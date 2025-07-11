@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Booking</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="modal-container">
+    <h1>Add a New Booking</h1>
+    <form id="save-booking" class="modal-form">
+      <label>Guest Name:
+        <input type="text" name="guestName" required />
+      </label>
+      <label>Second Guest (optional):
+        <input type="text" name="guestName2" />
+      </label>
+      <label>Check-in Date:
+        <input type="date" name="checkIn" required />
+      </label>
+      <label>Check-out Date:
+        <input type="date" name="checkOut" required />
+      </label>
+      <label>Platform:
+        <select name="platform" required>
+          <option value="">Select Platform</option>
+          <option value="Airbnb">Airbnb</option>
+          <option value="Agoda">Agoda</option>
+          <option value="Booking.com">Booking.com</option>
+        </select>
+      </label>
+      <label>Notes:
+        <textarea name="notes" placeholder="Notes (optional)" rows="3" style="width: 100%; border-radius: 6px;"></textarea>
+      </label>
+      <button type="submit">Save Booking</button>
+    </form>
+  </div>
+
+<script>
+  document.getElementById('save-booking').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = new URLSearchParams();
+    for (const pair of formData) {
+      data.append(pair[0], pair[1]);
+    }
+
+    try {
+      const response = await fetch('/save-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: data
+      });
+
+      if (response.ok) {
+        window.parent.closeModal();
+        window.parent.location.reload();
+      } else {
+        alert('Failed to save booking.');
+      }
+    } catch (err) {
+      alert('Error occurred while saving.');
+      console.error(err);
+    }
+  });
+</script>
+
+</body>
+</html>
