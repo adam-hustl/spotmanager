@@ -466,6 +466,17 @@ li {
   font-size: 11px;
 }
 
+.input-field {
+  width: 100%;
+  max-width: 100%;
+  padding: 8px;
+  font-size: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
 
 
 

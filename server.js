@@ -277,7 +277,7 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   if (username === 'admin' && password === '1234') {
-    res.send('<h2>Login successful! <a href="/dashboard">Go to Dashboard</a></h2>');
+    res.redirect('/dashboard');
   } else {
     res.send('<h2>Login failed. <a href="/">Try again</a></h2>');
   }
