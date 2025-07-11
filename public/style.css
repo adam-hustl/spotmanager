@@ -477,6 +477,27 @@ li {
   box-sizing: border-box;
 }
 
+.button-logout {
+  all: unset;
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background-color: #e74c3c; /* Red */
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-block;
+  transition: background-color 0.3s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  z-index: 1000;
+}
 
-
-
+.button-logout:hover {
+  background-color: #c0392b; /* darker red on hover */
+}
+  

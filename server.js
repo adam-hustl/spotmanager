@@ -8,9 +8,6 @@ const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const PORT = process.env.PORT || 3000;
 
-
-
-
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -18,9 +15,6 @@ const transporter = nodemailer.createTransport({
     pass: 'odtfujoqggybjurh'      // ← den 16-cifrede app-adgangskode
   }
 });
-
-
-
 
 const multer = require('multer');
 
@@ -33,7 +27,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-
 function formatDate(isoDate) {
   const date = new Date(isoDate);
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,7 +34,6 @@ function formatDate(isoDate) {
   const yy = String(date.getFullYear()).slice(-2);
   return `${mm}/${dd}-${yy}`;
 }
-
 
 app.get('/upload-id/:id', (req, res) => {
   const bookingId = req.params.id;
@@ -93,15 +85,11 @@ app.get('/upload-id/:id', (req, res) => {
   });
 </script>
 
-
-
-
         </body>
       </html>
     `);
   });
 });
-
 
 app.post('/upload-id/:id', upload.array('guestIds', 10), (req, res) => {
   if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
@@ -109,7 +97,6 @@ app.post('/upload-id/:id', upload.array('guestIds', 10), (req, res) => {
   const uploadedFiles = req.files.map(f => f.filename).join('<br>');
   res.send(`<h2>Files uploaded successfully:<br>${uploadedFiles} <br><br><a href="/dashboard">Go back</a></h2>`);
 });
-
 
 app.get('/view-ids/:id', (req, res) => {
   const bookingId = req.params.id;
@@ -207,11 +194,6 @@ app.post('/delete-id/:id/:filename', (req, res) => {
   });
 });
 
-
-
-
-
-
 // Middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
@@ -283,6 +265,18 @@ app.post('/login', (req, res) => {
   }
 });
 
+// end session on log out
+app.get('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.error('Error destroying session:', err);
+      return res.redirect('/dashboard');
+    }
+    res.redirect('/'); // Redirect to login after logout
+  });
+});
+
+
 // List bookings on dashboard
 
 
@@ -300,7 +294,6 @@ app.get('/dashboard', (req, res) => {
   const nowHosting = [];
   const upcoming = [];
   const past = [];
-
 
     // Categorize all bookings
 activeBookings.forEach((b) => {
@@ -386,7 +379,6 @@ activeBookings.forEach((b) => {
   </div>
 `;
 
-
     const fullHtml = `
       <html>
         <head>
@@ -395,7 +387,8 @@ activeBookings.forEach((b) => {
           <title>Dashboard</title>
         </head>
         <body>
-          <h1>Booking Dashboard</h1>
+        <button class="button-logout" onclick="window.location.href='/'">Log Out</button>
+        <h1>Booking Dashboard</h1>
 
           <div class="view-toggle">
             <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
@@ -405,8 +398,6 @@ activeBookings.forEach((b) => {
               <i class="fas fa-calendar-alt"></i>
             </button>
           </div>
-
-
 
           <div style="text-align: center;">
             <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
@@ -520,9 +511,7 @@ function cancelBooking(id) {
   }
 }
 
-
 const bookings = ${JSON.stringify(activeBookings)};
-
 
 app.post('/cancel-booking/:id', (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -542,8 +531,6 @@ app.post('/cancel-booking/:id', (req, res) => {
   });
 });
 
-
-
 function renderCalendar(monthOffset) {
   currentMonthOffset = monthOffset;
   const today = new Date();
@@ -560,8 +547,6 @@ function renderCalendar(monthOffset) {
   '<strong>' + target.toLocaleString("default", { month: "long" }) + ' ' + year + '</strong>' +
   '<button onclick="renderCalendar(' + (monthOffset + 1) + ')">&#10095;</button>' +
   '</div>';
-
-
 
   html += '<div style="position: relative;">';
 html += '<div class="calendar-grid calendar-grid-with-rows">';
@@ -605,47 +590,26 @@ duringStays.forEach(m => {
   html += '<div class="calendar-booking">' + m.guestName + ' <span>(' + m.platform + ')</span></div>';
 });
 
-
-
-
   html += '</div>'; // end .calendar-cell
 }
 
-
 html += '</div>'; // end .calendar-grid
 
-
 html += '</div>'; // end outer wrapper
-
-
 
 document.getElementById('calendarContainer').innerHTML = html;
 }
 
 
-
-
-
-
-
           </script>
 
-        
-
-
-
-        </body>
+          </body>
       </html>
     `;
 
     res.send(fullHtml);
   });
 });
-
-
-
-
-
 
 app.post('/cancel-booking/:id', (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -660,11 +624,6 @@ app.post('/cancel-booking/:id', (req, res) => {
     });
   });
 });
-
-
-
-
-
 
 // ✅ Updated /checklist/:id POST route
 app.post('/checklist/:id', (req, res) => {
@@ -754,8 +713,6 @@ app.get('/checklist/:id', (req, res) => {
   });
 </script>
 
-
-
         </body>
       </html>
     `);
@@ -840,7 +797,6 @@ Adam Kischinovsky`,
   }
 });
 
-
 app.get('/edit-booking/:id', (req, res) => {
   const bookingId = req.params.id;
 
@@ -915,14 +871,11 @@ app.get('/edit-booking/:id', (req, res) => {
   });
 </script>
 
-
-
         </body>
       </html>
     `);
   });
 });
-
 
 app.post('/edit-booking/:id', (req, res) => {
   const bookingId = req.params.id;
@@ -949,9 +902,6 @@ app.post('/edit-booking/:id', (req, res) => {
     });
   });
 });
-
-
-
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
