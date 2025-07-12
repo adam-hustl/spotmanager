@@ -249,6 +249,7 @@ app.post('/save-booking', (req, res) => {
     checkIn: req.body.checkIn,
     checkOut: req.body.checkOut,
     platform: req.body.platform,
+    people: req.body.people,
     notes: req.body.notes,
     timestamp: new Date().toISOString()
   };
@@ -369,6 +370,7 @@ activeBookings.forEach((b) => {
             <div class="booking-info">
               <strong>${b.guestName}</strong>${b.guestName2 ? ` and <strong>${b.guestName2}</strong>` : ''} (${b.platform})<br>
               Check-in: ${b.checkIn} | Check-out: ${b.checkOut}<br>
+              people: ${b.people}<br>
               Notes: ${b.notes || 'None'}
             </div>
           </li>
@@ -869,6 +871,9 @@ app.get('/edit-booking/:id', (req, res) => {
               <label>Check-out Date:
                 <input type="date" name="checkOut" value="${booking.checkOut}" required />
               </label>
+              <label>Amount of people:
+                <input type="text" name="people" value="${booking.people || ''}" />
+              </label>
               <label>Notes:
                 <input type="text" name="notes" value="${booking.notes || ''}" />
               </label>
@@ -926,6 +931,7 @@ app.post('/edit-booking/:id', (req, res) => {
       checkIn: req.body.checkIn,
       checkOut: req.body.checkOut,
       platform: req.body.platform,
+      people: req.body.people,
       notes: req.body.notes
     };
 
