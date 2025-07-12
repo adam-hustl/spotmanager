@@ -6,7 +6,7 @@ const bookingsFile = path.join(__dirname, 'bookings.json');
 const generateMoveInPDF = require('./generate-movein');
 const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
