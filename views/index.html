@@ -8,6 +8,19 @@
 </head>
 <body>
   <h1>Login</h1>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('error') === '1') {
+    const errorDiv = document.createElement('div');
+    errorDiv.textContent = 'Login failed. Please try again.';
+    errorDiv.style.color = 'red';
+    errorDiv.style.marginBottom = '10px';
+    document.body.insertBefore(errorDiv, document.querySelector('form'));
+  }
+</script>
+
+
   <form action="/login" method="POST" class="modal-container">
     <label for="username">Username:</label>
     <input type="text" id="username" name="username" placeholder="Username" required class="input-field" /><br />

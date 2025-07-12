@@ -500,4 +500,15 @@ li {
 .button-logout:hover {
   background-color: #c0392b; /* darker red on hover */
 }
+
+/* Fix styling for the logout form only */
+form.logout-form {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  border: none;
+  margin: 0;
+  display: inline;
+}
+
   

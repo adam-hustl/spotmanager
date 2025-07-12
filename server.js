@@ -274,7 +274,7 @@ app.post('/login', (req, res) => {
   res.redirect('/dashboard');
 }
  else {
-    res.send('<h2>Login failed. <a href="/">Try again</a></h2>');
+    res.redirect('/?error=1');
   }
 });
 
@@ -407,7 +407,7 @@ activeBookings.forEach((b) => {
           <title>Dashboard</title>
         </head>
         <body>
-        <form action="/logout" method="POST">
+        <form action="/logout" method="POST" class="logout-form">
           <button type="submit" class="button-logout">Log Out</button>
         </form>
 
