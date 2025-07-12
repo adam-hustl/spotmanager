@@ -7,6 +7,15 @@ const generateMoveInPDF = require('./generate-movein');
 const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const PORT = process.env.PORT || 3000;
+const session = require('express-session');
+
+// Session setup (after app is initialized)
+app.use(session({
+  secret: 'your_secret_key', // replace with something secure
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 3600000 } // 1 hour session
+}));
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -200,6 +209,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(bodyParser.urlencoded({ extended: true }));
 
+
+
 // Serve your views (HTML files in the views folder):
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'index.html'));
@@ -259,8 +270,10 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   if (username === 'admin' && password === '1234') {
-    res.redirect('/dashboard');
-  } else {
+  req.session.loggedIn = true;
+  res.redirect('/dashboard');
+}
+ else {
     res.send('<h2>Login failed. <a href="/">Try again</a></h2>');
   }
 });
@@ -276,11 +289,18 @@ app.get('/logout', (req, res) => {
   });
 });
 
+function isAuthenticated(req, res, next) {
+  if (req.session.loggedIn) {
+    next();
+  } else {
+    res.redirect('/');
+  }
+}
 
 // List bookings on dashboard
 
 
-app.get('/dashboard', (req, res) => {
+app.get('/dashboard',isAuthenticated, (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) throw err;
     const bookings = JSON.parse(data);
@@ -387,7 +407,10 @@ activeBookings.forEach((b) => {
           <title>Dashboard</title>
         </head>
         <body>
-        <button class="button-logout" onclick="window.location.href='/'">Log Out</button>
+        <form action="/logout" method="POST">
+          <button type="submit" class="button-logout">Log Out</button>
+        </form>
+
         <h1>Booking Dashboard</h1>
 
           <div class="view-toggle">
@@ -650,6 +673,16 @@ app.post('/checklist/:id', (req, res) => {
     });
   });
 });
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.log('Error ending session:', err);
+    }
+    res.redirect('/');
+  });
+});
+
 
 // ✅ Updated /checklist/:id route (GET)
 app.get('/checklist/:id', (req, res) => {
