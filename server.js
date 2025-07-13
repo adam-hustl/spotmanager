@@ -270,13 +270,22 @@ app.post('/save-booking', (req, res) => {
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
+  // Check admin credentials
   if (username === 'admin' && password === '1234') {
-  req.session.loggedIn = true;
-  res.redirect('/dashboard');
-}
- else {
-    res.redirect('/?error=1');
+    req.session.loggedIn = true;
+    req.session.role = 'admin';
+    return res.redirect('/dashboard');
   }
+
+  // Check cleaner credentials
+  if (username === 'cleaner' && password === 'abcd') {
+    req.session.loggedIn = true;
+    req.session.role = 'cleaner';
+    return res.redirect('/cleaner-dashboard');
+  }
+
+  // If no match
+  res.redirect('/?error=1');
 });
 
 // end session on log out
@@ -298,10 +307,28 @@ function isAuthenticated(req, res, next) {
   }
 }
 
+// Admin-only access
+function requireAdmin(req, res, next) {
+  if (req.session.loggedIn && req.session.role === 'admin') {
+    next();
+  } else {
+    res.redirect('/access-denied-page.html');
+  }
+}
+
+// Admin or Cleaner (shared access)
+function requireAnyUser(req, res, next) {
+  if (req.session.loggedIn && (req.session.role === 'admin' || req.session.role === 'cleaner')) {
+    next();
+  } else {
+    res.redirect('/access-denied-page.html');
+  }
+}
+
 // List bookings on dashboard
 
 
-app.get('/dashboard',isAuthenticated, (req, res) => {
+app.get('/dashboard', requireAdmin, (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) throw err;
     const bookings = JSON.parse(data);
@@ -423,6 +450,11 @@ activeBookings.forEach((b) => {
               <i class="fas fa-calendar-alt"></i>
             </button>
           </div>
+
+            <!-- button to view cleaner dashboard -->
+              <a href="/cleaner-dashboard" class="view-cleaner-dashboard-button">View Cleaner Dashboard</a>
+            </div>
+
 
           <div style="text-align: center;">
             <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
@@ -941,6 +973,51 @@ app.post('/edit-booking/:id', (req, res) => {
     });
   });
 });
+
+function isAuthenticated(req, res, next) {
+  if (req.session.loggedIn && (req.session.role === 'admin' || req.session.role === 'cleaner')) {
+    next();
+  } else {
+    res.redirect('/');
+  }
+}
+
+// route to serve the cleaner dashboard
+app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
+  const today = new Date().toISOString().split('T')[0];
+
+  const upcoming = bookingsData.filter(b => b.checkin >= today);
+
+  const listItems = upcoming.map(b => `<li>${b.checkin} - ${b.guests} Guest${b.guests > 1 ? 's' : ''}</li>`).join('');
+
+  res.send(`
+    <html>
+      <head>
+        <title>Cleaner Dashboard</title>
+        <link rel="stylesheet" href="/style.css">
+      </head>
+      <body>
+        <h1>Cleaner Dashboard</h1>
+
+        <div class="view-toggle">
+            <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
+              <i class="fas fa-list"></i>
+            </button>
+            <button id="calendarViewBtn" class="view-icon" onclick="toggleView('calendar')">
+              <i class="fas fa-calendar-alt"></i>
+            </button>
+          </div>
+        
+        <ul>${listItems}</ul>
+        <a href="/dashboard">Go back to Admin Dashboard</a>
+      </body>
+    </html>
+  `);
+});
+
+
+
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

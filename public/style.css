@@ -511,4 +511,67 @@ form.logout-form {
   display: inline;
 }
 
-  
+/* Access Denied Page Styles */
+.error-page {
+  font-family: 'Arial', sans-serif;
+  background-color: #f9f9f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
+.error-container {
+  text-align: center;
+  background-color: #fff;
+  padding: 40px 50px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.error-container h1 {
+  font-size: 32px;
+  color: #e74c3c;
+  margin-bottom: 20px;
+}
+
+.error-container p {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 30px;
+}
+
+.back-home {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #3498db;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+
+.back-home:hover {
+  background-color: #2980b9;
+}
+
+  .view-cleaner-dashboard-button {
+  all: unset;
+  position: absolute;
+  right: 40px;
+  top: 90px;
+  background-color: #3498db;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-block;
+  margin: 10px auto;
+  transition: background-color 0.3s ease;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
