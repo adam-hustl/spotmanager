@@ -996,26 +996,95 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
       <head>
         <title>Cleaner Dashboard</title>
         <link rel="stylesheet" href="/style.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
       </head>
       <body>
         <h1>Cleaner Dashboard</h1>
 
         <div class="view-toggle">
-            <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
-              <i class="fas fa-list"></i>
-            </button>
-            <button id="calendarViewBtn" class="view-icon" onclick="toggleView('calendar')">
-              <i class="fas fa-calendar-alt"></i>
-            </button>
-          </div>
-        
-        <ul>${listItems}</ul>
+          <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
+            <i class="fas fa-list"></i>
+          </button>
+          <button id="calendarViewBtn" class="view-icon" onclick="toggleView('calendar')">
+            <i class="fas fa-calendar-alt"></i>
+          </button>
+        </div>
+
+        <div id="calendarContainer" style="display:none;"></div>
+        <ul id="listContainer">${listItems}</ul>
+
         <a href="/dashboard">Go back to Admin Dashboard</a>
+
+        <script>
+          let currentMonthOffset = 0;
+
+          function toggleView(view) {
+            const listContainer = document.getElementById('listContainer');
+            const calendarContainer = document.getElementById('calendarContainer');
+
+            document.getElementById('listViewBtn').classList.remove('active');
+            document.getElementById('calendarViewBtn').classList.remove('active');
+
+            if (view === 'list') {
+              listContainer.style.display = 'block';
+              calendarContainer.style.display = 'none';
+              document.getElementById('listViewBtn').classList.add('active');
+            } else {
+              listContainer.style.display = 'none';
+              calendarContainer.style.display = 'block';
+              document.getElementById('calendarViewBtn').classList.add('active');
+              renderCalendar(currentMonthOffset);
+            }
+          }
+
+          function renderCalendar(monthOffset) {
+            currentMonthOffset = monthOffset;
+            const today = new Date();
+            const target = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+            const year = target.getFullYear();
+            const month = target.getMonth();
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+
+            let html = '<div class="calendar-header">' +
+              '<button onclick="renderCalendar(' + (monthOffset - 1) + ')">&#10094;</button>' +
+              '<strong>' + target.toLocaleString("default", { month: "long" }) + ' ' + year + '</strong>' +
+              '<button onclick="renderCalendar(' + (monthOffset + 1) + ')">&#10095;</button>' +
+              '</div>';
+
+            html += '<div style="position: relative;">';
+            html += '<div class="calendar-grid calendar-grid-with-rows">';
+            const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            weekdays.forEach(function(d) {
+              html += '<div class="calendar-day-name">' + d + '</div>';
+            });
+
+            for (let i = 0; i < firstDay.getDay(); i++) {
+              html += '<div class="calendar-empty"></div>';
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+              const currentDate = new Date(year, month, day).toISOString().split('T')[0];
+              const matches = ${JSON.stringify(upcoming)}.filter(b => b.checkin === currentDate);
+
+              html += '<div class="calendar-cell">';
+              html += '<strong>' + day + '</strong>';
+              matches.forEach(b => {
+                html += '<div class="calendar-booking">' + b.checkin + ' - ' + b.guests + ' Guest' + (b.guests > 1 ? 's' : '') + '</div>';
+              });
+              html += '</div>';
+            }
+
+            html += '</div></div>';
+            document.getElementById('calendarContainer').innerHTML = html;
+          }
+        </script>
       </body>
     </html>
   `);
 });
-
 
 
 
