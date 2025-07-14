@@ -991,6 +991,8 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
 
   const listItems = upcoming.map(b => `<li>${b.checkin} - ${b.guests} Guest${b.guests > 1 ? 's' : ''}</li>`).join('');
 
+   const showAdminButton = req.session.role === 'admin';
+
   res.send(`
     <html>
       <head>
@@ -1010,8 +1012,14 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
           </button>
         </div>
 
+        <!-- button to view cleaner dashboard -->
+              ${showAdminButton ? '<a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>' : ''}
+            </div>
+
         <div id="calendarContainer" style="display:none;"></div>
         <ul id="listContainer">${listItems}</ul>
+
+       
 
         <a href="/dashboard">Go back to Admin Dashboard</a>
 
