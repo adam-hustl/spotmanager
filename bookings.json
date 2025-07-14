@@ -14,8 +14,7 @@
       "step3": true,
       "step4": true,
       "step5": true
-    },
-    "cleaned": true
+    }
   },
   {
     "guestName": "test cleaner dashboard",
@@ -50,6 +49,6 @@
       "step4": false,
       "step5": false
     },
-    "cleaned": true
+    "cleaned": false
   }
 ]

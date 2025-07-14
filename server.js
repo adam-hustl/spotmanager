@@ -987,9 +987,11 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const today = new Date().toISOString().split('T')[0];
 
+
   app.post('/mark-cleaned', (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
+
 
   const updated = bookingsData.map(b => {
     if (b.timestamp === timestamp) {
@@ -997,6 +999,24 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
         ...b,
         cleaned: true
       };
+    }
+    return b;
+  });
+  
+
+  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  res.redirect('/cleaner-dashboard');
+});
+
+app.post('/unmark-cleaned', (req, res) => {
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
+  const { timestamp } = req.body;
+
+  const updated = bookingsData.map(b => {
+    if (b.timestamp === timestamp) {
+      const copy = { ...b };
+      delete copy.cleaned;
+      return copy;
     }
     return b;
   });
@@ -1019,10 +1039,15 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
             Check-in: ${b.checkIn || ''} | Check-out: ${b.checkOut || ''}<br>
             People: ${b.people || ''}<br>
             Notes: ${b.notes || 'None'}<br>
-            ${!b.cleaned ? `<form method="POST" action="/mark-cleaned" style="margin-top:5px">
+            ${!b.cleaned ? `<form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
               <input type="hidden" name="timestamp" value="${b.timestamp}">
-              <button type="submit">Mark as Cleaned</button>
-            </form>` : '<span style="color:green">✅ Cleaned</span>'}
+              <button class="button-add-booking" type="submit">Mark as Cleaned</button>
+            </form>` : 
+            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px">
+                <input type="hidden" name="timestamp" value="${b.timestamp}">
+                <button class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
+            </form>`
+}
           </div>
         </li>
       `;
