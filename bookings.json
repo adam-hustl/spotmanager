@@ -14,7 +14,8 @@
       "step3": true,
       "step4": true,
       "step5": true
-    }
+    },
+    "cleaned": true
   },
   {
     "guestName": "test cleaner dashboard",
@@ -32,5 +33,23 @@
       "step4": false,
       "step5": true
     }
+  },
+  {
+    "guestName": "test mark cleaning",
+    "guestName2": "",
+    "checkIn": "2025-08-07",
+    "checkOut": "2025-08-10",
+    "platform": "Airbnb",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-07-14T07:25:42.369Z",
+    "checklist": {
+      "step1": false,
+      "step2": true,
+      "step3": true,
+      "step4": false,
+      "step5": false
+    },
+    "cleaned": true
   }
 ]

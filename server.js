@@ -987,22 +987,47 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const today = new Date().toISOString().split('T')[0];
 
-  // Fix: use the correct property name "checkIn" from bookings.json
-  const upcoming = bookingsData.filter(b => {
-    return b.checkIn && b.checkIn >= today;
+  app.post('/mark-cleaned', (req, res) => {
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
+  const { timestamp } = req.body;
+
+  const updated = bookingsData.map(b => {
+    if (b.timestamp === timestamp) {
+      return {
+        ...b,
+        cleaned: true
+      };
+    }
+    return b;
   });
 
-  const listItems = upcoming.map(b => {
-    return `
-      <li>
-        <div class="booking-info">
-          Check-in: ${b.checkIn || ''} | Check-out: ${b.checkOut || ''}<br>
-          People: ${b.people || ''}<br>
-          Notes: ${b.notes || 'None'}
-        </div>
-      </li>
-    `;
-  }).join('');
+  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  res.redirect('/cleaner-dashboard');
+});
+
+
+  // Define upcoming and alreadyCleaned bookings
+  const upcoming = bookingsData.filter(b => b.checkIn && b.checkIn >= today && !b.cleaned);
+  const alreadyCleaned = bookingsData.filter(b => b.cleaned);
+
+  // Function to render bookings as HTML list items
+  function renderBookings(bookings) {
+    return bookings.map(b => {
+      return `
+        <li>
+          <div class="booking-info">
+            Check-in: ${b.checkIn || ''} | Check-out: ${b.checkOut || ''}<br>
+            People: ${b.people || ''}<br>
+            Notes: ${b.notes || 'None'}<br>
+            ${!b.cleaned ? `<form method="POST" action="/mark-cleaned" style="margin-top:5px">
+              <input type="hidden" name="timestamp" value="${b.timestamp}">
+              <button type="submit">Mark as Cleaned</button>
+            </form>` : '<span style="color:green">✅ Cleaned</span>'}
+          </div>
+        </li>
+      `;
+    }).join('');
+  }
 
   const showAdminButton = req.session.role === 'admin';
 
@@ -1016,6 +1041,13 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
       <body>
         <h1>Cleaner Dashboard</h1>
 
+        <div class="tab-buttons">
+          <button class="tab-btn active" onclick="showTab('upcoming')">Upcoming (${upcoming.length})</button>
+          <button class="tab-btn" onclick="showTab('cleaned')">Already Cleaned (${alreadyCleaned.length})</button>
+        </div>
+
+        ${showAdminButton ? '<a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>' : ''}
+
         <div class="view-toggle">
           <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
             <i class="fas fa-list"></i>
@@ -1025,16 +1057,30 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
           </button>
         </div>
 
-        ${showAdminButton ? '<a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>' : ''}
-
         <div id="calendarContainer" style="display:none;"></div>
-        <ul id="listContainer">${listItems}</ul>
+
+        <div id="upcoming" class="tab-content" style="display:block">
+          <ul>${renderBookings(upcoming)}</ul>
+        </div>
+
+        <div id="cleaned" class="tab-content" style="display:none">
+          <ul>${renderBookings(alreadyCleaned)}</ul>
+        </div>
+
+        <script>
+          function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabId).style.display = 'block';
+            event.target.classList.add('active');
+          }
+        </script>
 
         <script>
           let currentMonthOffset = 0;
 
           function toggleView(view) {
-            const listContainer = document.getElementById('listContainer');
+            const listContainer = document.querySelector('.tab-content:visible');
             const calendarContainer = document.getElementById('calendarContainer');
 
             document.getElementById('listViewBtn').classList.remove('active');
