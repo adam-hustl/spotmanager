@@ -15,5 +15,22 @@
       "step4": true,
       "step5": true
     }
+  },
+  {
+    "guestName": "test cleaner dashboard",
+    "guestName2": "",
+    "checkIn": "2025-07-23",
+    "checkOut": "2025-07-26",
+    "platform": "Agoda",
+    "people": "4",
+    "notes": "Test cleaner notes",
+    "timestamp": "2025-07-14T06:09:13.864Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": false,
+      "step5": true
+    }
   }
 ]
