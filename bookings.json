@@ -1,32 +1,42 @@
 [
   {
-    "guestName": "first booking",
+    "guestName": "check cleaned",
     "guestName2": "",
-    "checkIn": "2025-07-21",
-    "checkOut": "2025-07-22",
-    "platform": "Agoda",
-    "people": "2",
-    "notes": "",
-    "timestamp": "2025-07-16T13:14:07.453Z"
-  },
-  {
-    "guestName": "guest 5",
-    "guestName2": "",
-    "checkIn": "2025-07-30",
-    "checkOut": "2025-08-03",
-    "platform": "Airbnb",
-    "people": "5",
-    "notes": "",
-    "timestamp": "2025-07-16T13:14:42.328Z"
-  },
-  {
-    "guestName": "guest 3",
-    "guestName2": "",
-    "checkIn": "2025-07-25",
-    "checkOut": "2025-07-27",
+    "checkIn": "2025-07-18",
+    "checkOut": "2025-07-20",
     "platform": "Agoda",
     "people": "3",
     "notes": "",
-    "timestamp": "2025-07-16T13:15:23.691Z"
+    "timestamp": "2025-07-16T17:16:30.241Z"
+  },
+  {
+    "guestName": "igen",
+    "guestName2": "",
+    "checkIn": "2025-08-02",
+    "checkOut": "2025-08-05",
+    "platform": "Booking.com",
+    "people": "5",
+    "notes": "",
+    "timestamp": "2025-07-16T17:17:03.249Z"
+  },
+  {
+    "guestName": "test",
+    "guestName2": "",
+    "checkIn": "2025-07-22",
+    "checkOut": "2025-07-25",
+    "platform": "Agoda",
+    "people": "3",
+    "notes": "",
+    "timestamp": "2025-07-16T17:17:38.895Z"
+  },
+  {
+    "guestName": "tester efter sidste cleaning",
+    "guestName2": "",
+    "checkIn": "2025-08-09",
+    "checkOut": "2025-08-13",
+    "platform": "Agoda",
+    "people": "9",
+    "notes": "",
+    "timestamp": "2025-07-16T17:19:39.167Z"
   }
 ]

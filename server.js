@@ -364,10 +364,32 @@ activeBookings.forEach((b) => {
     upcoming.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
     past.sort((a, b) => new Date(b.checkOut) - new Date(a.checkOut));
 
+
+    const cleanedCheckouts = bookings
+  .filter(b => b.cleaned)
+  .sort((a, b) => new Date(b.checkOut) - new Date(a.checkOut));
+
+const cleanedFor = new Set();
+cleanedCheckouts.forEach(b => {
+  const next = bookings.find(other =>
+    new Date(other.checkIn) > new Date(b.checkOut) && !other.cancelled && !cleanedFor.has(other.timestamp)
+  );
+  if (next) cleanedFor.add(next.timestamp);
+});
+
+
+
+
     function renderBookings(list) {
+
+
+      
+
       return list.map((b) => {
         const checklist = b.checklist || {};
         const hasIncomplete = [checklist.step1, checklist.step2, checklist.step3, checklist.step4, checklist.step5].some(step => step !== true);
+
+        const isMarkedClean = cleanedFor.has(b.timestamp);
 
         const checkInDate = new Date(b.checkIn);
         const today = new Date();
@@ -399,6 +421,8 @@ activeBookings.forEach((b) => {
               Check-in: ${b.checkIn} | Check-out: ${b.checkOut}<br>
               people: ${b.people}<br>
               Notes: ${b.notes || 'None'}
+              ${isMarkedClean ? `<div style="color:green; font-size:0.9em; margin-top:4px;"><i class="fas fa-check-circle"></i> Cleaned and ready for guests</div>` : ''}
+
             </div>
           </li>
         `;
@@ -1187,13 +1211,13 @@ sortedByCheckIn.forEach((b, index) => {
             const upcoming = ${JSON.stringify(upcoming)};
 
             for (let day = 1; day <= daysInMonth; day++) {
-              const currentDate = new Date(year, month, day).toISOString().split('T')[0];
-              const matches = upcoming.filter(b => b.checkIn === currentDate);
+              const currentDate = new Date(Date.UTC(year, month, day)).toISOString().split('T')[0];
+              const matches = upcoming.filter(b => b.checkOut === currentDate);
 
               html += '<div class="calendar-cell">';
               html += '<strong>' + day + '</strong>';
               matches.forEach(b => {
-                html += '<div class="calendar-booking">' + b.checkIn + ' - ' + b.people + ' Guest' + (parseInt(b.people) > 1 ? 's' : '') + '</div>';
+                html += '<div class="calendar-booking">' + b.checkOut + ' - ' + b.people + ' Guest' + (parseInt(b.people) > 1 ? 's' : '') + '</div>';
               });
               html += '</div>';
             }
