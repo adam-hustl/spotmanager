@@ -1,54 +1,32 @@
 [
   {
-    "guestName": "test amount",
+    "guestName": "first booking",
     "guestName2": "",
-    "checkIn": "2025-07-14",
-    "checkOut": "2025-07-16",
+    "checkIn": "2025-07-21",
+    "checkOut": "2025-07-22",
     "platform": "Agoda",
-    "notes": "",
-    "timestamp": "2025-07-12T08:37:18.320Z",
     "people": "2",
-    "checklist": {
-      "step1": true,
-      "step2": false,
-      "step3": true,
-      "step4": true,
-      "step5": true
-    }
+    "notes": "",
+    "timestamp": "2025-07-16T13:14:07.453Z"
   },
   {
-    "guestName": "test cleaner dashboard",
+    "guestName": "guest 5",
     "guestName2": "",
-    "checkIn": "2025-07-23",
-    "checkOut": "2025-07-26",
-    "platform": "Agoda",
-    "people": "4",
-    "notes": "Test cleaner notes",
-    "timestamp": "2025-07-14T06:09:13.864Z",
-    "checklist": {
-      "step1": true,
-      "step2": true,
-      "step3": true,
-      "step4": false,
-      "step5": true
-    }
-  },
-  {
-    "guestName": "test mark cleaning",
-    "guestName2": "",
-    "checkIn": "2025-08-07",
-    "checkOut": "2025-08-10",
+    "checkIn": "2025-07-30",
+    "checkOut": "2025-08-03",
     "platform": "Airbnb",
-    "people": "2",
+    "people": "5",
     "notes": "",
-    "timestamp": "2025-07-14T07:25:42.369Z",
-    "checklist": {
-      "step1": false,
-      "step2": true,
-      "step3": true,
-      "step4": false,
-      "step5": false
-    },
-    "cleaned": false
+    "timestamp": "2025-07-16T13:14:42.328Z"
+  },
+  {
+    "guestName": "guest 3",
+    "guestName2": "",
+    "checkIn": "2025-07-25",
+    "checkOut": "2025-07-27",
+    "platform": "Agoda",
+    "people": "3",
+    "notes": "",
+    "timestamp": "2025-07-16T13:15:23.691Z"
   }
 ]

@@ -987,6 +987,10 @@ app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const today = new Date().toISOString().split('T')[0];
 
+  // Step: Sort all bookings by check-in date
+const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+
+
 
   app.post('/mark-cleaned', (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
@@ -1025,10 +1029,23 @@ app.post('/unmark-cleaned', (req, res) => {
   res.redirect('/cleaner-dashboard');
 });
 
+sortedByCheckIn.forEach((b, index) => {
+  const next = sortedByCheckIn.find(other => new Date(other.checkIn) > new Date(b.checkOut));
+  b.nextGuestPeople = next ? next.people : 'N/A';
+});
+
+
+
 
   // Define upcoming and alreadyCleaned bookings
-  const upcoming = bookingsData.filter(b => b.checkIn && b.checkIn >= today && !b.cleaned);
-  const alreadyCleaned = bookingsData.filter(b => b.cleaned);
+  const upcoming = bookingsData
+  .filter(b => b.checkIn && b.checkIn >= today && !b.cleaned)
+  .sort((a, b) => new Date(a.checkOut) - new Date(b.checkOut));
+
+  const alreadyCleaned = bookingsData
+  .filter(b => b.cleaned)
+  .sort((a, b) => new Date(a.checkOut) - new Date(b.checkOut));
+
 
   // Function to render bookings as HTML list items
   function renderBookings(bookings) {
@@ -1036,8 +1053,8 @@ app.post('/unmark-cleaned', (req, res) => {
       return `
         <li>
           <div class="booking-info">
-            Check-in: ${b.checkIn || ''} | Check-out: ${b.checkOut || ''}<br>
-            People: ${b.people || ''}<br>
+            Cleaning date: ${b.checkOut || ''}<br>
+            Guests arriving: ${b.nextGuestPeople || 'N/A'}<br>
             Notes: ${b.notes || 'None'}<br>
             ${!b.cleaned ? `<form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
               <input type="hidden" name="timestamp" value="${b.timestamp}">
@@ -1055,6 +1072,8 @@ app.post('/unmark-cleaned', (req, res) => {
   }
 
   const showAdminButton = req.session.role === 'admin';
+
+
 
   res.send(`
     <html>
@@ -1092,6 +1111,7 @@ app.post('/unmark-cleaned', (req, res) => {
           <ul>${renderBookings(alreadyCleaned)}</ul>
         </div>
 
+
         <script>
           function showTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -1105,23 +1125,36 @@ app.post('/unmark-cleaned', (req, res) => {
           let currentMonthOffset = 0;
 
           function toggleView(view) {
-            const listContainer = document.querySelector('.tab-content:visible');
             const calendarContainer = document.getElementById('calendarContainer');
+            const listViewBtn = document.getElementById('listViewBtn');
+            const calendarViewBtn = document.getElementById('calendarViewBtn');
 
-            document.getElementById('listViewBtn').classList.remove('active');
-            document.getElementById('calendarViewBtn').classList.remove('active');
+            // Hide all tab contents and tab buttons
+            const allTabs = document.querySelectorAll('.tab-content');
+            const tabButtons = document.querySelector('.tab-buttons');
+
+            listViewBtn.classList.remove('active');
+            calendarViewBtn.classList.remove('active');
 
             if (view === 'list') {
-              listContainer.style.display = 'block';
+              if (tabButtons) tabButtons.style.display = 'flex';
+              allTabs.forEach(tab => tab.style.display = 'none');
+              const activeTab = document.querySelector('.tab-btn.active');
+              if (activeTab) {
+                const tabId = activeTab.textContent.includes('Upcoming') ? 'upcoming' : 'cleaned';
+                document.getElementById(tabId).style.display = 'block';
+              }
               calendarContainer.style.display = 'none';
-              document.getElementById('listViewBtn').classList.add('active');
+              listViewBtn.classList.add('active');
             } else {
-              listContainer.style.display = 'none';
+              if (tabButtons) tabButtons.style.display = 'none';
+              allTabs.forEach(tab => tab.style.display = 'none');
               calendarContainer.style.display = 'block';
-              document.getElementById('calendarViewBtn').classList.add('active');
+              calendarViewBtn.classList.add('active');
               renderCalendar(currentMonthOffset);
             }
           }
+
 
           function renderCalendar(monthOffset) {
             currentMonthOffset = monthOffset;
