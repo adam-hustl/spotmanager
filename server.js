@@ -1054,16 +1054,36 @@ app.post('/unmark-cleaned', (req, res) => {
 });
 
 sortedByCheckIn.forEach((b, index) => {
-  const next = sortedByCheckIn.find(other => new Date(other.checkIn) > new Date(b.checkOut));
+  const bCheckOut = new Date(b.checkOut);
+
+  // Find the next booking (excluding the current one)
+  const next = sortedByCheckIn.find(other => {
+    if (other.timestamp === b.timestamp) return false;
+    const otherCheckIn = new Date(other.checkIn);
+    return otherCheckIn >= bCheckOut;
+  });
+
   b.nextGuestPeople = next ? next.people : 'N/A';
+
+  if (next) {
+    const nextCheckin = new Date(next.checkIn);
+    b.sameDayTurnover = (
+      bCheckOut.getFullYear() === nextCheckin.getFullYear() &&
+      bCheckOut.getMonth() === nextCheckin.getMonth() &&
+      bCheckOut.getDate() === nextCheckin.getDate()
+    );
+  } else {
+    b.sameDayTurnover = false;
+  }
 });
 
+  
 
 
 
   // Define upcoming and alreadyCleaned bookings
   const upcoming = bookingsData
-  .filter(b => b.checkIn && b.checkIn >= today && !b.cleaned)
+  .filter(b => !b.cleaned)
   .sort((a, b) => new Date(a.checkOut) - new Date(b.checkOut));
 
   const alreadyCleaned = bookingsData
@@ -1073,17 +1093,39 @@ sortedByCheckIn.forEach((b, index) => {
 
   // Function to render bookings as HTML list items
   function renderBookings(bookings) {
+
+
     return bookings.map(b => {
+
+            const checkoutTime = new Date(b.checkOut + 'T11:00:00Z');
+
+            const now = new Date();
+            const isPastCheckout = now > checkoutTime;
+
       return `
         <li>
-          <div class="booking-info">
+          <div class="booking-info" style="position: relative;">
+          ${b.sameDayTurnover ? `
+          <div style="position: absolute; top: 5px; right: 5px; color: red; font-weight: bold;">
+            <i class="fas fa-exclamation-circle"></i> same day check-in
+          </div>
+        ` : ''}
+
             Cleaning date: ${b.checkOut || ''}<br>
             Guests arriving: ${b.nextGuestPeople || 'N/A'}<br>
             Notes: ${b.notes || 'None'}<br>
-            ${!b.cleaned ? `<form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
-              <input type="hidden" name="timestamp" value="${b.timestamp}">
-              <button class="button-add-booking" type="submit">Mark as Cleaned</button>
-            </form>` : 
+            
+            
+
+            ${!b.cleaned ? `
+              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
+                <input type="hidden" name="timestamp" value="${b.timestamp}">
+                <button class="button-add-booking" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
+              </form>
+            ` : 
+
+
+
             `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px">
                 <input type="hidden" name="timestamp" value="${b.timestamp}">
                 <button class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>

@@ -2,7 +2,7 @@
   {
     "guestName": "check cleaned",
     "guestName2": "",
-    "checkIn": "2025-07-18",
+    "checkIn": "2025-07-17",
     "checkOut": "2025-07-20",
     "platform": "Agoda",
     "people": "3",
@@ -22,7 +22,7 @@
   {
     "guestName": "test",
     "guestName2": "",
-    "checkIn": "2025-07-22",
+    "checkIn": "2025-07-20",
     "checkOut": "2025-07-25",
     "platform": "Agoda",
     "people": "3",
@@ -32,7 +32,7 @@
   {
     "guestName": "tester efter sidste cleaning",
     "guestName2": "",
-    "checkIn": "2025-08-09",
+    "checkIn": "2025-08-05",
     "checkOut": "2025-08-13",
     "platform": "Agoda",
     "people": "9",
