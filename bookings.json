@@ -17,7 +17,8 @@
     "platform": "Booking.com",
     "people": "5",
     "notes": "",
-    "timestamp": "2025-07-16T17:17:03.249Z"
+    "timestamp": "2025-07-16T17:17:03.249Z",
+    "seen": true
   },
   {
     "guestName": "test",
@@ -32,8 +33,8 @@
   {
     "guestName": "tester efter sidste cleaning",
     "guestName2": "",
-    "checkIn": "2025-08-05",
-    "checkOut": "2025-08-13",
+    "checkIn": "2025-07-26",
+    "checkOut": "2025-07-29",
     "platform": "Agoda",
     "people": "9",
     "notes": "",

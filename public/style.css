@@ -596,3 +596,46 @@ form.logout-form {
 .button-unmark-cleaned:hover {
   background-color: #920e11;
 }
+
+.seen-button {
+  background-color: #eee;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.seen-button:hover {
+  background-color: #ccc;
+}
+
+.seen-true {
+  background-color: #76d076; /* green to indicate it's seen */
+}
+
+form.seen-form {
+  position: absolute;
+  top: 35px;  /* Adjust this number as needed */
+  right: 5px;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  border: none;
+  margin: 0;
+  display: inline;
+}
+
+.booking-seen {
+  position: absolute;
+  bottom: 5px;
+  left: 10px;
+  color: #007bff;
+  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+

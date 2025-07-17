@@ -391,6 +391,8 @@ cleanedCheckouts.forEach(b => {
 
         const isMarkedClean = cleanedFor.has(b.timestamp);
 
+        const isSeen = b.seen === true;
+
         const checkInDate = new Date(b.checkIn);
         const today = new Date();
         const timeDiff = checkInDate - today;
@@ -422,7 +424,7 @@ cleanedCheckouts.forEach(b => {
               people: ${b.people}<br>
               Notes: ${b.notes || 'None'}
               ${isMarkedClean ? `<div style="color:green; font-size:0.9em; margin-top:4px;"><i class="fas fa-check-circle"></i> Cleaned and ready for guests</div>` : ''}
-
+              ${isSeen ? `<div class="booking-seen"><i class="fas fa-eye"></i> Seen by cleaner</div>` : ''}
             </div>
           </li>
         `;
@@ -1006,6 +1008,26 @@ function isAuthenticated(req, res, next) {
   }
 }
 
+//  route mark-cleaned
+app.post('/mark-seen', (req, res) => {
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
+  const { timestamp } = req.body;
+
+  const updated = bookingsData.map(b => {
+    if (b.timestamp === timestamp) {
+      return {
+        ...b,
+        seen: true
+      };
+    }
+    return b;
+  });
+
+  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  res.redirect('/cleaner-dashboard');
+});
+
+
 // route to serve the cleaner dashboard
 app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
@@ -1105,16 +1127,21 @@ sortedByCheckIn.forEach((b, index) => {
       return `
         <li>
           <div class="booking-info" style="position: relative;">
+
           ${b.sameDayTurnover ? `
           <div style="position: absolute; top: 5px; right: 5px; color: red; font-weight: bold;">
             <i class="fas fa-exclamation-circle"></i> same day check-in
+
           </div>
         ` : ''}
+
+              
+        
+
 
             Cleaning date: ${b.checkOut || ''}<br>
             Guests arriving: ${b.nextGuestPeople || 'N/A'}<br>
             Notes: ${b.notes || 'None'}<br>
-            
             
 
             ${!b.cleaned ? `
@@ -1124,13 +1151,23 @@ sortedByCheckIn.forEach((b, index) => {
               </form>
             ` : 
 
-
-
             `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px">
                 <input type="hidden" name="timestamp" value="${b.timestamp}">
                 <button class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
             </form>`
 }
+
+
+
+            
+        </form>
+
+          <form method="POST" class="seen-form" action="/mark-seen">
+            <input type="hidden" name="timestamp" value="${b.timestamp}">
+            <button class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
+            👁️
+          </button>
+        </form>
           </div>
         </li>
       `;
