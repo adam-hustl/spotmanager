@@ -410,15 +410,15 @@ cleanedCheckouts.forEach(b => {
             ${hasIncomplete ? '<i class="fas fa-exclamation-circle alert-icon"></i>' : ''}
             <div class="button-group">
               <button data-label="Checklist" onclick="openModal('/checklist/${b.timestamp}')"><i class="fas fa-clipboard-check"></i></button>
-              <button data-label="Upload ID's" onclick="openModal('/upload-id/${b.timestamp}')"><i class="fas fa-upload"></i></button>
-              <button data-label="View ID's" onclick="openModal('/view-ids/${b.timestamp}')"><i class="fas fa-image"></i></button>
-              <button data-label="view move-in form" onclick="openModal('/generate-movein/${b.timestamp}')"><i class="fas fa-eye"></i></button>
+              <button class="tab-desktop-only" data-label="Upload ID's" onclick="openModal('/upload-id/${b.timestamp}')"><i class="fas fa-upload"></i></button>
+              <button class="tab-desktop-only" data-label="View ID's" onclick="openModal('/view-ids/${b.timestamp}')"><i class="fas fa-image"></i></button>
+              <button class="tab-desktop-only" data-label="view move-in form" onclick="openModal('/generate-movein/${b.timestamp}')"><i class="fas fa-eye"></i></button>
               <button data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
-              <button data-label="Edit Booking" onclick="openModal('/edit-booking/${b.timestamp}')"><i class="fas fa-pen"></i></button>
-              <button data-label="Cancel Booking" onclick="cancelBooking('${b.timestamp}')"><i class="fas fa-times"></i></button>
+              <button class="tab-desktop-only" data-label="Edit Booking" onclick="openModal('/edit-booking/${b.timestamp}')"><i class="fas fa-pen"></i></button>
+              <button class="tab-desktop-only" data-label="Cancel Booking" onclick="cancelBooking('${b.timestamp}')"><i class="fas fa-times"></i></button>
 
             </div>
-            <div class="booking-info">
+            <div class="booking-info-admin">
               <strong>${b.guestName}</strong>${b.guestName2 ? ` and <strong>${b.guestName2}</strong>` : ''} (${b.platform})<br>
               Check-in: ${b.checkIn} | Check-out: ${b.checkOut}<br>
               people: ${b.people}<br>
@@ -436,8 +436,8 @@ cleanedCheckouts.forEach(b => {
     <div class="tab-buttons">
       <button class="tab-btn" onclick="showTab('nowHosting')">Now Hosting</button>
       <button class="tab-btn active" onclick="showTab('upcoming')">Upcoming Bookings (${upcoming.length})</button>
-      <button class="tab-btn" onclick="showTab('past')">Past Bookings</button>
-      <button class="tab-btn" onclick="showTab('cancelled')">Cancelled Bookings (${cancelled.length})</button>
+      <button class="tab-btn tab-desktop-only" onclick="showTab('past')">Past Bookings</button>
+      <button class="tab-btn tab-desktop-only" onclick="showTab('cancelled')">Cancelled Bookings (${cancelled.length})</button>
     </div>
     <div id="nowHosting" class="tab-content">
       <ul>${renderBookings(nowHosting)}</ul>
@@ -466,6 +466,14 @@ cleanedCheckouts.forEach(b => {
         <form action="/logout" method="POST" class="logout-form">
           <button type="submit" class="button-logout">Log Out</button>
         </form>
+
+        <form action="/logout" method="POST" class="logout-form-phone">
+          <button type="submit" class="button-logout-phone">Log Out</button>
+        </form>
+
+            <!-- button to view cleaner dashboard -->
+              <a href="/cleaner-dashboard" class="view-cleaner-dashboard-button-phone">View Cleaner Dashboard</a>
+            </div>
 
         <h1>Booking Dashboard</h1>
 
@@ -1148,7 +1156,7 @@ sortedByCheckIn.forEach((b, index) => {
             ${!b.cleaned ? `
               <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
                 <input type="hidden" name="timestamp" value="${b.timestamp}">
-                <button class="button-add-booking" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
+                <button class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
               </form>
             ` : 
 
@@ -1193,6 +1201,11 @@ sortedByCheckIn.forEach((b, index) => {
         ${showAdminButton ? `
           
             <a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>
+          ` : ''}
+
+          ${showAdminButton ? `
+          
+            <a href="/dashboard" class="view-cleaner-dashboard-button-phone">View admin Dashboard</a>
           ` : ''}
 
         <h1>Cleaner Dashboard</h1>
