@@ -638,4 +638,122 @@ form.seen-form {
   gap: 5px;
 }
 
+  .same-day-alert {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  color: red;
+  font-weight: bold;
+}
+
+
+/* === 📱 Mobile-specific overrides === */
+@media screen and (max-width: 600px) {
+  body {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .same-day-alert {
+    position: relative;
+    color: red;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+
+  .seen-form {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1;
+  }
+
+  li {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .button-group {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .button-add-booking,
+  .button-logout,
+  .view-cleaner-dashboard-button,
+  .button-unmark-cleaned {
+    font-size: 14px;
+    padding: 8px 12px;
+    width: 100%;
+    max-width: 300px;
+    margin: 8px auto;
+  }
+
+  .tab-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .tab-btn {
+    width: 100%;
+    max-width: 300px;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+
+  .view-toggle {
+    top: 10px;
+    right: 10px;
+    display: none; /* Hide calendar toggle on mobile */
+  }
+
+  .calendar-header,
+  .calendar-grid,
+  #calendarContainer {
+    display: none !important; /* Force hide calendar elements */
+  }
+
+  .modal-container {
+    width: 100%;
+    max-width: 95vw;
+    padding: 15px;
+  }
+
+  .booking-seen {
+    bottom: 10px;
+    left: 10px;
+    font-size: 12px;
+  }
+
+  .seen-button {
+    background-color: #eee; /* default (unseen) */
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 5px 7px;
+    border-radius: 8px;
+    box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  }
+
+  .seen-button.seen-true {
+    background-color: #76d076; /* green if seen */
+  }
+
+  .booking-info {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    padding: 30px 10px 10px 10px;
+  }
+
+  .view-cleaner-dashboard-button {
+    visibility: hidden;
+  }
+
+  h1 {
+    margin-top: 0px;
+    text-align: center;
+  }
+}
+
 

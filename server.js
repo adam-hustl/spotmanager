@@ -457,6 +457,7 @@ cleanedCheckouts.forEach(b => {
     const fullHtml = `
       <html>
         <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
           <link rel="stylesheet" href="/style.css">
           <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
           <title>Dashboard</title>
@@ -1129,11 +1130,11 @@ sortedByCheckIn.forEach((b, index) => {
           <div class="booking-info" style="position: relative;">
 
           ${b.sameDayTurnover ? `
-          <div style="position: absolute; top: 5px; right: 5px; color: red; font-weight: bold;">
-            <i class="fas fa-exclamation-circle"></i> same day check-in
+            <div class="same-day-alert">
+              <i class="fas fa-exclamation-circle"></i> same day check-in
+            </div>
+          ` : ''}
 
-          </div>
-        ` : ''}
 
               
         
@@ -1181,19 +1182,30 @@ sortedByCheckIn.forEach((b, index) => {
   res.send(`
     <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Cleaner Dashboard</title>
         <link rel="stylesheet" href="/style.css">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
       </head>
       <body>
+
+
+        ${showAdminButton ? `
+          
+            <a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>
+          ` : ''}
+
         <h1>Cleaner Dashboard</h1>
+
+
+
 
         <div class="tab-buttons">
           <button class="tab-btn active" onclick="showTab('upcoming')">Upcoming (${upcoming.length})</button>
           <button class="tab-btn" onclick="showTab('cleaned')">Already Cleaned (${alreadyCleaned.length})</button>
         </div>
 
-        ${showAdminButton ? '<a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>' : ''}
+        
 
         <div class="view-toggle">
           <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
