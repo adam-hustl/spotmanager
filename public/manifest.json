@@ -1,6 +1,6 @@
 {
-  "name": "Booking Dashboard",
-  "short_name": "Dashboard",
+  "name": "The spot 43 booking management",
+  "short_name": "The spot 43",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
