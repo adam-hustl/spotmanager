@@ -667,6 +667,13 @@ form.seen-form {
   font-weight: bold;
 }
 
+form.logout-form-phone {
+  display: none;
+}
+
+.view-cleaner-dashboard-button-phone{
+  display: none;
+}
 
 /* === 📱 Mobile-specific overrides === */
 @media screen and (max-width: 600px) {
@@ -846,6 +853,7 @@ form.logout-form-phone {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+
   h1 {
     margin-top: 0px;
     text-align: center;
@@ -892,6 +900,9 @@ form.logout-form-phone {
     width: 100%;
     max-width: 100px;
   }
+
+
+
 
 
 

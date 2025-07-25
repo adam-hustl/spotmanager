@@ -460,6 +460,9 @@ cleanedCheckouts.forEach(b => {
         <meta name="viewport" content="width=device-width, initial-scale=1">
           <link rel="stylesheet" href="/style.css">
           <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+          <link rel="manifest" href="/manifest.json" />
+          <meta name="theme-color" content="#007bff" />
+
           <title>Dashboard</title>
         </head>
         <body>
@@ -695,6 +698,16 @@ document.getElementById('calendarContainer').innerHTML = html;
 
           </script>
 
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('Service Worker Registered!'))
+      .catch((error) => console.error('Service Worker Registration Failed:', error));
+  }
+</script>
+
+
+
           </body>
       </html>
     `;
@@ -764,6 +777,10 @@ app.get('/checklist/:id', (req, res) => {
 
     if (!booking) return res.send('Booking not found.');
 
+    
+
+
+
     res.send(`
       <html>
         <head>
@@ -772,6 +789,8 @@ app.get('/checklist/:id', (req, res) => {
         </head>
         <body>
         <div class="modal-container">
+          
+
           <h1>Checklist for ${booking.guestName}</h1>
           <p>(${booking.platform})<br>
           Check-in: ${booking.checkIn}<br>
@@ -786,6 +805,12 @@ app.get('/checklist/:id', (req, res) => {
             <button type="submit">Save Checklist</button>
           </form>
           </div>
+
+
+
+          
+
+
 
           <script>
   document.getElementById('checklist').addEventListener('submit', async function(e) {
@@ -1194,6 +1219,9 @@ sortedByCheckIn.forEach((b, index) => {
         <title>Cleaner Dashboard</title>
         <link rel="stylesheet" href="/style.css">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#007bff" />
+
       </head>
       <body>
 
@@ -1330,6 +1358,18 @@ sortedByCheckIn.forEach((b, index) => {
             document.getElementById('calendarContainer').innerHTML = html;
           }
         </script>
+
+
+        <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('Service Worker Registered!'))
+      .catch((error) => console.error('Service Worker Registration Failed:', error));
+  }
+</script>
+
+
+
       </body>
     </html>
   `);
