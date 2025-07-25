@@ -704,7 +704,18 @@ document.getElementById('calendarContainer').innerHTML = html;
       .then(() => console.log('Service Worker Registered!'))
       .catch((error) => console.error('Service Worker Registration Failed:', error));
   }
+
+  window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // Force reload when app becomes active again
+    location.reload();
+  }
+});
+
+
 </script>
+
+
 
 
 
@@ -1366,6 +1377,15 @@ sortedByCheckIn.forEach((b, index) => {
       .then(() => console.log('Service Worker Registered!'))
       .catch((error) => console.error('Service Worker Registration Failed:', error));
   }
+
+  window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // Force reload when app becomes active again
+    location.reload();
+  }
+});
+
+
 </script>
 
 
