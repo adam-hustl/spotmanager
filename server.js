@@ -1239,6 +1239,20 @@ sortedByCheckIn.forEach((b, index) => {
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#007bff" />
 
+
+                <!-- OneSignal SDK Script -->
+        <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+        <script>
+          window.OneSignalDeferred = window.OneSignalDeferred || [];
+          OneSignalDeferred.push(async function(OneSignal) {
+            await OneSignal.init({
+              appId: "ea93d9dd-cf34-486b-8d77-9444d5e7699f", // ← Your App ID from OneSignal
+            });
+          });
+        </script>
+
+
+
       </head>
       <body>
 

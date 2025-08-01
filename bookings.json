@@ -73,5 +73,59 @@
       "step5": true
     },
     "emailSent": true
+  },
+  {
+    "guestName": "Loreto Torres",
+    "guestName2": "",
+    "checkIn": "2025-07-31",
+    "checkOut": "2025-08-01",
+    "platform": "Booking.com",
+    "people": "4",
+    "notes": "",
+    "timestamp": "2025-07-31T05:10:39.216Z",
+    "emailSent": true,
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true,
+      "step5": false
+    }
+  },
+  {
+    "guestName": "Lyndon Nawanao",
+    "guestName2": "",
+    "checkIn": "2025-08-01",
+    "checkOut": "2025-08-03",
+    "platform": "Airbnb",
+    "people": "1",
+    "notes": "",
+    "timestamp": "2025-08-01T02:29:36.337Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true,
+      "step5": false
+    },
+    "emailSent": true
+  },
+  {
+    "guestName": "Jessica Watkins",
+    "guestName2": "",
+    "checkIn": "2025-08-03",
+    "checkOut": "2025-08-05",
+    "platform": "Booking.com",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-01T02:31:37.736Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true,
+      "step5": false
+    },
+    "emailSent": true
   }
 ]
