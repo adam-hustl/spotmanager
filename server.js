@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const PORT = process.env.PORT || 3000;
 const session = require('express-session');
+const { OneSignal } = require('@onesignal/node-onesignal');
 
 // Session setup (after app is initialized)
 app.use(session({
@@ -242,7 +243,7 @@ app.get('/add-booking', (req, res) => {
 });
 
 // Handle form submission
-app.post('/save-booking', (req, res) => {
+app.post('/save-booking', async (req, res) => {
   const newBooking = {
     guestName: req.body.guestName,
     guestName2: req.body.guestName2,
@@ -254,17 +255,26 @@ app.post('/save-booking', (req, res) => {
     timestamp: new Date().toISOString()
   };
 
-  fs.readFile(bookingsFile, 'utf8', (err, data) => {
-    if (err) throw err;
+  try {
+    const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data);
     bookings.push(newBooking);
 
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), (err) => {
-      if (err) throw err;
-      res.send('<h2>Booking saved to file! <a href="/dashboard">Go back</a></h2>');
-    });
-  });
+    await fs.promises.writeFile(bookingsFile, JSON.stringify(bookings, null, 2));
+
+    // Send push notification
+    await sendPushNotification('A new booking has been added!');
+
+    res.send('<h2>Booking saved to file! <a href="/dashboard">Go back</a></h2>');
+  } catch (err) {
+    console.error('Error saving booking:', err);
+    res.status(500).send('An error occurred while saving the booking.');
+  }
 });
+
+
+
+
 
 // Handle login
 app.post('/login', (req, res) => {
@@ -329,6 +339,35 @@ function requireAnyUser(req, res, next) {
 app.get('/about', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'about.html'));
 });
+
+
+
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+const sendPushNotification = async (message) => {
+  try {
+    await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': 'os_v2_app_5kj5txopgregxdlxsrcnlz3jt4ewaw7rxmzejsnxcv3mlekp43awmppykzwn2ecb5zk3wgd6ri2e4gaxda2t3uhpf4d6af6tv3cih7a' // Replace with your actual REST API Key
+      },
+      body: JSON.stringify({
+        app_id: 'ea93d9dd-cf34-486b-8d77-9444d5e7699f', // Replace with your OneSignal App ID
+        contents: { en: message },
+        included_segments: ['All'] // Or target specific segments/users if needed
+      })
+    });
+  } catch (error) {
+    console.error('Push notification error:', error);
+  }
+};
+
+
+
+
+
+
 
 
 // List bookings on dashboard
