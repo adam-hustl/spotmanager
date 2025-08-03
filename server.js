@@ -282,19 +282,20 @@ app.get('/send-cleaning-reminder', async (req, res) => {
   try {
     const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
 
+    // Convert UTC time to Manila time (UTC+8)
     const now = new Date();
-    now.setDate(now.getDate() + 1);
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const manilaTime = new Date(utc + (8 * 60 * 60000));
+    
+    // Add 1 day for tomorrow
+    manilaTime.setDate(manilaTime.getDate() + 1);
 
-    // Format "tomorrow" as YYYY-MM-DD to match checkOut in bookings
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const tomorrow = `${yyyy}-${mm}-${dd}`;
+    const tomorrow = manilaTime.toISOString().split('T')[0];
 
     const matching = bookings.filter(b => b.checkOut === tomorrow);
 
     if (matching.length > 0) {
-      const message = `Reminder: Cleaning task tomorrow (${mm}-${dd}-${yyyy})`;
+      const message = `Reminder: Cleaning task tomorrow (${formatDateForMessage(manilaTime)})`;
       await sendPushNotification(message);
       return res.send('Notification sent: ' + message);
     } else {
@@ -305,6 +306,7 @@ app.get('/send-cleaning-reminder', async (req, res) => {
     return res.status(500).send('Server error');
   }
 });
+
 
 
 
