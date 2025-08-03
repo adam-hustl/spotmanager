@@ -280,16 +280,16 @@ app.post('/save-booking', async (req, res) => {
 
 app.get('/send-cleaning-reminder', async (req, res) => {
   try {
-    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+    const data = await fs.promises.readFile(bookingsFile, 'utf8');
+    const bookings = JSON.parse(data);
 
     // Convert UTC time to Manila time (UTC+8)
     const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const manilaTime = new Date(utc + (8 * 60 * 60000));
-    
-    // Add 1 day for tomorrow
-    manilaTime.setDate(manilaTime.getDate() + 1);
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    const manilaTime = new Date(utc + 8 * 60 * 60000);
 
+    // Get tomorrow's date in YYYY-MM-DD
+    manilaTime.setDate(manilaTime.getDate() + 1);
     const tomorrow = manilaTime.toISOString().split('T')[0];
 
     const matching = bookings.filter(b => b.checkOut === tomorrow);
@@ -303,10 +303,16 @@ app.get('/send-cleaning-reminder', async (req, res) => {
     }
   } catch (error) {
     console.error('Error in /send-cleaning-reminder:', error);
-    return res.status(500).send('Server error');
+    return res.status(500).send('Server error: ' + error.message);
   }
 });
 
+function formatDateForMessage(date) {
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${mm}-${dd}-${yyyy}`;
+}
 
 
 
