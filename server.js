@@ -285,12 +285,16 @@ app.get('/send-cleaning-reminder', async (req, res) => {
     const now = new Date();
     now.setDate(now.getDate() + 1);
 
-    const tomorrow = now.toISOString().split('T')[0];
+    // Format "tomorrow" as YYYY-MM-DD to match checkOut in bookings
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const tomorrow = `${yyyy}-${mm}-${dd}`;
 
     const matching = bookings.filter(b => b.checkOut === tomorrow);
 
     if (matching.length > 0) {
-      const message = `Reminder: Cleaning task tomorrow (${formatDateForMessage(now)})`;
+      const message = `Reminder: Cleaning task tomorrow (${mm}-${dd}-${yyyy})`;
       await sendPushNotification(message);
       return res.send('Notification sent: ' + message);
     } else {
@@ -302,12 +306,6 @@ app.get('/send-cleaning-reminder', async (req, res) => {
   }
 });
 
-function formatDateForMessage(date) {
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const yyyy = date.getFullYear();
-  return `${mm}-${dd}-${yyyy}`;
-}
 
 
 
