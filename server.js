@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 const session = require('express-session');
 const { OneSignal } = require('@onesignal/node-onesignal');
 
+
 // Session setup (after app is initialized)
 app.use(session({
   secret: 'your_secret_key', // replace with something secure
@@ -262,8 +263,12 @@ app.post('/save-booking', async (req, res) => {
 
     await fs.promises.writeFile(bookingsFile, JSON.stringify(bookings, null, 2));
 
-    // Send push notification
-    await sendPushNotification('A new booking has been added!');
+  // Format checkOutDate to MM-DD-YYYY
+  const checkOut = new Date(newBooking.checkOut);
+  const formattedDate = `${(checkOut.getMonth() + 1).toString().padStart(2, '0')}-${checkOut.getDate().toString().padStart(2, '0')}-${checkOut.getFullYear()}`;
+
+  // Send push notification with formatted date
+  await sendPushNotification(`New cleaning task created (${formattedDate})`);
 
     res.send('<h2>Booking saved to file! <a href="/dashboard">Go back</a></h2>');
   } catch (err) {
@@ -271,6 +276,26 @@ app.post('/save-booking', async (req, res) => {
     res.status(500).send('An error occurred while saving the booking.');
   }
 });
+
+
+app.get('/send-cleaning-reminder', async (req, res) => {
+  const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+
+  const now = new Date();
+  now.setDate(now.getDate() + 1);
+  const tomorrow = now.toISOString().split('T')[0];
+
+  const matching = bookings.filter(b => b.checkOut === tomorrow);
+
+  if (matching.length > 0) {
+    const message = `Reminder: Cleaning task tomorrow (${tomorrow})`;
+    await sendPushNotification(message);
+    return res.send('Notification sent: ' + message);
+  } else {
+    return res.send('No check-outs tomorrow.');
+  }
+});
+
 
 
 
@@ -1231,7 +1256,7 @@ sortedByCheckIn.forEach((b, index) => {
 
             Cleaning date: ${b.checkOut || ''}<br>
             Guests arriving: ${b.nextGuestPeople || 'N/A'}<br>
-            Notes: ${b.notes || 'None'}<br>
+            
             
 
             ${!b.cleaned ? `

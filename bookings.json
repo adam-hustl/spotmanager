@@ -127,5 +127,44 @@
       "step5": false
     },
     "emailSent": true
+  },
+  {
+    "guestName": "Owen Chu",
+    "guestName2": "",
+    "checkIn": "2025-08-06",
+    "checkOut": "2025-08-09",
+    "platform": "Airbnb",
+    "people": "2",
+    "notes": "Remember to buy a 10L jug of water (Requested by guest)",
+    "timestamp": "2025-08-03T15:46:36.378Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true,
+      "step5": false
+    },
+    "emailSent": true,
+    "seen": true
+  },
+  {
+    "guestName": "test new notification",
+    "guestName2": "",
+    "checkIn": "2025-08-19",
+    "checkOut": "2025-08-21",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-03T16:17:01.040Z"
+  },
+  {
+    "guestName": "test format in notification",
+    "guestName2": "",
+    "checkIn": "2025-08-28",
+    "checkOut": "2025-08-30",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-03T16:23:43.467Z"
   }
 ]
