@@ -17,6 +17,8 @@
     "multer": "^2.0.1",
     "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.4",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "@onesignal/node-onesignal": "^1.0.0" 
+
   }
 }
