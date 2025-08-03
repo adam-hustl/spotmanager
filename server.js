@@ -279,22 +279,35 @@ app.post('/save-booking', async (req, res) => {
 
 
 app.get('/send-cleaning-reminder', async (req, res) => {
-  const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+  try {
+    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
 
-  const now = new Date();
-  now.setDate(now.getDate() + 1);
-  const tomorrow = now.toISOString().split('T')[0];
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
 
-  const matching = bookings.filter(b => b.checkOut === tomorrow);
+    const tomorrow = now.toISOString().split('T')[0];
 
-  if (matching.length > 0) {
-    const message = `Reminder: Cleaning task tomorrow (${tomorrow})`;
-    await sendPushNotification(message);
-    return res.send('Notification sent: ' + message);
-  } else {
-    return res.send('No check-outs tomorrow.');
+    const matching = bookings.filter(b => b.checkOut === tomorrow);
+
+    if (matching.length > 0) {
+      const message = `Reminder: Cleaning task tomorrow (${formatDateForMessage(now)})`;
+      await sendPushNotification(message);
+      return res.send('Notification sent: ' + message);
+    } else {
+      return res.send('No check-outs tomorrow.');
+    }
+  } catch (error) {
+    console.error('Error in /send-cleaning-reminder:', error);
+    return res.status(500).send('Server error');
   }
 });
+
+function formatDateForMessage(date) {
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${mm}-${dd}-${yyyy}`;
+}
 
 
 
