@@ -11,6 +11,7 @@ const session = require('express-session');
 const { OneSignal } = require('@onesignal/node-onesignal');
 
 
+
 // Session setup (after app is initialized)
 app.use(session({
   secret: 'your_secret_key', // replace with something secure
@@ -697,23 +698,9 @@ function cancelBooking(id) {
 
 const bookings = ${JSON.stringify(activeBookings)};
 
-app.post('/cancel-booking/:id', (req, res) => {
-  fs.readFile(bookingsFile, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading file');
-    let bookings = JSON.parse(data);
-    const timestamp = req.params.id;
 
-    const index = bookings.findIndex(b => b.timestamp === timestamp);
-    if (index === -1) return res.status(404).send('Booking not found');
 
-    bookings[index].cancelled = true;
 
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), (err) => {
-      if (err) return res.status(500).send('Error saving file');
-      res.send('Cancelled');
-    });
-  });
-});
 
 function renderCalendar(monthOffset) {
   currentMonthOffset = monthOffset;
@@ -819,16 +806,38 @@ document.getElementById('calendarContainer').innerHTML = html;
 app.post('/cancel-booking/:id', (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) return res.status(500).send('Error reading file');
+
     const bookings = JSON.parse(data);
     const index = bookings.findIndex(b => b.timestamp == req.params.id);
+
     if (index === -1) return res.status(404).send('Booking not found');
+
     bookings[index].cancelled = true;
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), err => {
+
+    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), async err => {
       if (err) return res.status(500).send('Error writing file');
+
+      // 🟡 Notification logic starts here
+      try {
+        const checkOut = new Date(bookings[index].checkOut);
+        const year = checkOut.getFullYear();
+        const month = (checkOut.getMonth() + 1).toString().padStart(2, '0');
+        const day = checkOut.getDate().toString().padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}`;
+
+        const message = 'Cleaning task is cancelled on ' + formattedDate;
+        await sendPushNotification(message);
+        console.log('Push notification sent:', message);
+      } catch (notificationError) {
+        console.error('Failed to send push notification:', notificationError);
+      }
+
       res.sendStatus(200);
     });
   });
 });
+
+
 
 // ✅ Updated /checklist/:id POST route
 app.post('/checklist/:id', (req, res) => {
