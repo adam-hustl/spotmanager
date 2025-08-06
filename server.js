@@ -3,12 +3,25 @@ const path = require('path');
 const app = express();
 const fs = require('fs');
 const bookingsFile = path.join(__dirname, 'bookings.json');
+
+
+// Where to put generated PDFs
+// On Render (no disk), use /tmp which is always writable but ephemeral
+const OUTPUT_DIR = process.env.RENDER ? '/tmp' : path.join(__dirname, 'outputs');
+
+// Make sure the folder exists (safe if it already exists)
+try { fs.mkdirSync(OUTPUT_DIR, { recursive: true }); } catch (e) { console.error('mkdir OUTPUT_DIR failed:', e); }
+
+
+
 const generateMoveInPDF = require('./generate-movein');
 const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const PORT = process.env.PORT || 3000;
 const session = require('express-session');
 const { OneSignal } = require('@onesignal/node-onesignal');
+
+
 
 
 
@@ -963,7 +976,7 @@ app.get('/generate-movein/:id', async (req, res) => {
 
   if (!booking) return res.send('Booking not found.');
 
-  const outputPath = path.join(__dirname, 'outputs', `movein-${bookingId}.pdf`);
+  const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
 
   try {
     await generateMoveInPDF(booking, outputPath);
