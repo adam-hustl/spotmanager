@@ -207,6 +207,7 @@
     "platform": "Airbnb",
     "people": "3",
     "notes": "",
-    "timestamp": "2025-08-06T18:01:05.929Z"
+    "timestamp": "2025-08-06T18:01:05.929Z",
+    "emailSent": true
   }
 ]

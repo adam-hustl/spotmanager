@@ -1046,9 +1046,21 @@ app.get('/send-email/:id', async (req, res) => {
   ? `${booking.guestName} and ${booking.guestName2}`
   : booking.guestName;
 
+  
+// Check if today is weekend (0 = Sunday, 6 = Saturday)
+  const today = new Date().getDay();
+  const isWeekend = (today === 0 || today === 6);
+
+  const recipients = ['adamkischi@hotmail.com'];
+  if (isWeekend) {
+    recipients.push('adam@aleph.dk');
+  }
+
+
+
   const mailOptions = {
     from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
-    to: 'adamkischi@hotmail.com',
+    to: recipients.join(', '),
     replyTo: 'adamkischi@hotmail.com',
     subject: `Move-In Form for ${guestNameLine}`,
     text: `Hello PMO,
