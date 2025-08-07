@@ -45,7 +45,7 @@ async function generateMoveInPDF(booking, outputPath) {
   drawText(firstPage, 'Adam Kischinovsky', 150, 365);
   drawText(firstPage, 'Adam Kischinovsky', 150, 300);
 
-  const signatureImageBytes = fs.readFileSync(path.join(__dirname, 'Min_underskrift.PNG'));
+  const signatureImageBytes = fs.readFileSync(path.join(__dirname, 'Min_underskrift.png'));
   const signatureImage = await pdfDoc.embedPng(signatureImageBytes);
   const signatureDims = signatureImage.scale(0.3);
 
