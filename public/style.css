@@ -715,7 +715,9 @@ form.logout-form-phone {
     padding: 8px 12px;
     width: 100%;
     max-width: 300px;
-    margin: 8px auto;
+    margin: 12px auto;
+    position:relative;
+    top: 15px;
   }
 
     .button-logout{
