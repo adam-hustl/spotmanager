@@ -970,24 +970,57 @@ app.get('/checklist/:id', (req, res) => {
 
 app.get('/generate-movein/:id', async (req, res) => {
   const bookingId = req.params.id;
-  const data = fs.readFileSync(bookingsFile, 'utf8');
-  const bookings = JSON.parse(data);
-  const booking = bookings.find(b => b.timestamp === bookingId);
 
-  if (!booking) return res.send('Booking not found.');
+  // Debug: show where we are writing
+  console.log('[/generate-movein] bookingId:', bookingId);
+  console.log('[/generate-movein] OUTPUT_DIR:', OUTPUT_DIR);
+
+  let data;
+  try {
+    data = fs.readFileSync(bookingsFile, 'utf8');
+  } catch (readErr) {
+    console.error('Failed to read bookings.json:', readErr);
+    return res.status(500).send('Failed to read bookings file: ' + readErr.message);
+  }
+
+  let bookings;
+  try {
+    bookings = JSON.parse(data);
+  } catch (parseErr) {
+    console.error('Failed to parse bookings.json:', parseErr);
+    return res.status(500).send('Failed to parse bookings file: ' + parseErr.message);
+  }
+
+  const booking = bookings.find(b => b.timestamp === bookingId);
+  if (!booking) {
+    return res.status(404).send('Booking not found.');
+  }
 
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
+  console.log('[/generate-movein] outputPath:', outputPath);
 
   try {
     await generateMoveInPDF(booking, outputPath);
+    // Sanity check: did the file get created?
+    if (!fs.existsSync(outputPath)) {
+      console.error('PDF was not created at:', outputPath);
+      return res.status(500).send('PDF was not created. Check template paths inside generate-movein.');
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename=movein.pdf');
-    res.sendFile(outputPath);
+    return res.sendFile(outputPath, (sendErr) => {
+      if (sendErr) {
+        console.error('sendFile error:', sendErr);
+      }
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Failed to generate PDF.');
+    console.error('generateMoveInPDF threw:', err);
+    return res.status(500).send('Failed to generate PDF: ' + (err && err.message ? err.message : String(err)));
   }
 });
+
 
 app.get('/send-email/:id', async (req, res) => {
   const bookingId = req.params.id;
