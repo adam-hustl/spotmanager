@@ -1214,7 +1214,7 @@ I am attaching the filled out move-in form, and ID’s.
 
 Thank you
 
-Best regards, test stage commit then main
+Best regards,
 
 Adam Kischinovsky`,
     attachments: [
