@@ -326,17 +326,21 @@ app.post('/save-booking', async (req, res) => {
 
   try {
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
-    const bookings = JSON.parse(data);
+    const bookings = JSON.parse(data || '[]');
     bookings.push(newBooking);
 
+    // Write locally first (so current runtime has the data)
     await fs.promises.writeFile(bookingsFile, JSON.stringify(bookings, null, 2));
 
-  // Format checkOutDate to MM-DD-YYYY
-  const checkOut = new Date(newBooking.checkOut);
-  const formattedDate = `${(checkOut.getMonth() + 1).toString().padStart(2, '0')}-${checkOut.getDate().toString().padStart(2, '0')}-${checkOut.getFullYear()}`;
+    // Mirror to Gist (don’t block the response if GitHub is slow)
+    pushBookingsToGist(bookings).catch(() => {});
 
-  // Send push notification with formatted date
-  await sendPushNotification(`New cleaning task created (${formattedDate})`);
+    // Format checkOutDate to MM-DD-YYYY (unchanged)
+    const checkOut = new Date(newBooking.checkOut);
+    const formattedDate = `${(checkOut.getMonth() + 1).toString().padStart(2, '0')}-${checkOut.getDate().toString().padStart(2, '0')}-${checkOut.getFullYear()}`;
+
+    // Send push notification with formatted date (unchanged)
+    await sendPushNotification(`New cleaning task created (${formattedDate})`);
 
     res.send('<h2>Booking saved to file! <a href="/dashboard">Go back</a></h2>');
   } catch (err) {
