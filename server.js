@@ -60,6 +60,21 @@ function formatDate(isoDate) {
   return `${mm}/${dd}-${yy}`;
 }
 
+
+// Separate storage for arrival stamps (force a clean, predictable filename)
+const storageStamp = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '.jpg') || '.jpg';
+    cb(null, `booking-${req.params.id}-stamp-${Date.now()}${ext}`);
+  }
+});
+const uploadStamp = multer({ storage: storageStamp });
+
+
+
+
+
 app.get('/upload-id/:id', (req, res) => {
   const bookingId = req.params.id;
 
@@ -424,6 +439,89 @@ const sendPushNotification = async (message) => {
 
 
 
+app.get('/upload-stamp/:id', (req, res) => {
+  const bookingId = req.params.id;
+
+  fs.readFile(bookingsFile, 'utf8', (err, data) => {
+    if (err) return res.send('Error reading bookings file.');
+    const bookings = JSON.parse(data);
+    const booking = bookings.find(b => b.timestamp === bookingId);
+    if (!booking) return res.send('Booking not found.');
+
+    res.send(`
+      <html>
+        <head>
+          <title>Upload arrival stamp for ${booking.guestName}</title>
+          <link rel="stylesheet" href="/style.css" />
+        </head>
+        <body>
+          <div class="modal-container">
+            <h1>Arrival stamp for ${booking.guestName}</h1>
+            <p>Take a clear photo of the passport arrival stamp.</p>
+
+            <form id="stampForm" class="modal-form" enctype="multipart/form-data" method="POST" action="/upload-stamp/${booking.timestamp}">
+              <input type="file" name="stamp" accept="image/*" capture="environment" required />
+              <br><br>
+              <button type="submit">Upload & Send</button>
+            </form>
+          </div>
+
+          <script>
+            // (Optional) you could add a preview here later if you want
+          </script>
+        </body>
+      </html>
+    `);
+  });
+});
+
+
+
+
+app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
+  const bookingId = req.params.id;
+
+  try {
+    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+    const booking = bookings.find(b => b.timestamp === bookingId);
+    if (!booking) return res.send('Booking not found.');
+    if (!req.file) return res.send('No image uploaded.');
+
+    const mailOptions = {
+      from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
+      to: 'adamkischi@hotmail.com', // you can change later
+      replyTo: 'adamkischi@hotmail.com',
+      subject: `Arrival stamp for ${booking.guestName}`,
+      text: `Hello, this is the arrival stamp of ${booking.guestName} staying in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
+      attachments: [
+        { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
+      ]
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Close the modal and refresh the dashboard
+    res.send(`
+      <h2>Stamp uploaded and email sent!<br><br>
+      <a href="/dashboard" target="_parent">Back to Dashboard</a>
+      <script>
+        if (window.parent) {
+          window.parent.closeModal();
+          window.parent.location.reload();
+        } else {
+          window.location.href = '/dashboard';
+        }
+      </script>
+      </h2>
+    `);
+  } catch (err) {
+    console.error('Stamp send error:', err);
+    res.status(500).send('Failed to send stamp email: ' + err.message);
+  }
+});
+
+
+
 
 
 
@@ -519,6 +617,8 @@ cleanedCheckouts.forEach(b => {
               <button data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
               <button class="tab-desktop-only" data-label="Edit Booking" onclick="openModal('/edit-booking/${b.timestamp}')"><i class="fas fa-pen"></i></button>
               <button class="tab-desktop-only" data-label="Cancel Booking" onclick="cancelBooking('${b.timestamp}')"><i class="fas fa-times"></i></button>
+              <button data-label="Stamp & send" onclick="openModal('/upload-stamp/${b.timestamp}')"><i class="fas fa-camera"></i></button>
+
 
             </div>
             <div class="booking-info-admin">
