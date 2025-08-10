@@ -8,6 +8,14 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 const bookingsFile = path.join(DATA_DIR, 'bookings.json');
 
 
+// Ensure required folders/files exist
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// Seed an empty bookings file if missing
+if (!fs.existsSync(bookingsFile)) {
+  fs.writeFileSync(bookingsFile, '[]', 'utf8');
+}
 
 
 
@@ -29,7 +37,6 @@ const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
 const PORT = process.env.PORT || 3000;
 const session = require('express-session');
-const { OneSignal } = require('@onesignal/node-onesignal');
 
 
 
