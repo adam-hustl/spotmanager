@@ -193,8 +193,7 @@
       "step1": true,
       "step2": true,
       "step3": true,
-      "step4": true,
-      "step5": false
+      "step4": true
     },
     "emailSent": true,
     "seen": true
@@ -208,6 +207,40 @@
     "people": "3",
     "notes": "",
     "timestamp": "2025-08-06T18:01:05.929Z",
+    "emailSent": true,
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true
+    }
+  },
+  {
+    "guestName": "test bcc",
+    "guestName2": "",
+    "checkIn": "2025-08-12",
+    "checkOut": "2025-08-14",
+    "platform": "Airbnb",
+    "people": "3",
+    "notes": "",
+    "timestamp": "2025-08-10T14:35:18.697Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": true
+    },
+    "emailSent": true
+  },
+  {
+    "guestName": "test no view form",
+    "guestName2": "",
+    "checkIn": "2025-08-15",
+    "checkOut": "2025-08-23",
+    "platform": "Airbnb",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-10T14:42:48.865Z",
     "emailSent": true
   }
 ]

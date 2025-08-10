@@ -490,9 +490,13 @@ app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
     if (!booking) return res.send('Booking not found.');
     if (!req.file) return res.send('No image uploaded.');
 
+
+
+
     const mailOptions = {
       from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
-      to: 'adamkischi@hotmail.com', // you can change later
+      to: 'adam@aleph.dk',
+      bcc: 'adamkischi@hotmail.com', 
       replyTo: 'adamkischi@hotmail.com',
       subject: `Arrival stamp for ${booking.guestName}`,
       text: `Hello, this is the arrival stamp of ${booking.guestName} staying in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
@@ -591,7 +595,7 @@ cleanedCheckouts.forEach(b => {
 
       return list.map((b) => {
         const checklist = b.checklist || {};
-        const hasIncomplete = [checklist.step1, checklist.step2, checklist.step3, checklist.step4, checklist.step5].some(step => step !== true);
+        const hasIncomplete = [checklist.step1, checklist.step2, checklist.step3, checklist.step4].some(step => step !== true);
 
         const isMarkedClean = cleanedFor.has(b.timestamp);
 
@@ -970,8 +974,7 @@ app.post('/checklist/:id', (req, res) => {
       step1: req.body.step1 === 'on',
       step2: req.body.step2 === 'on',
       step3: req.body.step3 === 'on',
-      step4: req.body.step4 === 'on',
-      step5: req.body.step5 === 'on'
+      step4: req.body.step4 === 'on'
     };
 
     fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), (err) => {
@@ -1024,9 +1027,8 @@ app.get('/checklist/:id', (req, res) => {
           <form id="checklist" class="modal-form">
             <label><input type="checkbox" name="step1" ${booking.checklist?.step1 ? 'checked' : ''}> Get guest IDs</label><br>
             <label><input type="checkbox" name="step2" ${booking.checklist?.step2 ? 'checked' : ''}> Send endorsement (w/ move-in form + ID)</label><br>
-            <label><input type="checkbox" name="step3" ${booking.checklist?.step3 ? 'checked' : ''}> Inform cleaners</label><br>
-            <label><input type="checkbox" name="step4" ${booking.checklist?.step4 ? 'checked' : ''}> Prepare work permit for cleaner</label><br>
-            <label><input type="checkbox" name="step5" ${booking.checklist?.step5 ? 'checked' : ''}> Get access cards</label><br><br>
+            <label><input type="checkbox" name="step3" ${booking.checklist?.step3 ? 'checked' : ''}> Pay for the access card</label><br>
+            <label><input type="checkbox" name="step4" ${booking.checklist?.step4 ? 'checked' : ''}> Get access cards</label><br><br>
             <button type="submit">Save Checklist</button>
           </form>
           </div>
@@ -1164,6 +1166,7 @@ app.get('/send-email/:id', async (req, res) => {
   const mailOptions = {
     from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
     to: recipients.join(', '),
+    bcc: 'adamkischi@hotmail.com',  
     replyTo: 'adamkischi@hotmail.com',
     subject: `Move-In Form for ${guestNameLine}`,
     text: `Hello PMO,
