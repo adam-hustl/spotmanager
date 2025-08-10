@@ -1302,7 +1302,7 @@ I am attaching the filled out move-in form, and ID’s.
 
 Thank you
 
-Best regards,
+Best regards, test bookings
 
 Adam Kischinovsky`,
     attachments: [
