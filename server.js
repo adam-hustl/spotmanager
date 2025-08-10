@@ -363,7 +363,7 @@ app.post('/login', (req, res) => {
   }
 
   // Check cleaner credentials
-  if (username === 'cleaner' && password === 'abcd') {
+  if (username === 'Diane' && password === 'abcd') {
     req.session.loggedIn = true;
     req.session.role = 'cleaner';
     return res.redirect('/cleaner-dashboard');
@@ -1513,6 +1513,17 @@ sortedByCheckIn.forEach((b, index) => {
 
       </head>
       <body>
+
+
+      <form action="/logout" method="POST" class="logout-form">
+  <button type="submit" class="button-logout">Log Out</button>
+</form>
+
+<form action="/logout" method="POST" class="logout-form-phone">
+  <button type="submit" class="button-logout-phone">Log Out</button>
+</form>
+
+
 
 
         ${showAdminButton ? `
