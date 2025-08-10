@@ -93,6 +93,7 @@ app.get('/upload-id/:id', (req, res) => {
         </head>
         <body>
         <div class="modal-container">
+        <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
           <h1>Upload ID for ${booking.guestName}</h1>
           <form id="upload" class="modal-form" enctype="multipart/form-data">
             <input type="file" name="guestIds" multiple accept="image/*,application/pdf" required><br><br>
@@ -197,6 +198,7 @@ app.get('/view-ids/:id', (req, res) => {
         </head>
         <body>
           <div class="modal-container view-ids">
+          <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
             <h2>Uploaded Guest IDs for Booking ${bookingId}</h2>
             <div class="id-gallery">
               ${fileBlocks}
@@ -456,6 +458,7 @@ app.get('/upload-stamp/:id', (req, res) => {
         </head>
         <body>
           <div class="modal-container">
+          <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
             <h1>Arrival stamp for ${booking.guestName}</h1>
             <p>Take a clear photo of the passport arrival stamp.</p>
 
@@ -1011,7 +1014,7 @@ app.get('/checklist/:id', (req, res) => {
         </head>
         <body>
         <div class="modal-container">
-          
+            <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
 
           <h1>Checklist for ${booking.guestName}</h1>
           <p>(${booking.platform})<br>
@@ -1208,6 +1211,8 @@ app.get('/edit-booking/:id', (req, res) => {
         </head>
         <body>
           <div class="modal-container">
+            <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
+
             <h1>Edit Booking</h1>
             <form id="editBookingForm" class="modal-form">
               <label>Guest Name:

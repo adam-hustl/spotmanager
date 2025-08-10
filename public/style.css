@@ -246,6 +246,32 @@ li {
   background-color: #2980b9;
 }
 
+
+/* make child close button position correctly */
+.modal-container { position: relative; }
+
+/* universal close button for all modals */
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  text-align: center;
+  font-size: 24px;
+  border-radius: 50%;
+  background: #eee;
+  color: #333;
+  text-decoration: none;
+  display: inline-block;
+}
+.modal-close:active { transform: scale(0.98); }
+
+
+
+
+
 /* === ✅ Final adjustments for View IDs modal === */
 .modal-container.view-ids {
   max-width: 90vw;
@@ -902,6 +928,7 @@ form.logout-form-phone {
     width: 100%;
     max-width: 100px;
   }
+
 
 
 
