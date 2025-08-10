@@ -326,17 +326,21 @@ app.post('/save-booking', async (req, res) => {
 
   try {
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
-    const bookings = JSON.parse(data);
+    const bookings = JSON.parse(data || '[]');
     bookings.push(newBooking);
 
+    // Write locally first (so current runtime has the data)
     await fs.promises.writeFile(bookingsFile, JSON.stringify(bookings, null, 2));
 
-  // Format checkOutDate to MM-DD-YYYY
-  const checkOut = new Date(newBooking.checkOut);
-  const formattedDate = `${(checkOut.getMonth() + 1).toString().padStart(2, '0')}-${checkOut.getDate().toString().padStart(2, '0')}-${checkOut.getFullYear()}`;
+    // Mirror to Gist (don’t block the response if GitHub is slow)
+    pushBookingsToGist(bookings).catch(() => {});
 
-  // Send push notification with formatted date
-  await sendPushNotification(`New cleaning task created (${formattedDate})`);
+    // Format checkOutDate to MM-DD-YYYY (unchanged)
+    const checkOut = new Date(newBooking.checkOut);
+    const formattedDate = `${(checkOut.getMonth() + 1).toString().padStart(2, '0')}-${checkOut.getDate().toString().padStart(2, '0')}-${checkOut.getFullYear()}`;
+
+    // Send push notification with formatted date (unchanged)
+    await sendPushNotification(`New cleaning task created (${formattedDate})`);
 
     res.send('<h2>Booking saved to file! <a href="/dashboard">Go back</a></h2>');
   } catch (err) {
@@ -455,6 +459,90 @@ app.get('/about', (req, res) => {
 
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+
+// ==== Gist Sync (bookings.json) ====
+const GIST_ID = process.env.GIST_ID;            // set in Render
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;  // set in Render
+const GIST_FILENAME = 'bookings.json';
+
+// Central local read/write helpers (use your existing bookingsFile path)
+function readBookingsLocal() {
+  try {
+    const txt = fs.readFileSync(bookingsFile, 'utf8');
+    return txt ? JSON.parse(txt) : [];
+  } catch {
+    return [];
+  }
+}
+function writeBookingsLocal(bookings) {
+  fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2));
+}
+
+// Pull current bookings from the Gist
+async function pullBookingsFromGist() {
+  if (!GIST_ID || !GITHUB_TOKEN) return null;
+  try {
+    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'User-Agent': 'spotmanager'
+      }
+    });
+    if (!r.ok) return null;
+    const gist = await r.json();
+    const content = gist?.files?.[GIST_FILENAME]?.content;
+    if (!content) return null;
+    return JSON.parse(content);
+  } catch (e) {
+    console.error('Gist pull failed:', e.message);
+    return null;
+  }
+}
+
+// Push new bookings to the Gist
+async function pushBookingsToGist(bookings) {
+  if (!GIST_ID || !GITHUB_TOKEN) return;
+  try {
+    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'spotmanager'
+      },
+      body: JSON.stringify({
+        files: {
+          [GIST_FILENAME]: { content: JSON.stringify(bookings, null, 2) }
+        }
+      })
+    });
+  } catch (e) {
+    console.error('Gist push failed:', e.message);
+  }
+}
+
+// On boot: if local file is empty, hydrate it from Gist
+(async () => {
+  try {
+    const local = readBookingsLocal();
+    if (!local || local.length === 0) {
+      const remote = await pullBookingsFromGist();
+      if (remote && Array.isArray(remote)) {
+        writeBookingsLocal(remote);
+        console.log('[Gist] Hydrated bookings.json from Gist');
+      } else {
+        console.log('[Gist] No remote data (or auth missing); keeping local []');
+      }
+    }
+  } catch (e) {
+    console.error('[Gist] Boot hydrate error:', e.message);
+  }
+})();
+
+
+
+
 
 const sendPushNotification = async (message) => {
   try {
@@ -960,38 +1048,46 @@ document.getElementById('calendarContainer').innerHTML = html;
   });
 });
 
-app.post('/cancel-booking/:id', (req, res) => {
-  fs.readFile(bookingsFile, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading file');
 
-    const bookings = JSON.parse(data);
+app.post('/cancel-booking/:id', async (req, res) => {
+  try {
+    const data = await fs.promises.readFile(bookingsFile, 'utf8');
+    const bookings = JSON.parse(data || '[]');
+
     const index = bookings.findIndex(b => b.timestamp == req.params.id);
-
     if (index === -1) return res.status(404).send('Booking not found');
 
+    // mark cancelled
     bookings[index].cancelled = true;
 
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), async err => {
-      if (err) return res.status(500).send('Error writing file');
+    // write locally and mirror to Gist
+    try {
+      writeBookingsLocal(bookings);
+    } catch (e) {
+      return res.status(500).send('Error writing file');
+    }
+    pushBookingsToGist(bookings).catch(() => {});
 
-      // 🟡 Notification logic starts here
-      try {
-        const checkOut = new Date(bookings[index].checkOut);
-        const year = checkOut.getFullYear();
-        const month = (checkOut.getMonth() + 1).toString().padStart(2, '0');
-        const day = checkOut.getDate().toString().padStart(2, '0');
-        const formattedDate = `${year}-${month}-${day}`;
+    // 🟡 Notification logic (unchanged, but now we can await)
+    try {
+      const checkOut = new Date(bookings[index].checkOut);
+      const year = checkOut.getFullYear();
+      const month = (checkOut.getMonth() + 1).toString().padStart(2, '0');
+      const day = checkOut.getDate().toString().padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
 
-        const message = 'Cleaning task is cancelled on ' + formattedDate;
-        await sendPushNotification(message);
-        console.log('Push notification sent:', message);
-      } catch (notificationError) {
-        console.error('Failed to send push notification:', notificationError);
-      }
+      const message = 'Cleaning task is cancelled on ' + formattedDate;
+      await sendPushNotification(message);
+      console.log('Push notification sent:', message);
+    } catch (notificationError) {
+      console.error('Failed to send push notification:', notificationError);
+    }
 
-      res.sendStatus(200);
-    });
-  });
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error('Error cancelling booking:', err);
+    return res.status(500).send('Error cancelling booking');
+  }
 });
 
 
@@ -1014,12 +1110,11 @@ app.post('/checklist/:id', (req, res) => {
       step4: req.body.step4 === 'on'
     };
 
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), (err) => {
-      if (err) throw err;
-      res.redirect(`/checklist/${bookingId}`);
+    writeBookingsLocal(bookings);
+    pushBookingsToGist(bookings).catch(() => {});
+    res.redirect(`/checklist/${bookingId}`);
     });
   });
-});
 
 app.post('/logout', (req, res) => {
   req.session.destroy(err => {
@@ -1214,7 +1309,7 @@ I am attaching the filled out move-in form, and ID’s.
 
 Thank you
 
-Best regards, test booking staying
+Best regards, 
 
 Adam Kischinovsky`,
     attachments: [
@@ -1226,7 +1321,9 @@ Adam Kischinovsky`,
   try {
     await safeSendMail(mailOptions);
     bookings[bookingIndex].emailSent = true;
-    fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2));
+    writeBookingsLocal(bookings);
+pushBookingsToGist(bookings).catch(() => {});
+
     res.json({ success: true });
   } catch (err) {
     console.error('Email error:', err);
@@ -1339,12 +1436,12 @@ app.post('/edit-booking/:id', (req, res) => {
       notes: req.body.notes
     };
 
-    fs.writeFile(bookingsFile, JSON.stringify(bookings, null, 2), (err) => {
-      if (err) return res.send('Failed to save.');
-      res.send(`<h2>Booking updated!<br><br><a href="/dashboard">Back to Dashboard</a></h2>`);
+    writeBookingsLocal(bookings);
+pushBookingsToGist(bookings).catch(() => {});
+res.send(`<h2>Booking updated!<br><br><a href="/dashboard">Back to Dashboard</a></h2>`);
+
     });
   });
-});
 
 function isAuthenticated(req, res, next) {
   if (req.session.loggedIn && (req.session.role === 'admin' || req.session.role === 'cleaner')) {
@@ -1369,7 +1466,9 @@ app.post('/mark-seen', (req, res) => {
     return b;
   });
 
-  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  writeBookingsLocal(updated);
+pushBookingsToGist(updated).catch(() => {});
+
   res.redirect('/cleaner-dashboard');
 });
 
@@ -1400,7 +1499,9 @@ const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - n
   });
   
 
-  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  writeBookingsLocal(updated);
+pushBookingsToGist(updated).catch(() => {});
+
   res.redirect('/cleaner-dashboard');
 });
 
@@ -1417,7 +1518,9 @@ app.post('/unmark-cleaned', (req, res) => {
     return b;
   });
 
-  fs.writeFileSync(bookingsFile, JSON.stringify(updated, null, 2));
+  writeBookingsLocal(updated);
+pushBookingsToGist(updated).catch(() => {});
+
   res.redirect('/cleaner-dashboard');
 });
 
