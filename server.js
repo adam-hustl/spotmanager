@@ -2,7 +2,17 @@ const express = require('express');
 const path = require('path');
 const app = express();
 const fs = require('fs');
-const bookingsFile = path.join(__dirname, 'bookings.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data-local');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const bookingsFile = path.join(DATA_DIR, 'bookings.json');
+
+
+
+
+
+
+
 
 
 // Where to put generated PDFs
@@ -39,7 +49,32 @@ const transporter = nodemailer.createTransport({
     user: 'adam.kischinovsky@gmail.com',         // ← din Gmail-adresse
     pass: 'odtfujoqggybjurh'      // ← den 16-cifrede app-adgangskode
   }
+
+  
+
+
+
 });
+
+const IS_PROD = process.env.APP_ENV === 'production';
+
+async function safeSendMail(options) {
+  if (!IS_PROD) {
+    // On staging/local: always send only to you, and clearly mark subject
+    const clone = { ...options };
+    clone.to = process.env.STAGING_MAIL_TO || 'adamkischi@hotmail.com';
+    clone.cc = undefined;
+    clone.bcc = undefined;
+    clone.subject = `[STAGING] ${options.subject}`;
+    return transporter.sendMail(clone);
+  }
+  return transporter.sendMail(options);
+}
+
+
+
+
+
 
 const multer = require('multer');
 
@@ -505,7 +540,7 @@ app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
       ]
     };
 
-    await transporter.sendMail(mailOptions);
+    await safeSendMail(mailOptions);
 
     // Close the modal and refresh the dashboard
     res.send(`
@@ -1187,7 +1222,7 @@ Adam Kischinovsky`,
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await safeSendMail(mailOptions);
     bookings[bookingIndex].emailSent = true;
     fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2));
     res.json({ success: true });
