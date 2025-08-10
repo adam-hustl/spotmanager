@@ -456,6 +456,90 @@ app.get('/about', (req, res) => {
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
+
+// ==== Gist Sync (bookings.json) ====
+const GIST_ID = process.env.GIST_ID;            // set in Render
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;  // set in Render
+const GIST_FILENAME = 'bookings.json';
+
+// Central local read/write helpers (use your existing bookingsFile path)
+function readBookingsLocal() {
+  try {
+    const txt = fs.readFileSync(bookingsFile, 'utf8');
+    return txt ? JSON.parse(txt) : [];
+  } catch {
+    return [];
+  }
+}
+function writeBookingsLocal(bookings) {
+  fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2));
+}
+
+// Pull current bookings from the Gist
+async function pullBookingsFromGist() {
+  if (!GIST_ID || !GITHUB_TOKEN) return null;
+  try {
+    const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'User-Agent': 'spotmanager'
+      }
+    });
+    if (!r.ok) return null;
+    const gist = await r.json();
+    const content = gist?.files?.[GIST_FILENAME]?.content;
+    if (!content) return null;
+    return JSON.parse(content);
+  } catch (e) {
+    console.error('Gist pull failed:', e.message);
+    return null;
+  }
+}
+
+// Push new bookings to the Gist
+async function pushBookingsToGist(bookings) {
+  if (!GIST_ID || !GITHUB_TOKEN) return;
+  try {
+    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'spotmanager'
+      },
+      body: JSON.stringify({
+        files: {
+          [GIST_FILENAME]: { content: JSON.stringify(bookings, null, 2) }
+        }
+      })
+    });
+  } catch (e) {
+    console.error('Gist push failed:', e.message);
+  }
+}
+
+// On boot: if local file is empty, hydrate it from Gist
+(async () => {
+  try {
+    const local = readBookingsLocal();
+    if (!local || local.length === 0) {
+      const remote = await pullBookingsFromGist();
+      if (remote && Array.isArray(remote)) {
+        writeBookingsLocal(remote);
+        console.log('[Gist] Hydrated bookings.json from Gist');
+      } else {
+        console.log('[Gist] No remote data (or auth missing); keeping local []');
+      }
+    }
+  } catch (e) {
+    console.error('[Gist] Boot hydrate error:', e.message);
+  }
+})();
+
+
+
+
+
 const sendPushNotification = async (message) => {
   try {
     await fetch('https://onesignal.com/api/v1/notifications', {
@@ -1214,7 +1298,7 @@ I am attaching the filled out move-in form, and ID’s.
 
 Thank you
 
-Best regards, test booking staying
+Best regards,
 
 Adam Kischinovsky`,
     attachments: [
