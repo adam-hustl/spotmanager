@@ -18,11 +18,6 @@ if (!fs.existsSync(bookingsFile)) {
 }
 
 
-
-
-
-
-
 // Where to put generated PDFs
 // On Render (no disk), use /tmp which is always writable but ephemeral
 const OUTPUT_DIR = process.env.RENDER ? '/tmp' : path.join(__dirname, 'outputs');
@@ -1219,7 +1214,7 @@ I am attaching the filled out move-in form, and ID’s.
 
 Thank you
 
-Best regards,
+Best regards, test stage commit then main
 
 Adam Kischinovsky`,
     attachments: [
