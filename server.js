@@ -559,7 +559,7 @@ const sendPushNotification = async (message) => {
       },
       body: JSON.stringify({
         app_id: process.env.ONESIGNAL_APP_ID, // Now from env variable
-        contents: { en: message },
+        contents: { en: finalMessage },
         included_segments: ['All'] // Or target specific segments/users if needed
       })
     });
