@@ -6,6 +6,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data-local');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const bookingsFile = path.join(DATA_DIR, 'bookings.json');
+const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || '';
+
 
 
 // Ensure required folders/files exist
@@ -546,14 +548,17 @@ async function pushBookingsToGist(bookings) {
 
 const sendPushNotification = async (message) => {
   try {
+    const finalMessage = IS_PROD ? message : `[STAGING] ${message}`;
+
+
     await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': 'os_v2_app_5kj5txopgregxdlxsrcnlz3jt4ewaw7rxmzejsnxcv3mlekp43awmppykzwn2ecb5zk3wgd6ri2e4gaxda2t3uhpf4d6af6tv3cih7a' // Replace with your actual REST API Key
+        'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`, // Now from env variable
       },
       body: JSON.stringify({
-        app_id: 'ea93d9dd-cf34-486b-8d77-9444d5e7699f', // Replace with your OneSignal App ID
+        app_id: process.env.ONESIGNAL_APP_ID, // Now from env variable
         contents: { en: message },
         included_segments: ['All'] // Or target specific segments/users if needed
       })
@@ -1644,7 +1649,8 @@ sortedByCheckIn.forEach((b, index) => {
           window.OneSignalDeferred = window.OneSignalDeferred || [];
           OneSignalDeferred.push(async function(OneSignal) {
             await OneSignal.init({
-              appId: "ea93d9dd-cf34-486b-8d77-9444d5e7699f", // ← Your App ID from OneSignal
+              appId: "${ONESIGNAL_APP_ID}"
+
             });
           });
         </script>
