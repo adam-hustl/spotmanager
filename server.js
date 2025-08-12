@@ -282,6 +282,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 
+app.get('/OneSignalSDKWorker.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'OneSignalSDKWorker.js'));
+});
+app.get('/OneSignalSDKUpdaterWorker.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'OneSignalSDKUpdaterWorker.js'));
+});
+
+
+
 
 // Serve your views (HTML files in the views folder):
 app.get('/', (req, res) => {
@@ -1024,22 +1033,7 @@ document.getElementById('calendarContainer').innerHTML = html;
 
           </script>
 
-  <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(() => console.log('Service Worker Registered!'))
-      .catch((error) => console.error('Service Worker Registration Failed:', error));
-  }
-
-  window.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    // Force reload when app becomes active again
-    location.reload();
-  }
-});
-
-
-</script>
+  
 
 
 
@@ -1806,23 +1800,7 @@ sortedByCheckIn.forEach((b, index) => {
         </script>
 
 
-        <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(() => console.log('Service Worker Registered!'))
-      .catch((error) => console.error('Service Worker Registration Failed:', error));
-  }
-
-  window.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    // Force reload when app becomes active again
-    location.reload();
-  }
-});
-
-
-</script>
-
+       
 
 
       </body>
