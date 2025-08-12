@@ -1,0 +1,18 @@
+[
+  {
+    "guestName": "test local",
+    "guestName2": "",
+    "checkIn": "2025-08-21",
+    "checkOut": "2025-08-22",
+    "platform": "Agoda",
+    "people": "3",
+    "notes": "",
+    "timestamp": "2025-08-12T10:25:22.101Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": false,
+      "step4": false
+    }
+  }
+]
