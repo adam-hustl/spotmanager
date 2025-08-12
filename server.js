@@ -282,6 +282,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 
+app.get('/OneSignalSDKWorker.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'OneSignalSDKWorker.js'));
+});
+app.get('/OneSignalSDKUpdaterWorker.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'OneSignalSDKUpdaterWorker.js'));
+});
+
+
+
 
 // Serve your views (HTML files in the views folder):
 app.get('/', (req, res) => {
