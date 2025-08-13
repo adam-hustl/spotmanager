@@ -14,5 +14,25 @@
       "step3": false,
       "step4": false
     }
+  },
+  {
+    "guestName": "test cancel on cleaner dashboard",
+    "guestName2": "",
+    "checkIn": "2025-08-29",
+    "checkOut": "2025-08-23",
+    "platform": "Agoda",
+    "people": "3",
+    "notes": "",
+    "timestamp": "2025-08-13T14:02:30.923Z"
+  },
+  {
+    "guestName": "test igen",
+    "guestName2": "",
+    "checkIn": "2025-08-26",
+    "checkOut": "2025-08-29",
+    "platform": "Airbnb",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-13T14:02:54.036Z"
   }
 ]

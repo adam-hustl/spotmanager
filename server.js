@@ -1474,8 +1474,11 @@ pushBookingsToGist(updated).catch(() => {});
 
 // route to serve the cleaner dashboard
 app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
-  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
-  const today = new Date().toISOString().split('T')[0];
+  // new: exclude cancelled from all cleaner views
+const allBookings = JSON.parse(fs.readFileSync(bookingsFile));
+const bookingsData = allBookings.filter(b => !b.cancelled);
+const today = new Date().toISOString().split('T')[0];
+
 
   // Step: Sort all bookings by check-in date
 const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
