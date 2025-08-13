@@ -780,6 +780,9 @@ cleanedCheckouts.forEach(b => {
       }).join('');
     }
 
+   
+
+
     const bookingsHtml = `
   <div class="tabs">
     <div class="tab-buttons">
@@ -815,6 +818,12 @@ cleanedCheckouts.forEach(b => {
           <title>Dashboard</title>
         </head>
         <body>
+
+         <div class="env-banner ${IS_PROD ? 'prod' : 'staging'}">
+          ${IS_PROD ? 'PRODUCTION SERVER' : 'STAGING SERVER'}
+        </div>
+
+
         <form action="/logout" method="POST" class="logout-form">
           <button type="submit" class="button-logout">Log Out</button>
         </form>

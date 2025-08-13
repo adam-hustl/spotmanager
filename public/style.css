@@ -62,6 +62,35 @@ li {
 }
 
 
+.env-banner {
+    position: fixed;                /* stays in place when scrolling */
+    top: 10px;                       /* small gap from top of page */
+    left: 50%;                       /* start centering */
+    transform: translateX(-50%);     /* complete horizontal centering */
+    background-color: gold;          /* keep the color */
+    color: black;                    /* text color */
+    text-align: center;
+    font-weight: bold;
+    padding: 5px 15px;               /* padding for spacing */
+    font-size: 14px;
+    border: 2px solid #000;          /* border around all sides */
+    border-radius: 4px;              /* slightly rounded corners */
+    z-index: 9999;                   /* always on top of other elements */
+}
+
+
+.env-banner.prod {
+    background-color: #ff4444; /* red */
+    color: white;
+}
+
+.env-banner.staging {
+    background-color: #ffcc00; /* yellow */
+    color: black;
+}
+
+
+
   button {
   all: unset;
   font-family: inherit;
