@@ -632,17 +632,33 @@ app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
 
 
 
-    const mailOptions = {
-      from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
-      to: 'adam@aleph.dk',
-      bcc: 'adamkischi@hotmail.com', 
-      replyTo: 'adamkischi@hotmail.com',
-      subject: `Arrival stamp for ${booking.guestName}`,
-      text: `Hello, this is the arrival stamp of ${booking.guestName} staying in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
-      attachments: [
-        { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
-      ]
-    };
+    // Manila weekend check (UTC+8)
+const now = new Date();
+const manila = new Date(now.getTime() + (now.getTimezoneOffset() + 8 * 60) * 60000);
+const day = manila.getDay(); // 0 Sun .. 6 Sat in Manila
+const isWeekend = (day === 0 || day === 6);
+
+// Recipients by environment (same rule as endorsement email)
+const prodRecipients = isWeekend
+  ? ['pmo@knightsbridgeresidences.com.ph', 'securityandsafety@knightsbridgeresidences.com.ph']
+  : ['pmo@knightsbridgeresidences.com.ph'];
+
+// Keep staging/local safe: always send only to your test inbox
+const stagingRecipients = ['adamkischi@hotmail.com'];
+
+const recipients = IS_PROD ? prodRecipients : stagingRecipients;
+
+const mailOptions = {
+  from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
+  to: recipients.join(', '),
+  bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
+  replyTo: 'adamkischi@hotmail.com',
+  subject: `Arrival stamp for ${booking.guestName}`,
+  text: `Hello, this is the arrival stamp of ${booking.guestName} staying in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
+  attachments: [
+    { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
+  ]
+};
 
     await safeSendMail(mailOptions);
 
@@ -1274,7 +1290,7 @@ app.get('/send-email/:id', async (req, res) => {
   if (bookingIndex === -1) return res.status(404).json({ success: false, message: 'Booking not found.' });
 
   const booking = bookings[bookingIndex];
-  const outputPath = path.join(__dirname, 'outputs', `movein-${bookingId}.pdf`);
+  const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
   const uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
@@ -1293,23 +1309,32 @@ app.get('/send-email/:id', async (req, res) => {
 
   
 // Check if today is weekend (0 = Sunday, 6 = Saturday)
-  const today = new Date().getDay();
-  const isWeekend = (today === 0 || today === 6);
-
-  const recipients = ['adamkischi@hotmail.com'];
-  if (isWeekend) {
-    recipients.push('adam@aleph.dk');
-  }
+// Manila weekend check (UTC+8)
+const now = new Date();
+const manila = new Date(now.getTime() + (now.getTimezoneOffset() + 8 * 60) * 60000);
+const day = manila.getDay(); // 0 Sun .. 6 Sat in Manila
+const isWeekend = (day === 0 || day === 6);
 
 
+// Build recipient list depending on environment
+const prodRecipients = isWeekend
+  ? ['pmo@knightsbridgeresidences.com.ph', 'securityandsafety@knightsbridgeresidences.com.ph']
+  : ['pmo@knightsbridgeresidences.com.ph'];
 
-  const mailOptions = {
-    from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
-    to: recipients.join(', '),
-    bcc: 'adamkischi@hotmail.com',  
-    replyTo: 'adamkischi@hotmail.com',
-    subject: `Move-In Form for ${guestNameLine}`,
-    text: `Hello PMO,
+// On staging/local we keep things safe: always send to your test inbox only
+// (safeSendMail will also enforce this and prefix [STAGING] in subject)
+const stagingRecipients = ['adamkischi@hotmail.com'];
+
+// Final "to" list
+const recipients = IS_PROD ? prodRecipients : stagingRecipients;
+
+const mailOptions = {
+  from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
+  to: recipients.join(', '),
+  bcc: 'adamkischi@hotmail.com',   // keep a copy to yourself on both envs
+  replyTo: 'adamkischi@hotmail.com',
+  subject: `Move-In Form for ${guestNameLine}`,
+  text: `Hello PMO,
 
 I hereby endorse ${guestNameLine} to move in to the unit 4317 on ${checkInFormatted} and move-out ${checkOutFormatted}.
 
@@ -1320,11 +1345,11 @@ Thank you
 Best regards, 
 
 Adam Kischinovsky`,
-    attachments: [
-      { filename: `MoveInForm-${bookingId}.pdf`, path: outputPath },
-      ...uploadedFiles
-    ]
-  };
+  attachments: [
+    { filename: `MoveInForm-${bookingId}.pdf`, path: outputPath },
+    ...uploadedFiles
+  ]
+};
 
   try {
     await safeSendMail(mailOptions);
