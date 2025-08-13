@@ -1,0 +1,7 @@
+# Ignore generated artifacts
+uploads/**
+outputs/**
+
+# Keep these directories present as empty
+!uploads/.gitkeep
+!outputs/.gitkeep
