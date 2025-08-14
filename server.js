@@ -300,26 +300,32 @@ app.get('/view-ids/:id', async (req, res) => {
   }
 });
 
-// stream a single file from SFTP
+// return a single file from SFTP (Buffer)
 app.get('/id/:filename', async (req, res) => {
-  const file = req.params.filename;
+  const file = req.params.filename;                 // Express already URL-decodes
   const remotePath = `${SFTP_ROOT}/ids/${file}`;
 
   try {
     const sftp = await getSftp();
-    const stream = await sftp.get(remotePath); // returns a readable stream
-    // set a basic content type guess
+    const data = await sftp.get(remotePath);        // ← Buffer
+    await sftp.end();
+
     const ext = path.extname(file).toLowerCase();
     if (ext === '.pdf') res.setHeader('Content-Type', 'application/pdf');
-    if (ext === '.png') res.setHeader('Content-Type', 'image/png');
-    if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
-    stream.on('close', () => sftp.end());
-    stream.pipe(res);
+    else if (ext === '.png') res.setHeader('Content-Type', 'image/png');
+    else if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
+    else res.setHeader('Content-Type', 'application/octet-stream');
+
+    // (optional) small cache so the modal feels snappier
+    res.setHeader('Cache-Control', 'public, max-age=60');
+
+    res.send(data);                                  // send Buffer
   } catch (e) {
-    console.error('SFTP stream error:', e);
+    console.error('SFTP get error:', e);
     res.status(404).send('File not found');
   }
 });
+
 
 
 
