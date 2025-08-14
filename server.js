@@ -1527,6 +1527,7 @@ app.get('/edit-booking/:id', (req, res) => {
               <option value="Airbnb" ${booking.platform === 'Airbnb' ? 'selected' : ''}>Airbnb</option>
               <option value="Agoda" ${booking.platform === 'Agoda' ? 'selected' : ''}>Agoda</option>
               <option value="Booking.com" ${booking.platform === 'Booking.com' ? 'selected' : ''}>Booking.com</option>
+              <option value="Direct" ${booking.platform === 'Direct' ? 'selected' : ''}>Direct</option>
               </select>
             <br />
               </label>
