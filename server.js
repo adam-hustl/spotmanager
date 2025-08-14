@@ -819,13 +819,19 @@ activeBookings.forEach((b) => {
   .sort((a, b) => new Date(b.checkOut) - new Date(a.checkOut));
 
 const cleanedFor = new Set();
+
 cleanedCheckouts.forEach(b => {
-  const next = bookings.find(other =>
-    new Date(other.checkIn) > new Date(b.checkOut) && !other.cancelled && !cleanedFor.has(other.timestamp)
-  );
+  // candidates whose check-in is ON or AFTER this checkout
+  const candidates = bookings
+    .filter(other =>
+      !other.cancelled &&
+      new Date(other.checkIn) >= new Date(b.checkOut)
+    )
+    .sort((a, c) => new Date(a.checkIn) - new Date(c.checkIn));
+
+  const next = candidates[0]; // earliest valid next stay
   if (next) cleanedFor.add(next.timestamp);
 });
-
 
 
 
