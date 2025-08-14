@@ -65,15 +65,28 @@ const IS_PROD = process.env.APP_ENV === 'production';
 
 const SftpClient = require('ssh2-sftp-client');
 
+// Base dir you created on the server
+const SFTP_ROOT = process.env.SFTP_BASE_DIR || '/var/www/www.demoaleph.dk/spotmanager/staging';
+
 function getSftp() {
   const sftp = new SftpClient();
+
+  // Render sometimes stores multiline keys as literal "\n"
+  const rawKey = process.env.SFTP_PRIVATE_KEY || '';
+  const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+
   return sftp.connect({
     host: process.env.SFTP_HOST,
+    port: process.env.SFTP_PORT ? Number(process.env.SFTP_PORT) : 22,
     username: process.env.SFTP_USER,
-    privateKey: process.env.SFTP_PRIVATE_KEY
+    privateKey,
+    readyTimeout: 20000,           // be patient on cold starts
+    algorithms: {                  // conservative, helps some hosts
+      serverHostKey: ['ssh-ed25519', 'ssh-rsa']
+    }
   }).then(() => sftp);
 }
-const SFTP_ROOT = process.env.SFTP_BASE_DIR || '/var/www/www.demoaleph.dk/spotmanager/staging';
+
 
 
 
@@ -101,7 +114,7 @@ const multer = require('multer');
 
 // Configure multer to save in uploads/ folder
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     cb(null, `booking-${req.params.id}-${Date.now()}-${file.originalname}`);
   }
@@ -119,7 +132,7 @@ function formatDate(isoDate) {
 
 // Separate storage for arrival stamps (force a clean, predictable filename)
 const storageStamp = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || '.jpg') || '.jpg';
     cb(null, `booking-${req.params.id}-stamp-${Date.now()}${ext}`);
@@ -187,6 +200,24 @@ app.get('/upload-id/:id', (req, res) => {
     `);
   });
 });
+
+
+
+app.get('/_sftp-test', async (req, res) => {
+  try {
+    const sftp = await getSftp();
+    const cwd = await sftp.cwd();
+    await sftp.end();
+    res.send('SFTP OK. cwd=' + cwd);
+  } catch (e) {
+    console.error('SFTP test failed:', e);
+    res.status(500).send('SFTP test failed: ' + (e && e.message ? e.message : String(e)));
+  }
+});
+
+
+
+
 
 app.post('/upload-id/:id', upload.array('guestIds', 10), async (req, res) => {
   const bookingId = req.params.id;

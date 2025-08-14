@@ -34,5 +34,15 @@
     "people": "2",
     "notes": "",
     "timestamp": "2025-08-13T14:02:54.036Z"
+  },
+  {
+    "guestName": "test new upload",
+    "guestName2": "",
+    "checkIn": "2025-08-20",
+    "checkOut": "2025-08-22",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-14T04:07:03.930Z"
   }
 ]
