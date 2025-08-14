@@ -1,7 +1,5 @@
-# Ignore generated artifacts
+node_modules/
 uploads/**
 outputs/**
-
-# Keep these directories present as empty
 !uploads/.gitkeep
 !outputs/.gitkeep

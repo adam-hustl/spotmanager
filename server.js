@@ -62,6 +62,36 @@ const transporter = nodemailer.createTransport({
 
 const IS_PROD = process.env.APP_ENV === 'production';
 
+
+const SftpClient = require('ssh2-sftp-client');
+
+// Base dir you created on the server
+const SFTP_ROOT = process.env.SFTP_BASE_DIR || '/var/www/www.demoaleph.dk/spotmanager/staging';
+
+function getSftp() {
+  const sftp = new SftpClient();
+
+  // Render sometimes stores multiline keys as literal "\n"
+  const rawKey = process.env.SFTP_PRIVATE_KEY || '';
+  const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+
+  return sftp.connect({
+    host: process.env.SFTP_HOST,
+    port: process.env.SFTP_PORT ? Number(process.env.SFTP_PORT) : 22,
+    username: process.env.SFTP_USER,
+    privateKey,
+    readyTimeout: 20000,           // be patient on cold starts
+    algorithms: {                  // conservative, helps some hosts
+      serverHostKey: ['ssh-ed25519', 'ssh-rsa']
+    }
+  }).then(() => sftp);
+}
+
+
+
+
+
+
 async function safeSendMail(options) {
   if (!IS_PROD) {
     // On staging/local: always send only to you, and clearly mark subject
@@ -84,7 +114,7 @@ const multer = require('multer');
 
 // Configure multer to save in uploads/ folder
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     cb(null, `booking-${req.params.id}-${Date.now()}-${file.originalname}`);
   }
@@ -102,7 +132,7 @@ function formatDate(isoDate) {
 
 // Separate storage for arrival stamps (force a clean, predictable filename)
 const storageStamp = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || '.jpg') || '.jpg';
     cb(null, `booking-${req.params.id}-stamp-${Date.now()}${ext}`);
@@ -171,108 +201,164 @@ app.get('/upload-id/:id', (req, res) => {
   });
 });
 
-app.post('/upload-id/:id', upload.array('guestIds', 10), (req, res) => {
-  if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
-  const uploadedFiles = req.files.map(f => f.filename).join('<br>');
-  res.send(`<h2>Files uploaded successfully:<br>${uploadedFiles} <br><br><a href="/dashboard">Go back</a></h2>`);
+
+app.get('/_sftp-test', async (req, res) => {
+  try {
+    const sftp = await getSftp();
+    const cwd = await sftp.cwd();
+    await sftp.end();
+    res.send('SFTP OK. cwd=' + cwd);
+  } catch (e) {
+    console.error('SFTP test failed:', e);
+    res.status(500).send('SFTP test failed: ' + (e && e.message ? e.message : String(e)));
+  }
 });
 
-app.get('/view-ids/:id', (req, res) => {
+
+
+
+
+app.post('/upload-id/:id', upload.array('guestIds', 10), async (req, res) => {
   const bookingId = req.params.id;
-  const folderPath = path.join(__dirname, 'uploads');
+  if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
-  fs.readdir(folderPath, (err, files) => {
-    if (err) return res.send('Error reading uploaded files.');
+  try {
+    const sftp = await getSftp();
+    const remoteDir = `${SFTP_ROOT}/ids`;
+    try { await sftp.mkdir(remoteDir, true); } catch (_) {}
 
-    const matching = files.filter(f => f.includes(`booking-${bookingId}-`));
-    if (matching.length === 0) return res.send('No uploaded IDs found for this booking.');
+    // push each uploaded file to SFTP and then remove local copy
+    for (const f of req.files) {
+      const localPath = path.join(__dirname, 'uploads', f.filename);
+      const remotePath = `${remoteDir}/${f.filename}`;
+      await sftp.put(localPath, remotePath);
+      try { fs.unlinkSync(localPath); } catch (_) {}
+    }
 
-    const fileBlocks = matching.map(f => {
-      const ext = path.extname(f).toLowerCase();
-      const encoded = encodeURIComponent(f);
+    await sftp.end();
+    res.send(`<h2>Files uploaded successfully to SFTP.<br><br><a href="/dashboard">Back</a></h2>`);
+  } catch (e) {
+    console.error('SFTP upload failed:', e);
+    res.status(500).send('Failed to upload to SFTP: ' + e.message);
+  }
+});
+
+app.get('/view-ids/:id', async (req, res) => {
+  const bookingId = req.params.id;
+
+  try {
+    const sftp = await getSftp();
+    const remoteDir = `${SFTP_ROOT}/ids`;
+    let list = [];
+    try {
+      list = await sftp.list(remoteDir);
+    } catch (_) {
+      list = [];
+    }
+    await sftp.end();
+
+    const matching = list
+      .map(f => f.name)
+      .filter(name => name.includes(`booking-${bookingId}-`));
+
+      // 🔎 Look up this booking so we can show the guest name in the modal title
+const bookings =
+  typeof readBookingsLocal === 'function'
+    ? readBookingsLocal()
+    : JSON.parse(fs.readFileSync(bookingsFile, 'utf8')); // fallback if you don't have readBookingsLocal()
+
+// try to match either timestamp or id
+const booking = bookings.find(
+  b =>
+    String(b.timestamp) === String(bookingId) ||
+    (b.id && String(b.id) === String(bookingId))
+);
+
+      const guestName = booking ? booking.guestName : '';
+
+
+    if (matching.length === 0) {
+      return res.send('No uploaded IDs found for this booking.');
+    }
+
+    const items = matching.map(fname => {
+      const encoded = encodeURIComponent(fname);
+      const ext = path.extname(fname).toLowerCase();
       const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
-
       const preview = isImage
-        ? `<img src="/uploads/${encoded}" alt="${f}" class="zoomable-id">`
-        : `<a href="/uploads/${encoded}" target="_blank">${f}</a>`;
-
-      return `
-        <div class="id-item">
-          ${preview}
-     <div style="text-align: center; margin-top: 10px;">
-      <form action="/delete-id/${bookingId}/${encoded}" method="POST">
-     <button type="submit">Delete</button>
-  </form>
-</div>
-        </div>
-      `;
+        ? `<img class="zoomable-id" src="/id/${encoded}" />`
+        : `<a href="/id/${encoded}" target="_blank">${fname}</a>`;
+      return `<div class="id-item">${preview}
+                <div style="text-align:center;margin-top:10px">
+                  <form action="/delete-id/${bookingId}/${encoded}" method="POST">
+                    <button type="submit">Delete</button>
+                  </form>
+                </div>
+              </div>`;
     }).join('');
 
     res.send(`
       <html>
-        <head>
-          <title>Uploaded Guest IDs</title>
-          <link rel="stylesheet" href="/style.css" />
-          <style>
-            .modal-container .zoom-overlay {
-              display: none;
-              position: fixed;
-              top: 0;
-              left: 0;
-              width: 100vw;
-              height: 100vh;
-              background: rgba(0, 0, 0, 0.8);
-              justify-content: center;
-              align-items: center;
-              z-index: 9999;
-            }
-            .modal-container .zoom-overlay img {
-              max-width: 90vw;
-              max-height: 90vh;
-              border-radius: 12px;
-              box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-            }
-          </style>
-        </head>
+        <head><link rel="stylesheet" href="/style.css" /></head>
         <body>
           <div class="modal-container view-ids">
-          <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
-            <h2>Uploaded Guest IDs for Booking ${bookingId}</h2>
-            <div class="id-gallery">
-              ${fileBlocks}
-            </div>
-            <div class="zoom-overlay" id="zoomOverlay" onclick="this.style.display='none';">
-              <img id="zoomImage" src="" alt="Zoomed ID">
-            </div>
+            <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
+            <h2>Uploaded Guest IDs for guest ${guestName}</h2>
+            <div class="id-gallery">${items}</div>
           </div>
-
-          <script>
-            document.querySelectorAll('.zoomable-id').forEach(img => {
-              img.addEventListener('click', () => {
-                const overlay = document.getElementById('zoomOverlay');
-                const zoomed = document.getElementById('zoomImage');
-                zoomed.src = img.src;
-                overlay.style.display = 'flex';
-              });
-            });
-          </script>
         </body>
       </html>
     `);
-  });
+  } catch (e) {
+    console.error('/view-ids error:', e);
+    res.status(500).send('Failed to list IDs: ' + e.message);
+  }
+});
+
+// return a single file from SFTP (Buffer)
+app.get('/id/:filename', async (req, res) => {
+  const file = req.params.filename;                 // Express already URL-decodes
+  const remotePath = `${SFTP_ROOT}/ids/${file}`;
+
+  try {
+    const sftp = await getSftp();
+    const data = await sftp.get(remotePath);        // ← Buffer
+    await sftp.end();
+
+    const ext = path.extname(file).toLowerCase();
+    if (ext === '.pdf') res.setHeader('Content-Type', 'application/pdf');
+    else if (ext === '.png') res.setHeader('Content-Type', 'image/png');
+    else if (ext === '.jpg' || ext === '.jpeg') res.setHeader('Content-Type', 'image/jpeg');
+    else res.setHeader('Content-Type', 'application/octet-stream');
+
+    // (optional) small cache so the modal feels snappier
+    res.setHeader('Cache-Control', 'public, max-age=60');
+
+    res.send(data);                                  // send Buffer
+  } catch (e) {
+    console.error('SFTP get error:', e);
+    res.status(404).send('File not found');
+  }
 });
 
 
-app.post('/delete-id/:id/:filename', (req, res) => {
-  const bookingId = req.params.id; // now timestamp
-  const fileToDelete = req.params.filename;
-  const filePath = path.join(__dirname, 'uploads', fileToDelete);
 
-  fs.unlink(filePath, (err) => {
-    if (err) return res.send('Error deleting file.');
+
+
+app.post('/delete-id/:id/:filename', async (req, res) => {
+  const bookingId = req.params.id;
+  const file = req.params.filename;
+
+  try {
+    const sftp = await getSftp();
+    await sftp.delete(`${SFTP_ROOT}/ids/${file}`);
+    await sftp.end();
     res.redirect(`/view-ids/${bookingId}`);
-  });
+  } catch (e) {
+    console.error('SFTP delete error:', e);
+    res.status(500).send('Error deleting file');
+  }
 });
 
 // Middleware
@@ -1293,12 +1379,57 @@ app.get('/send-email/:id', async (req, res) => {
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
-  const uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
-    .filter(f => f.includes(`booking-${bookingId}-`))
-    .map(f => ({
-      filename: f,
-      path: path.join(__dirname, 'uploads', f)
-    }));
+ // --- Gather ID attachments from SFTP (primary) or local uploads (fallback) ---
+let uploadedFiles = [];
+try {
+  const sftp = await getSftp();                              // uses env + private key
+  const remoteDir = `${SFTP_ROOT}/ids`;
+  let list = [];
+  try {
+    list = await sftp.list(remoteDir);
+  } catch (_) {
+    list = [];
+  }
+
+  const matching = list
+    .map(f => f.name)
+    .filter(name => name.includes(`booking-${bookingId}-`));
+
+  // Helper: quick mime for common types
+  const mimeOf = (filename) => {
+    const ext = (require('path').extname(filename) || '').toLowerCase();
+    if (ext === '.png') return 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+    if (ext === '.gif') return 'image/gif';
+    if (ext === '.webp') return 'image/webp';
+    if (ext === '.pdf') return 'application/pdf';
+    return 'application/octet-stream';
+  };
+
+  uploadedFiles = await Promise.all(matching.map(async (fname) => {
+    const remotePath = `${remoteDir}/${fname}`;
+    const buf = await sftp.get(remotePath);                  // Buffer
+    return {
+      filename: fname,
+      content: buf,                                          // attach Buffer directly
+      contentType: mimeOf(fname)
+    };
+  }));
+
+  await sftp.end();
+} catch (e) {
+  console.warn('[email] SFTP fetch of IDs failed, falling back to local uploads:', e.message);
+  // Fallback: look in local /uploads if running purely local/dev
+  try {
+    uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
+      .filter(f => f.includes(`booking-${bookingId}-`))
+      .map(f => ({
+        filename: f,
+        path: path.join(__dirname, 'uploads', f)
+      }));
+  } catch {}
+}
+
 
   const checkInFormatted = formatDate(booking.checkIn);
   const checkOutFormatted = formatDate(booking.checkOut);
