@@ -288,7 +288,7 @@ app.get('/view-ids/:id', async (req, res) => {
         <body>
           <div class="modal-container view-ids">
             <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
-            <h2>Uploaded Guest IDs for Booking ${bookingId}</h2>
+            <h2>Uploaded Guest IDs for guest ${guestName}</h2>
             <div class="id-gallery">${items}</div>
           </div>
         </body>
