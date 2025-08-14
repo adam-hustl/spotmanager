@@ -1363,12 +1363,57 @@ app.get('/send-email/:id', async (req, res) => {
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
-  const uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
-    .filter(f => f.includes(`booking-${bookingId}-`))
-    .map(f => ({
-      filename: f,
-      path: path.join(__dirname, 'uploads', f)
-    }));
+ // --- Gather ID attachments from SFTP (primary) or local uploads (fallback) ---
+let uploadedFiles = [];
+try {
+  const sftp = await getSftp();                              // uses env + private key
+  const remoteDir = `${SFTP_ROOT}/ids`;
+  let list = [];
+  try {
+    list = await sftp.list(remoteDir);
+  } catch (_) {
+    list = [];
+  }
+
+  const matching = list
+    .map(f => f.name)
+    .filter(name => name.includes(`booking-${bookingId}-`));
+
+  // Helper: quick mime for common types
+  const mimeOf = (filename) => {
+    const ext = (require('path').extname(filename) || '').toLowerCase();
+    if (ext === '.png') return 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+    if (ext === '.gif') return 'image/gif';
+    if (ext === '.webp') return 'image/webp';
+    if (ext === '.pdf') return 'application/pdf';
+    return 'application/octet-stream';
+  };
+
+  uploadedFiles = await Promise.all(matching.map(async (fname) => {
+    const remotePath = `${remoteDir}/${fname}`;
+    const buf = await sftp.get(remotePath);                  // Buffer
+    return {
+      filename: fname,
+      content: buf,                                          // attach Buffer directly
+      contentType: mimeOf(fname)
+    };
+  }));
+
+  await sftp.end();
+} catch (e) {
+  console.warn('[email] SFTP fetch of IDs failed, falling back to local uploads:', e.message);
+  // Fallback: look in local /uploads if running purely local/dev
+  try {
+    uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
+      .filter(f => f.includes(`booking-${bookingId}-`))
+      .map(f => ({
+        filename: f,
+        path: path.join(__dirname, 'uploads', f)
+      }));
+  } catch {}
+}
+
 
   const checkInFormatted = formatDate(booking.checkIn);
   const checkOutFormatted = formatDate(booking.checkOut);
