@@ -262,6 +262,19 @@ app.get('/view-ids/:id', async (req, res) => {
       .map(f => f.name)
       .filter(name => name.includes(`booking-${bookingId}-`));
 
+      // 🔎 Look up this booking so we can show the guest name in the modal title
+const bookings =
+  typeof readBookingsLocal === 'function'
+    ? readBookingsLocal()
+    : JSON.parse(fs.readFileSync(bookingsFile, 'utf8')); // fallback if you don't have readBookingsLocal()
+
+// try to match either timestamp or id
+const booking = bookings.find(
+  b =>
+    String(b.timestamp) === String(bookingId) ||
+    (b.id && String(b.id) === String(bookingId))
+);
+
       const guestName = booking ? booking.guestName : '';
 
 
@@ -291,7 +304,7 @@ app.get('/view-ids/:id', async (req, res) => {
         <body>
           <div class="modal-container view-ids">
             <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
-            <h2>Uploaded Guest IDs for Booking ${guestName}</h2>
+            <h2>Uploaded Guest IDs for guest ${guestName}</h2>
             <div class="id-gallery">${items}</div>
           </div>
         </body>
