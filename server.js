@@ -1698,7 +1698,7 @@ pushBookingsToGist(updated).catch(() => {});
 
 
 // route to serve the cleaner dashboard
-app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
+app.get('/cleaner-dashboard', requireAdminOrViewer, (req, res) => {
   // new: exclude cancelled from all cleaner views
 const allBookings = JSON.parse(fs.readFileSync(bookingsFile));
 const bookingsData = allBookings.filter(b => !b.cancelled);
@@ -1707,6 +1707,15 @@ const today = new Date().toISOString().split('T')[0];
 
   // Step: Sort all bookings by check-in date
 const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+
+
+// ---- read-only helpers for "viewer" role (same pattern as admin dashboard) ----
+const readOnly = req.session.role === 'viewer';
+const disabledAttr = readOnly
+  ? 'disabled aria-disabled="true" style="opacity:.55; pointer-events:none"'
+  : '';
+const blockSubmit = readOnly ? ' onsubmit="return false"' : '';
+
 
 
 
@@ -1821,29 +1830,32 @@ sortedByCheckIn.forEach((b, index) => {
             
 
             ${!b.cleaned ? `
-              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
-                <input type="hidden" name="timestamp" value="${b.timestamp}">
-                <button class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
+              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px"${blockSubmit}>
+              <input type="hidden" name="timestamp" value="${b.timestamp}">
+              <button ${disabledAttr} class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
               </form>
+
             ` : 
 
-            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px">
-                <input type="hidden" name="timestamp" value="${b.timestamp}">
-                <button class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
-            </form>`
-}
+            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px"${blockSubmit}>
+            <input type="hidden" name="timestamp" value="${b.timestamp}">
+            <button ${disabledAttr} class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
+          </form>
+          `
+          }
 
 
 
             
         </form>
 
-          <form method="POST" class="seen-form" action="/mark-seen">
-            <input type="hidden" name="timestamp" value="${b.timestamp}">
-            <button class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
+          <form method="POST" class="seen-form" action="/mark-seen"${blockSubmit}>
+          <input type="hidden" name="timestamp" value="${b.timestamp}">
+          <button ${disabledAttr} class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
             👁️
           </button>
         </form>
+
           </div>
         </li>
       `;
