@@ -17,6 +17,21 @@
 <body>
   <h1>Login</h1>
 
+
+  <!-- Install PWA UI -->
+<div id="installBox" style="display:none; margin: 12px 0;">
+  <button id="installBtn" class="button-add-booking">Install app</button>
+</div>
+
+<!-- iOS “Add to Home Screen” helper (shown only on iOS Safari) -->
+<div id="iosA2HS" style="display:none; margin: 12px 0; font-size: 0.95em;">
+  <span>To install the app: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.</span>
+</div>
+
+
+
+
+
 <script>
   const params = new URLSearchParams(window.location.search);
   if (params.get('error') === '1') {
@@ -47,6 +62,63 @@
       .catch((error) => console.error('Service Worker Registration Failed:', error));
   }
 </script>
+
+
+<script>
+  (function () {
+    // Basic platform checks
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    const installBox = document.getElementById('installBox');
+    const installBtn  = document.getElementById('installBtn');
+    const iosA2HS     = document.getElementById('iosA2HS');
+
+    // If already "installed", hide everything
+    if (isStandalone) return;
+
+    // ---- iOS Safari: no install event -> show hint UI ----
+    if (isIOS) {
+      iosA2HS.style.display = 'block';
+      return; // iOS has no beforeinstallprompt
+    }
+
+    // ---- Android/Chrome: capture beforeinstallprompt ----
+    let deferredPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent the mini-infobar
+      e.preventDefault();
+      deferredPrompt = e;
+
+      // Show our custom button (only on mobile)
+      if (isMobile) installBox.style.display = 'block';
+    });
+
+    installBtn?.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+
+      // Show the browser prompt (must be triggered by a user gesture)
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      // outcome is 'accepted' or 'dismissed'
+      deferredPrompt = null;
+
+      // Hide the UI either way
+      installBox.style.display = 'none';
+    });
+
+    // Optional: hide UI once the app gets installed
+    window.addEventListener('appinstalled', () => {
+      installBox.style.display = 'none';
+      iosA2HS.style.display = 'none';
+    });
+  })();
+</script>
+
+
+
 
 
 </body>
