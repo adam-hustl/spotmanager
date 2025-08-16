@@ -1862,7 +1862,8 @@ sortedByCheckIn.forEach((b, index) => {
     }).join('');
   }
 
-  const showAdminButton = req.session.role === 'admin';
+  const showAdminButton = (req.session.role === 'admin' || req.session.role === 'viewer');
+
 
 
 
