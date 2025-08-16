@@ -144,7 +144,7 @@ const uploadStamp = multer({ storage: storageStamp });
 
 
 
-app.get('/upload-id/:id', (req, res) => {
+app.get('/upload-id/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -219,7 +219,7 @@ app.get('/_sftp-test', async (req, res) => {
 
 
 
-app.post('/upload-id/:id', upload.array('guestIds', 10), async (req, res) => {
+app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (req, res) => {
   const bookingId = req.params.id;
   if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
@@ -346,7 +346,7 @@ app.get('/id/:filename', async (req, res) => {
 
 
 
-app.post('/delete-id/:id/:filename', async (req, res) => {
+app.post('/delete-id/:id/:filename', requireAdmin, async (req, res) => {
   const bookingId = req.params.id;
   const file = req.params.filename;
 
@@ -417,7 +417,8 @@ app.get('/add-booking', (req, res) => {
 });
 
 // Handle form submission
-app.post('/save-booking', async (req, res) => {
+app.post('/save-booking', requireAdmin, async (req, res) => {
+
   const newBooking = {
     guestName: req.body.guestName,
     guestName2: req.body.guestName2,
@@ -515,6 +516,14 @@ app.post('/login', (req, res) => {
     return res.redirect('/cleaner-dashboard');
   }
 
+
+    // Check viewer credentials (read-only)
+  if (username === 'viewer' && password === 'viewonly') {
+    req.session.loggedIn = true;
+    req.session.role = 'viewer';
+    return res.redirect('/dashboard');
+  }
+
   // If no match
   res.redirect('/?error=1');
 });
@@ -555,6 +564,19 @@ function requireAnyUser(req, res, next) {
     res.redirect('/access-denied-page.html');
   }
 }
+
+
+function isViewer(req) {
+  return req.session.loggedIn && req.session.role === 'viewer';
+}
+
+function forbidViewer(req, res, next) {
+  if (isViewer(req)) return res.status(403).send('Read-only user.');
+  next();
+}
+
+
+
 
 // About page
 app.get('/about', (req, res) => {
@@ -674,7 +696,7 @@ const sendPushNotification = async (message) => {
 
 
 
-app.get('/upload-stamp/:id', (req, res) => {
+app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -714,7 +736,7 @@ app.get('/upload-stamp/:id', (req, res) => {
 
 
 
-app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
+app.post('/upload-stamp/:id', requireAdmin, uploadStamp.single('stamp'), async (req, res) => {
   const bookingId = req.params.id;
 
   try {
@@ -872,14 +894,14 @@ cleanedCheckouts.forEach(b => {
           <li style="${cardColor}">
             ${hasIncomplete ? '<i class="fas fa-exclamation-circle alert-icon"></i>' : ''}
             <div class="button-group">
-              <button data-label="Checklist" onclick="openModal('/checklist/${b.timestamp}')"><i class="fas fa-clipboard-check"></i></button>
-              <button class="tab-desktop-only" data-label="Upload ID's" onclick="openModal('/upload-id/${b.timestamp}')"><i class="fas fa-upload"></i></button>
-              <button class="tab-desktop-only" data-label="View ID's" onclick="openModal('/view-ids/${b.timestamp}')"><i class="fas fa-image"></i></button>
-              <button class="tab-desktop-only" data-label="view move-in form" onclick="openModal('/generate-movein/${b.timestamp}')"><i class="fas fa-eye"></i></button>
-              <button data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
-              <button class="tab-desktop-only" data-label="Edit Booking" onclick="openModal('/edit-booking/${b.timestamp}')"><i class="fas fa-pen"></i></button>
-              <button class="tab-desktop-only" data-label="Cancel Booking" onclick="cancelBooking('${b.timestamp}')"><i class="fas fa-times"></i></button>
-              <button data-label="Stamp & send" onclick="openModal('/upload-stamp/${b.timestamp}')"><i class="fas fa-camera"></i></button>
+              <button ${disabledAttr} data-label="Checklist" ${maybe(`onclick="openModal('/checklist/${b.timestamp}')"`)}><i class="fas fa-clipboard-check"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Upload ID's" ${maybe(`onclick="openModal('/upload-id/${b.timestamp}')"`)}><i class="fas fa-upload"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="View ID's" ${maybe(`onclick="openModal('/view-ids/${b.timestamp}')"`)}><i class="fas fa-image"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="view move-in form" ${maybe(`onclick="openModal('/generate-movein/${b.timestamp}')"`)}><i class="fas fa-eye"></i></button>
+              <button ${disabledAttr} data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" ${maybe(`onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"`)}${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Edit Booking" ${maybe(`onclick="openModal('/edit-booking/${b.timestamp}')"`)}><i class="fas fa-pen"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Cancel Booking" ${maybe(`onclick="cancelBooking('${b.timestamp}')"`)}><i class="fas fa-times"></i></button>
+              <button ${disabledAttr} data-label="Stamp & send" ${maybe(`onclick="openModal('/upload-stamp/${b.timestamp}')"`)}><i class="fas fa-camera"></i></button>
 
 
             </div>
@@ -921,6 +943,8 @@ cleanedCheckouts.forEach(b => {
     </div>
   </div>
 `;
+
+    const readOnly = req.session.role === 'viewer';
 
     const fullHtml = `
       <html>
@@ -968,9 +992,11 @@ cleanedCheckouts.forEach(b => {
             </div>
 
 
-          <div style="text-align: center;">
-            <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
-          </div>
+                ${readOnly ? '' : `
+              <div style="text-align: center;">
+                <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
+              </div>`}
+
           <br><br>
           ${bookingsHtml}
           <div id="calendarContainer" style="display:none;"></div>
@@ -1173,7 +1199,8 @@ document.getElementById('calendarContainer').innerHTML = html;
 });
 
 
-app.post('/cancel-booking/:id', async (req, res) => {
+app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
+
   try {
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data || '[]');
@@ -1217,7 +1244,8 @@ app.post('/cancel-booking/:id', async (req, res) => {
 
 
 // ✅ Updated /checklist/:id POST route
-app.post('/checklist/:id', (req, res) => {
+app.post('/checklist/:id', forbidViewer, (req, res) => {
+
   const bookingId = req.params.id; // now using timestamp
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -1383,7 +1411,8 @@ app.get('/generate-movein/:id', async (req, res) => {
 });
 
 
-app.get('/send-email/:id', async (req, res) => {
+app.get('/send-email/:id', requireAdmin, async (req, res) => {
+
   const bookingId = req.params.id;
   const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
   const bookingIndex = bookings.findIndex(b => b.timestamp === bookingId);
@@ -1595,7 +1624,8 @@ app.get('/edit-booking/:id', (req, res) => {
   });
 });
 
-app.post('/edit-booking/:id', (req, res) => {
+app.post('/edit-booking/:id', requireAdmin, (req, res) => {
+
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -1631,7 +1661,7 @@ function isAuthenticated(req, res, next) {
 }
 
 //  route mark-cleaned
-app.post('/mark-seen', (req, res) => {
+app.post('/mark-seen', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
@@ -1665,7 +1695,7 @@ const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - n
 
 
 
-  app.post('/mark-cleaned', (req, res) => {
+  app.post('/mark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
@@ -1687,7 +1717,7 @@ pushBookingsToGist(updated).catch(() => {});
   res.redirect('/cleaner-dashboard');
 });
 
-app.post('/unmark-cleaned', (req, res) => {
+app.post('/unmark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
