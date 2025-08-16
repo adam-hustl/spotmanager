@@ -400,15 +400,6 @@ app.set('views', path.join(__dirname, 'views'));
 app.engine('html', require('ejs').renderFile);
 app.set('view engine', 'html');
 
-// Home route to serve index.html
-app.get('/', (req, res) => {
-  res.render('index');
-});
-
-// Login page
-app.get('/', (req, res) => {
-  res.redirect('/dashboard');
-});
 
 
 // Add booking form
@@ -881,6 +872,14 @@ cleanedCheckouts.forEach(b => {
 
 
 
+// ---- read-only helpers for "viewer" role ----
+const readOnly = req.session.role === 'viewer';
+const disabledAttr = readOnly ? 'disabled aria-disabled="true" style="opacity:.55; pointer-events:none"' : '';
+const maybe = (html) => readOnly ? '' : html;
+
+
+
+
     function renderBookings(list) {
 
 
@@ -960,7 +959,7 @@ cleanedCheckouts.forEach(b => {
   </div>
 `;
 
-    const readOnly = req.session.role === 'viewer';
+    
 
     const fullHtml = `
       <html>
