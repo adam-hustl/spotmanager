@@ -566,6 +566,21 @@ function requireAnyUser(req, res, next) {
 }
 
 
+// Allow admin OR viewer (read-only) to see the dashboard
+function requireAdminOrViewer(req, res, next) {
+  if (
+    req.session.loggedIn &&
+    (req.session.role === 'admin' || req.session.role === 'viewer')
+  ) {
+    return next();
+  }
+  return res.redirect('/access-denied-page.html');
+}
+
+
+
+
+
 function isViewer(req) {
   return req.session.loggedIn && req.session.role === 'viewer';
 }
@@ -807,7 +822,8 @@ const mailOptions = {
 // List bookings on dashboard
 
 
-app.get('/dashboard', requireAdmin, (req, res) => {
+app.get('/dashboard', requireAdminOrViewer, (req, res) => {
+
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) throw err;
     const bookings = JSON.parse(data);
