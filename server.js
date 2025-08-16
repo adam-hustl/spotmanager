@@ -376,6 +376,14 @@ app.get('/OneSignalSDKUpdaterWorker.js', (req, res) => {
 });
 
 
+const favicon = require('serve-favicon');
+app.use(
+  favicon(path.join(__dirname, 'public', 'favicon.ico'), { maxAge: '1h' })
+);
+
+
+
+
 
 
 // Serve your views (HTML files in the views folder):
