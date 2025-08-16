@@ -144,7 +144,7 @@ const uploadStamp = multer({ storage: storageStamp });
 
 
 
-app.get('/upload-id/:id', (req, res) => {
+app.get('/upload-id/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -219,7 +219,7 @@ app.get('/_sftp-test', async (req, res) => {
 
 
 
-app.post('/upload-id/:id', upload.array('guestIds', 10), async (req, res) => {
+app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (req, res) => {
   const bookingId = req.params.id;
   if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
@@ -346,7 +346,7 @@ app.get('/id/:filename', async (req, res) => {
 
 
 
-app.post('/delete-id/:id/:filename', async (req, res) => {
+app.post('/delete-id/:id/:filename', requireAdmin, async (req, res) => {
   const bookingId = req.params.id;
   const file = req.params.filename;
 
@@ -400,15 +400,6 @@ app.set('views', path.join(__dirname, 'views'));
 app.engine('html', require('ejs').renderFile);
 app.set('view engine', 'html');
 
-// Home route to serve index.html
-app.get('/', (req, res) => {
-  res.render('index');
-});
-
-// Login page
-app.get('/', (req, res) => {
-  res.redirect('/dashboard');
-});
 
 
 // Add booking form
@@ -417,7 +408,8 @@ app.get('/add-booking', (req, res) => {
 });
 
 // Handle form submission
-app.post('/save-booking', async (req, res) => {
+app.post('/save-booking', requireAdmin, async (req, res) => {
+
   const newBooking = {
     guestName: req.body.guestName,
     guestName2: req.body.guestName2,
@@ -515,6 +507,14 @@ app.post('/login', (req, res) => {
     return res.redirect('/cleaner-dashboard');
   }
 
+
+    // Check viewer credentials (read-only)
+  if (username === 'viewer' && password === 'viewonly') {
+    req.session.loggedIn = true;
+    req.session.role = 'viewer';
+    return res.redirect('/dashboard');
+  }
+
   // If no match
   res.redirect('/?error=1');
 });
@@ -555,6 +555,34 @@ function requireAnyUser(req, res, next) {
     res.redirect('/access-denied-page.html');
   }
 }
+
+
+// Allow admin OR viewer (read-only) to see the dashboard
+function requireAdminOrViewer(req, res, next) {
+  if (
+    req.session.loggedIn &&
+    (req.session.role === 'admin' || req.session.role === 'viewer')
+  ) {
+    return next();
+  }
+  return res.redirect('/access-denied-page.html');
+}
+
+
+
+
+
+function isViewer(req) {
+  return req.session.loggedIn && req.session.role === 'viewer';
+}
+
+function forbidViewer(req, res, next) {
+  if (isViewer(req)) return res.status(403).send('Read-only user.');
+  next();
+}
+
+
+
 
 // About page
 app.get('/about', (req, res) => {
@@ -674,7 +702,7 @@ const sendPushNotification = async (message) => {
 
 
 
-app.get('/upload-stamp/:id', (req, res) => {
+app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -714,7 +742,7 @@ app.get('/upload-stamp/:id', (req, res) => {
 
 
 
-app.post('/upload-stamp/:id', uploadStamp.single('stamp'), async (req, res) => {
+app.post('/upload-stamp/:id', requireAdmin, uploadStamp.single('stamp'), async (req, res) => {
   const bookingId = req.params.id;
 
   try {
@@ -785,7 +813,8 @@ const mailOptions = {
 // List bookings on dashboard
 
 
-app.get('/dashboard', requireAdmin, (req, res) => {
+app.get('/dashboard', requireAdminOrViewer, (req, res) => {
+
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) throw err;
     const bookings = JSON.parse(data);
@@ -843,6 +872,14 @@ cleanedCheckouts.forEach(b => {
 
 
 
+// ---- read-only helpers for "viewer" role ----
+const readOnly = req.session.role === 'viewer';
+const disabledAttr = readOnly ? 'disabled aria-disabled="true" style="opacity:.55; pointer-events:none"' : '';
+const maybe = (html) => readOnly ? '' : html;
+
+
+
+
     function renderBookings(list) {
 
 
@@ -872,14 +909,14 @@ cleanedCheckouts.forEach(b => {
           <li style="${cardColor}">
             ${hasIncomplete ? '<i class="fas fa-exclamation-circle alert-icon"></i>' : ''}
             <div class="button-group">
-              <button data-label="Checklist" onclick="openModal('/checklist/${b.timestamp}')"><i class="fas fa-clipboard-check"></i></button>
-              <button class="tab-desktop-only" data-label="Upload ID's" onclick="openModal('/upload-id/${b.timestamp}')"><i class="fas fa-upload"></i></button>
-              <button class="tab-desktop-only" data-label="View ID's" onclick="openModal('/view-ids/${b.timestamp}')"><i class="fas fa-image"></i></button>
-              <button class="tab-desktop-only" data-label="view move-in form" onclick="openModal('/generate-movein/${b.timestamp}')"><i class="fas fa-eye"></i></button>
-              <button data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
-              <button class="tab-desktop-only" data-label="Edit Booking" onclick="openModal('/edit-booking/${b.timestamp}')"><i class="fas fa-pen"></i></button>
-              <button class="tab-desktop-only" data-label="Cancel Booking" onclick="cancelBooking('${b.timestamp}')"><i class="fas fa-times"></i></button>
-              <button data-label="Stamp & send" onclick="openModal('/upload-stamp/${b.timestamp}')"><i class="fas fa-camera"></i></button>
+              <button ${disabledAttr} data-label="Checklist" ${maybe(`onclick="openModal('/checklist/${b.timestamp}')"`)}><i class="fas fa-clipboard-check"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Upload ID's" ${maybe(`onclick="openModal('/upload-id/${b.timestamp}')"`)}><i class="fas fa-upload"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="View ID's" ${maybe(`onclick="openModal('/view-ids/${b.timestamp}')"`)}><i class="fas fa-image"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="view move-in form" ${maybe(`onclick="openModal('/generate-movein/${b.timestamp}')"`)}><i class="fas fa-eye"></i></button>
+              <button ${disabledAttr} data-label="Send endorsement e-mail" id="sendBtn-${b.timestamp}" ${maybe(`onclick="sendEmail('${b.timestamp}')" title="Send endorsement e-mail"`)}${b.emailSent ? 'disabled' : ''}><i id="sendIcon-${b.timestamp}" class="fas ${b.emailSent ? 'fa-check-circle' : 'fa-paper-plane'}"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Edit Booking" ${maybe(`onclick="openModal('/edit-booking/${b.timestamp}')"`)}><i class="fas fa-pen"></i></button>
+              <button ${disabledAttr} class="tab-desktop-only" data-label="Cancel Booking" ${maybe(`onclick="cancelBooking('${b.timestamp}')"`)}><i class="fas fa-times"></i></button>
+              <button ${disabledAttr} data-label="Stamp & send" ${maybe(`onclick="openModal('/upload-stamp/${b.timestamp}')"`)}><i class="fas fa-camera"></i></button>
 
 
             </div>
@@ -921,6 +958,8 @@ cleanedCheckouts.forEach(b => {
     </div>
   </div>
 `;
+
+    
 
     const fullHtml = `
       <html>
@@ -968,9 +1007,11 @@ cleanedCheckouts.forEach(b => {
             </div>
 
 
-          <div style="text-align: center;">
-            <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
-          </div>
+                ${readOnly ? '' : `
+              <div style="text-align: center;">
+                <button class="button-add-booking" onclick="openModal('/add-booking')">+ Add Booking</button>
+              </div>`}
+
           <br><br>
           ${bookingsHtml}
           <div id="calendarContainer" style="display:none;"></div>
@@ -1173,7 +1214,8 @@ document.getElementById('calendarContainer').innerHTML = html;
 });
 
 
-app.post('/cancel-booking/:id', async (req, res) => {
+app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
+
   try {
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data || '[]');
@@ -1217,7 +1259,8 @@ app.post('/cancel-booking/:id', async (req, res) => {
 
 
 // ✅ Updated /checklist/:id POST route
-app.post('/checklist/:id', (req, res) => {
+app.post('/checklist/:id', forbidViewer, (req, res) => {
+
   const bookingId = req.params.id; // now using timestamp
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -1383,7 +1426,8 @@ app.get('/generate-movein/:id', async (req, res) => {
 });
 
 
-app.get('/send-email/:id', async (req, res) => {
+app.get('/send-email/:id', requireAdmin, async (req, res) => {
+
   const bookingId = req.params.id;
   const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
   const bookingIndex = bookings.findIndex(b => b.timestamp === bookingId);
@@ -1595,7 +1639,8 @@ app.get('/edit-booking/:id', (req, res) => {
   });
 });
 
-app.post('/edit-booking/:id', (req, res) => {
+app.post('/edit-booking/:id', requireAdmin, (req, res) => {
+
   const bookingId = req.params.id;
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
@@ -1631,7 +1676,7 @@ function isAuthenticated(req, res, next) {
 }
 
 //  route mark-cleaned
-app.post('/mark-seen', (req, res) => {
+app.post('/mark-seen', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
@@ -1653,7 +1698,7 @@ pushBookingsToGist(updated).catch(() => {});
 
 
 // route to serve the cleaner dashboard
-app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
+app.get('/cleaner-dashboard', requireAdminOrViewer, (req, res) => {
   // new: exclude cancelled from all cleaner views
 const allBookings = JSON.parse(fs.readFileSync(bookingsFile));
 const bookingsData = allBookings.filter(b => !b.cancelled);
@@ -1664,8 +1709,17 @@ const today = new Date().toISOString().split('T')[0];
 const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
 
 
+// ---- read-only helpers for "viewer" role (same pattern as admin dashboard) ----
+const readOnly = req.session.role === 'viewer';
+const disabledAttr = readOnly
+  ? 'disabled aria-disabled="true" style="opacity:.55; pointer-events:none"'
+  : '';
+const blockSubmit = readOnly ? ' onsubmit="return false"' : '';
 
-  app.post('/mark-cleaned', (req, res) => {
+
+
+
+  app.post('/mark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
@@ -1687,7 +1741,7 @@ pushBookingsToGist(updated).catch(() => {});
   res.redirect('/cleaner-dashboard');
 });
 
-app.post('/unmark-cleaned', (req, res) => {
+app.post('/unmark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body;
 
@@ -1776,36 +1830,40 @@ sortedByCheckIn.forEach((b, index) => {
             
 
             ${!b.cleaned ? `
-              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px">
-                <input type="hidden" name="timestamp" value="${b.timestamp}">
-                <button class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
+              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px"${blockSubmit}>
+              <input type="hidden" name="timestamp" value="${b.timestamp}">
+              <button ${disabledAttr} class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
               </form>
+
             ` : 
 
-            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px">
-                <input type="hidden" name="timestamp" value="${b.timestamp}">
-                <button class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
-            </form>`
-}
+            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px"${blockSubmit}>
+            <input type="hidden" name="timestamp" value="${b.timestamp}">
+            <button ${disabledAttr} class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
+          </form>
+          `
+          }
 
 
 
             
         </form>
 
-          <form method="POST" class="seen-form" action="/mark-seen">
-            <input type="hidden" name="timestamp" value="${b.timestamp}">
-            <button class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
+          <form method="POST" class="seen-form" action="/mark-seen"${blockSubmit}>
+          <input type="hidden" name="timestamp" value="${b.timestamp}">
+          <button ${disabledAttr} class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
             👁️
           </button>
         </form>
+
           </div>
         </li>
       `;
     }).join('');
   }
 
-  const showAdminButton = req.session.role === 'admin';
+  const showAdminButton = (req.session.role === 'admin' || req.session.role === 'viewer');
+
 
 
 

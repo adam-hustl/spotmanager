@@ -90,6 +90,12 @@ li {
 }
 
 
+.disabled-btn { 
+  opacity: .5; 
+  cursor: not-allowed !important; 
+  pointer-events: none; 
+}
+
 
   button {
   all: unset;
