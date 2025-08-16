@@ -974,9 +974,12 @@ const maybe = (html) => readOnly ? '' : html;
         </head>
         <body>
 
-         <div class="env-banner ${IS_PROD ? 'prod' : 'staging'}">
-          ${IS_PROD ? 'PRODUCTION SERVER' : 'STAGING SERVER'}
-        </div>
+         ${req.session.role !== 'viewer' ? `
+          <div class="env-banner ${IS_PROD ? 'prod' : 'staging'}">
+            ${IS_PROD ? 'PRODUCTION SERVER' : 'STAGING SERVER'}
+          </div>
+        ` : ''}
+
 
 
         <form action="/logout" method="POST" class="logout-form">
