@@ -494,14 +494,14 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   // Check admin credentials
-  if (username === 'admin' && password === '1234') {
+  if (username === 'admin' && password === 'gern_jark_FLIT') {
     req.session.loggedIn = true;
     req.session.role = 'admin';
     return res.redirect('/dashboard');
   }
 
   // Check cleaner credentials
-  if (username === 'Diane' && password === 'abcd') {
+  if (username === 'Diane' && password === '2525') {
     req.session.loggedIn = true;
     req.session.role = 'cleaner';
     return res.redirect('/cleaner-dashboard');
