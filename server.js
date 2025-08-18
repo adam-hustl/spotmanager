@@ -63,6 +63,25 @@ const transporter = nodemailer.createTransport({
 const IS_PROD = process.env.APP_ENV === 'production';
 
 
+// ---- Per-environment credentials (hardcoded) ----
+// ✅ Replace the sample values with your real ones.
+const ADMIN_USER = IS_PROD ? 'admin' : 'admin';
+const ADMIN_PASS = IS_PROD ? 'gern_jark_FLIT' : '1234';
+
+// If you also want different cleaner creds per environment, set them here too:
+const CLEANER_USER = IS_PROD ? 'Diane' : 'Diane';
+const CLEANER_PASS = IS_PROD ? '2525'  : '2525';
+
+// Viewer can remain the same across envs (read-only):
+const VIEWER_USER = 'viewer';
+const VIEWER_PASS = 'viewonly';
+
+
+
+
+
+
+
 const SftpClient = require('ssh2-sftp-client');
 
 // Base dir you created on the server
@@ -493,31 +512,31 @@ function formatDateForMessage(date) {
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
-  // Check admin credentials
-  if (username === 'admin' && password === 'gern_jark_FLIT') {
+  // Admin (env-specific)
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'admin';
     return res.redirect('/dashboard');
   }
 
-  // Check cleaner credentials
-  if (username === 'Diane' && password === '2525') {
+  // Cleaner (env-specific if you changed CLEANER_* above)
+  if (username === CLEANER_USER && password === CLEANER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'cleaner';
     return res.redirect('/cleaner-dashboard');
   }
 
-
-    // Check viewer credentials (read-only)
-  if (username === 'viewer' && password === 'viewonly') {
+  // Viewer (read-only; same for both envs)
+  if (username === VIEWER_USER && password === VIEWER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
     return res.redirect('/dashboard');
   }
 
-  // If no match
-  res.redirect('/?error=1');
+  // No match
+  return res.redirect('/?error=1');
 });
+
 
 // end session on log out
 app.get('/logout', (req, res) => {
