@@ -4,6 +4,8 @@ const app = express();
 const fs = require('fs');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data-local');
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const finance = require('./finance');
+
 
 const bookingsFile = path.join(DATA_DIR, 'bookings.json');
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || '';
@@ -385,6 +387,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
 
 app.get('/OneSignalSDKWorker.js', (req, res) => {
@@ -568,7 +571,7 @@ function requireAdmin(req, res, next) {
 
 // Admin or Cleaner (shared access)
 function requireAnyUser(req, res, next) {
-  if (req.session.loggedIn && (req.session.role === 'admin' || req.session.role === 'cleaner')) {
+  if (req.session.loggedIn && (req.session.role === 'admin' || req.session.role === 'cleaner' || req.session.role === 'viewer')) {
     next();
   } else {
     res.redirect('/access-denied-page.html');
@@ -1720,7 +1723,7 @@ pushBookingsToGist(updated).catch(() => {});
 
 
 // route to serve the cleaner dashboard
-app.get('/cleaner-dashboard', requireAdminOrViewer, (req, res) => {
+app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   // new: exclude cancelled from all cleaner views
 const allBookings = JSON.parse(fs.readFileSync(bookingsFile));
 const bookingsData = allBookings.filter(b => !b.cancelled);
@@ -2070,6 +2073,202 @@ sortedByCheckIn.forEach((b, index) => {
     </html>
   `);
 });
+
+// --------------- Finance Tab (MVP) ---------------
+
+// Admin-only Finance UI
+app.get('/finance', requireAdmin, (req, res) => {
+  const fmt = (n) => (Number(n || 0)).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
+
+  // Current month key
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const summary = finance.monthSummary(monthKey);
+  const entries = finance.listEntries();
+
+  const rows = entries.slice(0, 50).map(e => {
+    if (e.type === 'income') {
+      const net = (e.gross - (e.platformFee||0) - (e.cleaningCost||0) - (e.otherCost||0));
+      return `<tr>
+        <td>${e.date}</td>
+        <td>Income</td>
+        <td>${e.platform || ''}</td>
+        <td>${e.guestName || ''}</td>
+        <td>${fmt(e.gross)}</td>
+        <td>${fmt(e.platformFee)}</td>
+        <td>${fmt(e.cleaningCost)}</td>
+        <td>${fmt(e.otherCost)}</td>
+        <td>${fmt(net)}</td>
+        <td>${e.notes || ''}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td>${e.date}</td>
+        <td>Expense</td>
+        <td>${e.category || ''}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>${fmt(e.amount)}</td>
+        <td></td>
+        <td>-${fmt(e.amount)}</td>
+        <td>${e.notes || ''}</td>
+      </tr>`;
+    }
+  }).join('');
+
+  res.send(`<!doctype html>
+  <html>
+  <head>
+    <title>Finance</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      form .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+      table { width:100%; border-collapse: collapse; margin-top: 16px; }
+      th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 14px; }
+      th { background:#f6f6f8; text-align:left; }
+      .card { background:#fff; padding:16px; border-radius:12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+      h2 { margin: 0 0 8px; }
+      .subtle { color:#666; font-size: 13px; }
+      .actions { margin-top: 8px; }
+      input, select, textarea { padding:6px 8px; border:1px solid #ccc; border-radius:8px; }
+      label { font-size: 12px; color:#333; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <a href="/dashboard" style="text-decoration:none;">← Back to Dashboard</a>
+      <h1>Finance</h1>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Summary (${summary.month})</h2>
+          <div class="subtle">Last 50 entries shown below</div>
+          <table>
+            <tbody>
+              <tr><th>Total Gross (Income)</th><td>${fmt(summary.incomeGross)}</td></tr>
+              <tr><th>Platform Fees</th><td>${fmt(summary.platformFees)}</td></tr>
+              <tr><th>Cleaning Costs</th><td>${fmt(summary.cleaning)}</td></tr>
+              <tr><th>Other Costs</th><td>${fmt(summary.other)}</td></tr>
+              <tr><th>Expenses (General)</th><td>${fmt(summary.expense)}</td></tr>
+              <tr><th>Net</th><td><strong>${fmt(summary.net)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>Add Income (per booking)</h2>
+          <form method="POST" action="/finance/entry">
+            <input type="hidden" name="type" value="income"/>
+            <div class="row">
+              <div>
+                <label>Date<br/><input type="date" name="date" required /></label>
+              </div>
+              <div>
+                <label>Platform<br/>
+                  <select name="platform">
+                    <option value="">—</option>
+                    <option>Airbnb</option>
+                    <option>Booking.com</option>
+                    <option>Agoda</option>
+                    <option>Other</option>
+                  </select>
+                </label>
+              </div>
+              <div>
+                <label>Booking Timestamp (optional)<br/><input type="text" name="bookingTimestamp" placeholder="ISO timestamp" /></label>
+              </div>
+              <div>
+                <label>Guest Name (optional)<br/><input type="text" name="guestName" /></label>
+              </div>
+            </div>
+
+            <div class="row">
+              <div><label>Gross (₱)<br/><input type="number" name="gross" step="0.01" required/></label></div>
+              <div><label>Platform Fee (₱)<br/><input type="number" name="platformFee" step="0.01"/></label></div>
+              <div><label>Cleaning Cost (₱)<br/><input type="number" name="cleaningCost" step="0.01"/></label></div>
+              <div><label>Other Cost (₱)<br/><input type="number" name="otherCost" step="0.01"/></label></div>
+            </div>
+
+            <div class="row">
+              <label style="flex:1;">Notes<br/><textarea name="notes" rows="2" style="width:100%;"></textarea></label>
+            </div>
+
+            <div class="actions">
+              <button type="submit">Save Income</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>Add Expense (general)</h2>
+        <form method="POST" action="/finance/entry">
+          <input type="hidden" name="type" value="expense"/>
+          <div class="row">
+            <div><label>Date<br/><input type="date" name="date" required/></label></div>
+            <div><label>Category<br/><input type="text" name="category" placeholder="Supplies, Transport, etc."/></label></div>
+            <div><label>Amount (₱)<br/><input type="number" name="amount" step="0.01" required/></label></div>
+          </div>
+          <div class="row">
+            <label style="flex:1;">Notes<br/><textarea name="notes" rows="2" style="width:100%;"></textarea></label>
+          </div>
+          <div class="actions">
+            <button type="submit">Save Expense</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>Recent Entries</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Type</th><th>Platform/Category</th><th>Guest</th>
+              <th>Gross</th><th>Platform Fee</th><th>Cleaning</th><th>Other</th><th>Net</th><th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>${rows || ''}</tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+  </html>`);
+});
+
+// Handle create entry (income or expense)
+app.post('/finance/entry', requireAdmin, (req, res) => {
+  try {
+    if (req.body.type === 'income') {
+      finance.addIncome({
+        date: req.body.date,
+        platform: req.body.platform,
+        bookingTimestamp: req.body.bookingTimestamp,
+        guestName: req.body.guestName,
+        gross: req.body.gross,
+        platformFee: req.body.platformFee,
+        cleaningCost: req.body.cleaningCost,
+        otherCost: req.body.otherCost,
+        notes: req.body.notes
+      });
+    } else if (req.body.type === 'expense') {
+      finance.addExpense({
+        date: req.body.date,
+        category: req.body.category,
+        amount: req.body.amount,
+        notes: req.body.notes
+      });
+    }
+    res.redirect('/finance');
+  } catch (e) {
+    console.error('Finance save error', e);
+    res.status(500).send('Failed to save. ' + e.message);
+  }
+});
+
+
+
 
 
 
