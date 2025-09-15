@@ -33,7 +33,13 @@
     "platform": "Airbnb",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-08-13T14:02:54.036Z"
+    "timestamp": "2025-08-13T14:02:54.036Z",
+    "checklist": {
+      "step1": false,
+      "step2": false,
+      "step3": false,
+      "step4": false
+    }
   },
   {
     "guestName": "test new upload",
@@ -44,5 +50,46 @@
     "people": "2",
     "notes": "",
     "timestamp": "2025-08-14T04:07:03.930Z"
+  },
+  {
+    "guestName": "test finance",
+    "guestName2": "",
+    "checkIn": "2025-08-01",
+    "checkOut": "2025-08-05",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-22T11:21:53.154Z"
+  },
+  {
+    "guestName": "test again fin",
+    "guestName2": "",
+    "checkIn": "2025-07-10",
+    "checkOut": "2025-07-12",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-22T11:25:49.245Z",
+    "cleaned": true
+  },
+  {
+    "guestName": "test add to finance",
+    "guestName2": "",
+    "checkIn": "2025-08-21",
+    "checkOut": "2025-08-22",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-08-22T11:58:23.910Z"
+  },
+  {
+    "guestName": "test now",
+    "guestName2": "",
+    "checkIn": "2025-08-25",
+    "checkOut": "2025-08-27",
+    "platform": "Direct",
+    "people": "4",
+    "notes": "",
+    "timestamp": "2025-08-25T13:18:58.805Z"
   }
 ]

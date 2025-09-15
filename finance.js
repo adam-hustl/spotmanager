@@ -10,7 +10,19 @@ const FINANCE_FILE = path.join(DATA_DIR, 'finance.json');
 // Initialize file if missing
 function ensureFile() {
   if (!fs.existsSync(FINANCE_FILE)) {
-    const seed = { entries: [], settings: { currency: 'PHP' } };
+
+    const seed = {
+  entries: [],
+  settings: {
+    currency: 'PHP',
+    cleanerRate: 0,          // per cleaning
+    internetAmount: 0,       // monthly (due 20th)
+    rentAmount: 0,           // monthly (due 10th)
+    cleanerPaidThru: ''      // ISO date we have paid cleaner up to (inclusive)
+  }
+};
+
+
     fs.writeFileSync(FINANCE_FILE, JSON.stringify(seed, null, 2));
   }
 }
@@ -31,6 +43,28 @@ function load() {
 function save(data) {
   fs.writeFileSync(FINANCE_FILE, JSON.stringify(data, null, 2));
 }
+
+function getSettings() {
+  return load().settings;
+}
+
+function updateSettings(partial) {
+  const data = load();
+  const s = data.settings || {};
+  const num = (v) => (v === '' || v == null ? 0 : Number(v));
+  data.settings = {
+    ...s,
+    ...(partial.cleanerRate !== undefined ? { cleanerRate: num(partial.cleanerRate) } : {}),
+    ...(partial.internetAmount !== undefined ? { internetAmount: num(partial.internetAmount) } : {}),
+    ...(partial.rentAmount !== undefined ? { rentAmount: num(partial.rentAmount) } : {}),
+    ...(partial.cleanerPaidThru !== undefined ? { cleanerPaidThru: partial.cleanerPaidThru } : {})
+  };
+  save(data);
+  return data.settings;
+}
+
+
+
 
 function uid() {
   return 'fin_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -123,5 +157,8 @@ module.exports = {
   addExpense,
   listEntries,
   monthSummary,
-  allMonthsSummary
+  allMonthsSummary,
+  getSettings,
+  updateSettings
 };
+
