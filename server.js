@@ -613,6 +613,7 @@ app.get('/about', (req, res) => {
 
 
 
+
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 
@@ -2076,6 +2077,273 @@ sortedByCheckIn.forEach((b, index) => {
 
 // --------------- Finance Tab (MVP) ---------------
 
+
+
+// NEW Finance page (shows Summary + Upcoming & Due + Add Expense)
+app.get('/finance', requireAdmin, (req, res) => {
+  const fmt = (n) => (Number(n || 0)).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
+  const toMonthKey = (d) => {
+    const dt = new Date(d);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  };
+const makeDate = (y, m, d) => new Date(y, m, d); // local midnight
+const toLocalISO = (d) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+  const lastDayOfMonth = (y, m) => new Date(y, m + 1, 0);
+
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+  // summary (paid-only)
+  const summary = finance.monthSummary(monthKey);
+
+  // data
+  const settings = finance.getSettings();
+  const entries = finance.listEntries();
+  const bookings = (typeof readBookingsLocal === 'function') ? readBookingsLocal() : []; // uses your helper :contentReference[oaicite:7]{index=7}
+
+  // did we already log this month’s expense for category?
+  const hasExpenseForMonth = (category, mk) =>
+    entries.some(e => e.type === 'expense' && (e.category || '').toLowerCase() === category.toLowerCase() && toMonthKey(e.date) === mk);
+
+  // Internet (20th): show current month unless it’s already paid → then show next month
+  const internetMonth = hasExpenseForMonth('Internet', monthKey)
+    ? `${y}-${String(m + 2).padStart(2, '0')}`
+    : monthKey;
+  const [iy, im] = internetMonth.split('-').map(Number);
+  const internetDueISO = toLocalISO(makeDate(iy, im - 1, 20));
+
+
+  // Rent (10th)
+  const rentMonth = hasExpenseForMonth('Rent', monthKey)
+    ? `${y}-${String(m + 2).padStart(2, '0')}`
+    : monthKey;
+  const [ry, rm] = rentMonth.split('-').map(Number);
+  const rentDueISO = toLocalISO(makeDate(ry, rm - 1, 10));
+
+
+  // Cleaner payout (15th / last day), owed since settings.cleanerPaidThru
+const nextCleanerDue = (now.getDate() <= 15)
+  ? toLocalISO(makeDate(y, m, 15))
+  : toLocalISO(lastDayOfMonth(y, m));
+
+  const paidThru = settings.cleanerPaidThru ? new Date(settings.cleanerPaidThru) : new Date('1970-01-01');
+  const end = new Date(nextCleanerDue);
+  const cleanedSincePaid = bookings.filter(b => {
+    try { return b.cleaned && new Date(b.checkOut) > paidThru && new Date(b.checkOut) <= end; }
+    catch { return false; }
+  });
+  const cleaningsCount = cleanedSincePaid.length;
+  const cleanerOwed = Number(settings.cleanerRate || 0) * cleaningsCount;
+
+  // Build upcoming items list
+  const items = [];
+
+  items.push({
+    dueISO: nextCleanerDue,
+    title: 'Cleaner payout',
+    amount: cleanerOwed,
+    breakdown: [
+      `${cleaningsCount} cleaned × ${fmt(settings.cleanerRate || 0)}`,
+      'Laundry: (to be added later via receipt upload)'
+    ],
+    action: 'cleaner',
+    params: { periodEnd: nextCleanerDue }
+  });
+
+  if ((settings.internetAmount || 0) > 0) {
+    items.push({
+      dueISO: internetDueISO,
+      title: `Internet (${internetMonth})`,
+      amount: Number(settings.internetAmount || 0),
+      breakdown: [`Monthly internet for ${internetMonth}`],
+      action: 'internet',
+      params: { monthKey: internetMonth }
+    });
+  }
+
+  if ((settings.rentAmount || 0) > 0) {
+    items.push({
+      dueISO: rentDueISO,
+      title: `Rent (${rentMonth})`,
+      amount: Number(settings.rentAmount || 0),
+      breakdown: [`Monthly rent for ${rentMonth}`],
+      action: 'rent',
+      params: { monthKey: rentMonth }
+    });
+  }
+
+  // group by due date
+  const groups = {};
+  for (const it of items) {
+    if (!groups[it.dueISO]) groups[it.dueISO] = { dueISO: it.dueISO, total: 0, items: [] };
+    groups[it.dueISO].total += Number(it.amount || 0);
+    groups[it.dueISO].items.push(it);
+  }
+  const grouped = Object.values(groups).sort((a, b) => a.dueISO.localeCompare(b.dueISO));
+
+  // recent entries table (same as your current table)
+  const rows = entries.slice(0, 50).map(e => {
+    if (e.type === 'income') {
+      const net = (e.gross - (e.platformFee||0) - (e.cleaningCost||0) - (e.otherCost||0));
+      return `<tr>
+        <td>${e.date}</td><td>Income</td><td>${e.platform || ''}</td><td>${e.guestName || ''}</td>
+        <td>${fmt(e.gross)}</td><td>${fmt(e.platformFee)}</td><td>${fmt(e.cleaningCost)}</td>
+        <td>${fmt(e.otherCost)}</td><td>${fmt(net)}</td><td>${e.notes || ''}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td>${e.date}</td><td>Expense</td><td>${e.category || ''}</td><td></td>
+        <td></td><td></td><td>${fmt(e.amount)}</td><td></td><td>-${fmt(e.amount)}</td>
+        <td>${e.notes || ''}</td>
+      </tr>`;
+    }
+  }).join('');
+
+  res.send(`<!doctype html>
+  <html>
+  <head>
+    <title>Finance</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      .card { background:#fff; padding:16px; border-radius:12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+      table { width:100%; border-collapse: collapse; margin-top: 16px; }
+      th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 14px; }
+      th { background:#f6f6f8; text-align:left; }
+      .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+      input, select, textarea { padding:6px 8px; border:1px solid #ccc; border-radius:8px; }
+      .subtle { color:#666; font-size: 13px; }
+      .group { border:1px solid #eee; border-radius:10px; padding:10px; margin:10px 0; }
+      .group-header { display:flex; justify-content:space-between; align-items:center; }
+      .toggle { cursor:pointer; font-size:12px; }
+      .breakdown { display:none; margin-top:8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <a href="/dashboard" style="text-decoration:none;">← Back to Dashboard</a>
+      <h1>Finance</h1>
+
+      <div class="grid">
+        <!-- Summary -->
+        <div class="card">
+          <h2>Summary (${summary.month})</h2>
+          <div class="subtle">Only paid expenses are included in totals.</div>
+          <table>
+            <tbody>
+              <tr><th>Total Gross (Income)</th><td>${fmt(summary.incomeGross)}</td></tr>
+              <tr><th>Platform Fees</th><td>${fmt(summary.platformFees)}</td></tr>
+              <tr><th>Cleaning Costs</th><td>${fmt(summary.cleaning)}</td></tr>
+              <tr><th>Other Costs</th><td>${fmt(summary.other)}</td></tr>
+              <tr><th>Expenses (General)</th><td>${fmt(summary.expense)}</td></tr>
+              <tr><th>Net</th><td><strong>${fmt(summary.net)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Upcoming & Due -->
+        <div class="card">
+          <h2>Upcoming & Due Expenses</h2>
+          <div class="subtle">Cleaner payout adds up as you mark bookings “Cleaned”. Internet (20th) and Rent (10th) show if configured.</div>
+
+          ${grouped.map(g => {
+            const brk = g.items.map(it => `
+              <div style="border-top:1px dashed #eee; padding-top:8px; margin-top:8px;">
+                <div><strong>${it.title}</strong></div>
+                <div>${it.breakdown.map(line => `<div class="subtle">${line}</div>`).join('')}</div>
+                <form method="POST" action="/finance/mark-paid/${it.action}" style="margin-top:8px;">
+                  ${it.action === 'cleaner' ? `<input type="hidden" name="periodEnd" value="${it.params.periodEnd}">` : ''}
+                  ${it.action !== 'cleaner' ? `<input type="hidden" name="monthKey" value="${it.params.monthKey}">` : ''}
+                  <button class="btn btn-primary" ${Number(it.amount||0) <= 0 ? 'disabled' : ''}>Mark Paid (${fmt(it.amount)})</button>
+                </form>
+              </div>
+            `).join('');
+
+            const labels = g.items.map(it => (it.action === 'cleaner' ? 'Cleaning' : it.action === 'internet' ? 'Internet' : it.action === 'rent' ? 'Rent' : (it.title || ''))).join(' + ');
+
+
+            return `
+              <div class="group">
+                <div class="group-header">
+                <div><strong>Due ${g.dueISO} — ${labels}</strong></div>
+                  <div><strong>${fmt(g.total)}</strong> <span class="toggle" onclick="toggleDetails('${g.dueISO}')">Details</span></div>
+                </div>
+
+                <div id="bd-${g.dueISO}" class="breakdown">${brk}</div>
+              </div>
+            `;
+          }).join('')}
+
+          <h3 style="margin-top:16px;">Settings</h3>
+          <form method="POST" action="/finance/settings">
+            <div class="row">
+              <label>Cleaner rate (₱)<br/><input type="number" name="cleanerRate" step="0.01" value="${Number(settings.cleanerRate||0)}"></label>
+              <label>Internet (₱)<br/><input type="number" name="internetAmount" step="0.01" value="${Number(settings.internetAmount||0)}"></label>
+              <label>Rent (₱)<br/><input type="number" name="rentAmount" step="0.01" value="${Number(settings.rentAmount||0)}"></label>
+            </div>
+            <button class="btn btn-primary" type="submit">Save Settings</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Add Expense (general) -->
+      <div class="card" style="margin-top:16px;">
+        <h2>Add Expense (general)</h2>
+        <form method="POST" action="/finance/entry">
+          <input type="hidden" name="type" value="expense"/>
+          <div class="row">
+            <div><label>Date<br/><input type="date" name="date" required/></label></div>
+            <div><label>Category<br/><input type="text" name="category" placeholder="Supplies, Transport, etc."/></label></div>
+            <div><label>Amount (₱)<br/><input type="number" name="amount" step="0.01" required/></label></div>
+          </div>
+          <div class="row">
+            <label style="flex:1;">Notes<br/><textarea name="notes" rows="2" style="width:100%;"></textarea></label>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="submit">Save Expense</button>
+
+          </div>
+        </form>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>Recent Entries</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Type</th><th>Category/Platform</th><th>Guest</th>
+              <th>Gross</th><th>Platform Fee</th><th>Cleaning</th><th>Other</th><th>Net</th><th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>${rows || ''}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      function toggleDetails(id) {
+        const el = document.getElementById('bd-' + id);
+        if (!el) return;
+        el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+      }
+    </script>
+  </body>
+  </html>`);
+});
+
+
+
+
+
+
 // Admin-only Finance UI
 app.get('/finance', requireAdmin, (req, res) => {
   const fmt = (n) => (Number(n || 0)).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
@@ -2236,6 +2504,111 @@ app.get('/finance', requireAdmin, (req, res) => {
   </body>
   </html>`);
 });
+
+
+// Save Finance settings
+app.post('/finance/settings', requireAdmin, (req, res) => {
+  try {
+    finance.updateSettings({
+  cleanerRate: req.body.cleanerRate,
+  internetAmount: req.body.internetAmount,
+  rentAmount: req.body.rentAmount
+  // cleanerPaidThru is updated only by the “Mark Paid – Cleaner” action
+});
+
+    res.redirect('/finance');
+  } catch (e) {
+    console.error('Finance settings error', e);
+    res.status(500).send('Failed to save settings.');
+  }
+});
+
+// Mark Paid — Internet
+app.post('/finance/mark-paid/internet', requireAdmin, (req, res) => {
+  try {
+    const s = finance.getSettings();
+    const mk = req.body.monthKey; // YYYY-MM
+    const [y, m] = mk.split('-').map(Number);
+    const dueDate = new Date(y, m - 1, 20).toISOString().split('T')[0];
+    const amount = Number(s.internetAmount || 0);
+
+    if (amount > 0) {
+      finance.addExpense({
+        date: dueDate,
+        category: 'Internet',
+        amount,
+        notes: `Internet for ${mk}`
+      });
+    }
+    res.redirect('/finance');
+  } catch (e) {
+    console.error('Internet mark-paid error', e);
+    res.status(500).send('Failed to mark Internet paid.');
+  }
+});
+
+// Mark Paid — Rent
+app.post('/finance/mark-paid/rent', requireAdmin, (req, res) => {
+  try {
+    const s = finance.getSettings();
+    const mk = req.body.monthKey; // YYYY-MM
+    const [y, m] = mk.split('-').map(Number);
+    const dueDate = new Date(y, m - 1, 10).toISOString().split('T')[0];
+    const amount = Number(s.rentAmount || 0);
+
+    if (amount > 0) {
+      finance.addExpense({
+        date: dueDate,
+        category: 'Rent',
+        amount,
+        notes: `Rent for ${mk}`
+      });
+    }
+    res.redirect('/finance');
+  } catch (e) {
+    console.error('Rent mark-paid error', e);
+    res.status(500).send('Failed to mark Rent paid.');
+  }
+});
+
+// Mark Paid — Cleaner payout (up to periodEnd)
+app.post('/finance/mark-paid/cleaner', requireAdmin, (req, res) => {
+  try {
+    const s = finance.getSettings();
+    const periodEnd = req.body.periodEnd; // ISO date (15th or month-end)
+
+    // Recompute owed on server
+    const bookings = (typeof readBookingsLocal === 'function') ? readBookingsLocal() : [];
+    const paidThru = s.cleanerPaidThru ? new Date(s.cleanerPaidThru) : new Date('1970-01-01');
+    const end = new Date(periodEnd);
+    const cleanedSincePaid = bookings.filter(b => {
+      try { return b.cleaned && new Date(b.checkOut) > paidThru && new Date(b.checkOut) <= end; }
+      catch { return false; }
+    });
+    const count = cleanedSincePaid.length;
+    const amount = Number(s.cleanerRate || 0) * count; // Laundry to be added later
+
+    if (amount > 0 || count >= 0) {
+      finance.addExpense({
+        date: periodEnd,
+        category: 'Cleaner Payout',
+        amount,
+        notes: `Up to ${periodEnd}: ${count} cleanings × ${s.cleanerRate || 0}. Laundry added later.`
+      });
+      // Move the boundary forward to avoid double paying
+      finance.updateSettings({ cleanerPaidThru: periodEnd });
+    }
+
+    res.redirect('/finance');
+  } catch (e) {
+    console.error('Cleaner mark-paid error', e);
+    res.status(500).send('Failed to mark Cleaner paid.');
+  }
+});
+
+
+
+
 
 // Handle create entry (income or expense)
 app.post('/finance/entry', requireAdmin, (req, res) => {
