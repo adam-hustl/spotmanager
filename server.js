@@ -799,7 +799,7 @@ const mailOptions = {
   bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
   replyTo: 'adamkischi@hotmail.com',
   subject: `reciept of payment for access card for ${booking.guestName}`,
-  text: `Hello, this is the receipt for payment of access card of ${booking.guestName} that will stay in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
+  text: `Hello, this is the receipt for payment of the access card of ${booking.guestName} that will stay in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
   attachments: [
     { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
   ]
