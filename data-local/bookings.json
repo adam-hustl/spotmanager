@@ -91,5 +91,15 @@
     "people": "4",
     "notes": "",
     "timestamp": "2025-08-25T13:18:58.805Z"
+  },
+  {
+    "guestName": "Test reciept",
+    "guestName2": "",
+    "checkIn": "2025-10-16",
+    "checkOut": "2025-10-24",
+    "platform": "Booking.com",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-10-12T23:07:34.552Z"
   }
 ]
