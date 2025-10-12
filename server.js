@@ -737,14 +737,14 @@ app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
     res.send(`
       <html>
         <head>
-          <title>Upload arrival stamp for ${booking.guestName}</title>
+          <title>Upload payment receipt for ${booking.guestName}</title>
           <link rel="stylesheet" href="/style.css" />
         </head>
         <body>
           <div class="modal-container">
           <a href="#" class="modal-close" onclick="window.parent.closeModal(); return false;" aria-label="Close">&times;</a>
-            <h1>Arrival stamp for ${booking.guestName}</h1>
-            <p>Take a clear photo of the passport arrival stamp.</p>
+            <h1>Receipt for access card for ${booking.guestName}</h1>
+            <p>Upload the payment receipt for the access card here.</p>
 
             <form id="stampForm" class="modal-form" enctype="multipart/form-data" method="POST" action="/upload-stamp/${booking.timestamp}">
               <input type="file" name="stamp" accept="image/*" capture="environment" required />
@@ -798,8 +798,8 @@ const mailOptions = {
   to: recipients.join(', '),
   bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
   replyTo: 'adamkischi@hotmail.com',
-  subject: `Arrival stamp for ${booking.guestName}`,
-  text: `Hello, this is the arrival stamp of ${booking.guestName} staying in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
+  subject: `reciept of payment for access card for ${booking.guestName}`,
+  text: `Hello, this is the receipt for payment of access card of ${booking.guestName} that will stay in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
   attachments: [
     { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
   ]
