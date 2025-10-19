@@ -829,7 +829,24 @@ const mailOptions = {
 
 
 
+// === New Booking Dashboard (static for now) ===
+app.get('/dashboard-new', requireAdminOrViewer, (req, res) => {
+res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
+});
 
+
+// === Lightweight API for wiring UI later ===
+app.get('/api/bookings', requireAnyUser, (req, res) => {
+try {
+const data = typeof readBookingsLocal === 'function'
+? readBookingsLocal()
+: JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+res.json(data);
+} catch (e) {
+console.error('GET /api/bookings failed:', e);
+res.status(500).json({ error: 'Failed to read bookings' });
+}
+});
 
 
 
@@ -2504,6 +2521,17 @@ app.get('/finance', requireAdmin, (req, res) => {
   </body>
   </html>`);
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Save Finance settings
