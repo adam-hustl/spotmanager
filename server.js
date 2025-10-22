@@ -788,6 +788,9 @@ const prodRecipients = isWeekend
   ? ['pmo@knightsbridgeresidences.com.ph', 'securityandsafety@knightsbridgeresidences.com.ph']
   : ['pmo@knightsbridgeresidences.com.ph'];
 
+  // Add accounting CC only on production
+const accountingCC = IS_PROD ? 'accountingservices@knightsbridgeresidences.com.ph' : undefined;
+
 // Keep staging/local safe: always send only to your test inbox
 const stagingRecipients = ['adamkischi@hotmail.com'];
 
@@ -796,6 +799,7 @@ const recipients = IS_PROD ? prodRecipients : stagingRecipients;
 const mailOptions = {
   from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
   to: recipients.join(', '),
+  cc: accountingCC,
   bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
   replyTo: 'adamkischi@hotmail.com',
   subject: `reciept of payment for access card for ${booking.guestName}`,
@@ -829,7 +833,24 @@ const mailOptions = {
 
 
 
+// === New Booking Dashboard (static for now) ===
+app.get('/dashboard-new', requireAdminOrViewer, (req, res) => {
+res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
+});
 
+
+// === Lightweight API for wiring UI later ===
+app.get('/api/bookings', requireAnyUser, (req, res) => {
+try {
+const data = typeof readBookingsLocal === 'function'
+? readBookingsLocal()
+: JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+res.json(data);
+} catch (e) {
+console.error('GET /api/bookings failed:', e);
+res.status(500).json({ error: 'Failed to read bookings' });
+}
+});
 
 
 
@@ -2504,6 +2525,17 @@ app.get('/finance', requireAdmin, (req, res) => {
   </body>
   </html>`);
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Save Finance settings
