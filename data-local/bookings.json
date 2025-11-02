@@ -100,6 +100,7 @@
     "platform": "Booking.com",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-10-12T23:07:34.552Z"
+    "timestamp": "2025-10-12T23:07:34.552Z",
+    "emailSent": true
   }
 ]

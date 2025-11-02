@@ -89,6 +89,15 @@ const SftpClient = require('ssh2-sftp-client');
 // Base dir you created on the server
 const SFTP_ROOT = process.env.SFTP_BASE_DIR || '/var/www/www.demoaleph.dk/spotmanager/staging';
 
+function hasSftpCreds() {
+  return Boolean(
+    process.env.SFTP_HOST &&
+    process.env.SFTP_USER &&
+    process.env.SFTP_PRIVATE_KEY
+  );
+}
+
+
 function getSftp() {
   const sftp = new SftpClient();
 
@@ -208,6 +217,7 @@ app.get('/upload-id/:id', requireAdmin, (req, res) => {
         window.parent.location.reload();
       } else {
         alert('Failed to upload files.');
+      
       }
     } catch (err) {
       alert('Error occurred while uploading.');
@@ -245,11 +255,12 @@ app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (re
   if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
   try {
+  if (IS_PROD && hasSftpCreds()) {
+    // ---- Production: push to SFTP, then delete local temp files ----
     const sftp = await getSftp();
     const remoteDir = `${SFTP_ROOT}/ids`;
     try { await sftp.mkdir(remoteDir, true); } catch (_) {}
 
-    // push each uploaded file to SFTP and then remove local copy
     for (const f of req.files) {
       const localPath = path.join(__dirname, 'uploads', f.filename);
       const remotePath = `${remoteDir}/${f.filename}`;
@@ -258,15 +269,68 @@ app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (re
     }
 
     await sftp.end();
-    res.send(`<h2>Files uploaded successfully to SFTP.<br><br><a href="/dashboard">Back</a></h2>`);
-  } catch (e) {
-    console.error('SFTP upload failed:', e);
-    res.status(500).send('Failed to upload to SFTP: ' + e.message);
+    return res.status(200).send('OK'); // frontend treats 200 as success
   }
+
+  // ---- Local / staging without SFTP creds: keep files locally and return 200 ----
+  return res.status(200).send('OK');
+} catch (e) {
+  console.error('SFTP upload failed:', e);
+  return res.status(500).send('Failed to upload to SFTP: ' + e.message);
+}
+
 });
 
 app.get('/view-ids/:id', async (req, res) => {
   const bookingId = req.params.id;
+
+    // Local/staging: list from local uploads folder, Production: use SFTP
+  if (!IS_PROD || !hasSftpCreds()) {
+    try {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      const matching = files.filter(name => name.includes(`booking-${bookingId}-`));
+
+      // Optional: read bookings to show guest name (same as your SFTP path does)
+      const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+      const booking = bookings.find(
+        b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+      );
+      const guestName = booking ? booking.guestName : '';
+
+      if (matching.length === 0) {
+        return res.send('No uploaded IDs found for this booking.');
+      }
+
+      const items = matching.map(fname => {
+        const encoded = encodeURIComponent(fname);
+        const ext = path.extname(fname).toLowerCase();
+        const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
+        const preview = isImage
+          ? `<img class="zoomable-id" src="/uploads/${encoded}" />`
+          : `<a href="/uploads/${encoded}" target="_blank">${fname}</a>`;
+        return `<div class="id-item">${preview}</div>`;
+      }).join('');
+
+      return res.send(`
+        <html>
+          <head><link rel="stylesheet" href="/style.css" /></head>
+          <body>
+            <div class="modal-container view-ids">
+              <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
+              <h2>Uploaded Guest IDs for guest ${guestName}</h2>
+              <div class="id-gallery">${items}</div>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (e) {
+      return res.status(500).send('Failed to list local IDs: ' + e.message);
+    }
+  }
+
+
+
+
 
   try {
     const sftp = await getSftp();
@@ -810,6 +874,14 @@ const mailOptions = {
 };
 
     await safeSendMail(mailOptions);
+
+    // If the client is uploading without a modal, return a simple 200.
+if (req.headers['x-no-modal'] === '1') {
+  return res.status(200).send('OK');
+}
+
+
+
 
     // Close the modal and refresh the dashboard
     res.send(`
