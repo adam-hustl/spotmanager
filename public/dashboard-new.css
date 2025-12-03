@@ -89,9 +89,17 @@ body.page {
 .menu-title { margin-bottom: .5rem; font-size: .625rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: rgba(55,65,81,.8); }
 .menu-footer { margin-top: .75rem; }
 .menu-btn {
-  width: 100%; display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem;
-  border-radius: .75rem; transition: background .2s ease; border: 1px solid transparent; background: transparent;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .75rem;
+  border-radius: .75rem;
+  transition: background .2s ease;
+  border: 1px solid transparent;
+  background: transparent;
 }
+
 .menu-btn:hover { background: rgba(255,255,255,.1); }
 .menu-active { background: #10B981; color: #fff !important; border: 1px solid #10B981; box-shadow: 0 8px 18px rgba(16,185,129,0.35); }
 
@@ -109,7 +117,7 @@ body.page {
 .card-white {
   background: #fff; border: 1px solid #f3f4f6; border-radius: var(--radius-2xl); padding: 1rem;
 }
-.net { /* base colors are themed by JS */ }
+
 
 .guestcard {
   border-radius: var(--radius-3xl); padding: 1rem; box-shadow: var(--shadow-sm); border: 1px solid var(--border);
@@ -196,22 +204,132 @@ body.page {
 
 /* Guest header row */
 .guest-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+
+/* Inline "add guest" row */
+.new-guest-row {
+  margin-top: .75rem;
+  padding-top: .75rem;
+  border-top: 1px solid rgba(22, 163, 74, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap; /* allows wrapping on very small screens */
+}
+
+
+.new-guest-fields {
+  display: flex;
+  flex: 1 1 auto;   /* left side grows */
+  gap: .5rem;
+  margin-bottom: .35rem;  /* spacing under the row of fields */
+}
+
+
+.new-guest-row .ng-input {
+  font: inherit;
+  border-radius: .5rem;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  padding: .35rem .55rem;
+  background: #fff;
+}
+
+
+.new-guest-row .ng-input {
+  min-width: 0;
+}
+
+/* Make the "# guests" input narrower so everything fits nicely */
+.ng-people {
+  max-width: 6.5rem;
+}
+
+
+
+
+.new-guest-actions {
+  display: flex;
+  flex: 0 0 auto;          /* right side stays tight */
+  justify-content: flex-end;
+  gap: .5rem;
+  min-width: fit-content;
+}
+
+
+/* Make "Save guest" a bit more prominent, but still use ghost-btn style */
+.ghost-btn.ghost-btn--primary {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.65);
+  color: #047857;
+}
+
+
+
+
 .guest-name { font-weight: 600; }
 .dates { font-size: .875rem; color: #374151; }
 
 /* Calendar */
 .calendar-grid {
   margin-top: .75rem;
-  display: grid; grid-template-columns: repeat(7, 1fr); row-gap: .75rem; text-align: center;
+  display: grid; grid-template-columns: repeat(7, 1fr); row-gap: .75rem; text-align: center; position: relative; 
 }
+
+.booking-span {
+  align-self: center;
+  height: 2.5rem;              /* roughly same height as the circles */
+  border-radius: 9999px;
+  border: 2px solid #111827;   /* black outline */
+  box-sizing: border-box;
+  pointer-events: none;        /* don’t block clicks on days */
+  z-index: 0;                  /* stay behind the .day circles */
+}
+
+
+
 .weekday { font-size: .875rem; color: #6b7280; }
 .day {
   display: inline-flex; height: 40px; width: 40px; margin: 0 auto;
-  align-items: center; justify-content: center; border-radius: 9999px; transition: background .15s ease;
+  align-items: center; justify-content: center; border-radius: 9999px; transition: background .15s ease; position: relative; z-index: 1; 
 }
+
 .day:hover { background: #e5e7eb; }
 .day-accent { background: #10B981; color: #fff; font-weight: 500; }
 .day-invert { background: #000; color: #fff; font-weight: 500; }
+
+
+
+
+.day-checkin {
+  background-color: #10B981;
+}
+
+.day-checkout {
+  background-color: #FF0000;
+}
+
+/* Make checkin/checkout circles smaller */
+.day-checkin,
+.day-checkout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  width: 32px;
+  height: 32px;
+
+  margin: auto;
+  border-radius: 50%;
+  color: #fff;           /* keep text clear */
+  font-weight: 600;
+}
+
+
+
+
+
+
 
 /* Buttons */
 .chip-btn {

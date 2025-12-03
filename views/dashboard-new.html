@@ -72,6 +72,62 @@
               <a id="platformLink" class="link" href="#" target="_blank" rel="noopener">—</a>
             </div>
             <div id="stayDates" class="dates">—</div>
+
+
+
+
+<!-- Inline "Add guest" row (hidden by default) -->
+<form id="newGuestForm" class="guest-row new-guest-row" style="display:none">
+  <div class="row new-guest-fields">
+    <input
+      type="text"
+      name="guestName"
+      class="ng-input"
+      placeholder="Guest name"
+      required
+    />
+
+    <select name="platform" class="ng-input" required>
+      <option value="">Platform</option>
+      <option value="Airbnb">Airbnb</option>
+      <option value="Booking.com">Booking.com</option>
+      <option value="Agoda">Agoda</option>
+      <option value="Direct">Direct</option>
+    </select>
+
+    <input
+      type="date"
+      name="checkIn"
+      class="ng-input"
+      required
+    />
+    <input
+      type="date"
+      name="checkOut"
+      class="ng-input"
+      required
+    />
+
+    <input
+      type="number"
+      name="people"
+      class="ng-input ng-people"
+      min="1"
+      placeholder="# guests"
+    />
+  </div>
+
+  <div class="new-guest-actions">
+    <!-- You can add a real Comment flow later; for now it's just visual -->
+    <button type="button" class="ghost-btn" disabled>Comment</button>
+    <button type="button" id="cancelNewGuest" class="ghost-btn">Cancel</button>
+    <button type="submit" class="ghost-btn ghost-btn--primary">Save guest</button>
+  </div>
+</form>
+
+
+
+
           </div>
         </div>
       </section>
@@ -80,26 +136,20 @@
       <section id="calendar" class="card">
         <div class="row space-between">
           <div class="row gap-12">
-            <button class="chip-btn">◀</button>
-            <button class="chip-btn">Today ▾</button>
-            <button class="chip-btn">▶</button>
+            <button id="calPrev" class="chip-btn" type="button">◀</button>
+            <button id="calToday" class="chip-btn" type="button">Today</button>
+            <button id="calNext" class="chip-btn" type="button">▶</button>
+
           </div>
           <button class="chip-btn outlined">Settings</button>
         </div>
         <div class="mt-12"><h2 id="monthTitle" class="h2">Feb 2025</h2></div>
-        <div class="calendar-grid">
-          <div class="weekday">Sun</div><div class="weekday">Mon</div><div class="weekday">Tue</div>
-          <div class="weekday">Wed</div><div class="weekday">Thu</div><div class="weekday">Fri</div><div class="weekday">Sat</div>
+        <div id="calendarGrid" class="calendar-grid">
+  <div class="weekday">Sun</div><div class="weekday">Mon</div><div class="weekday">Tue</div>
+  <div class="weekday">Wed</div><div class="weekday">Thu</div><div class="weekday">Fri</div><div class="weekday">Sat</div>
+  <!-- day cells will be injected here by JS -->
+</div>
 
-          <div class="day">26</div>
-          <div class="day">27</div>
-          <div class="day">28</div>
-          <div class="day">29</div>
-          <div class="day">30</div>
-          <div class="day">31</div>
-          <div class="day">1</div>
-          <div id="calTail"></div>
-        </div>
       </section>
 
       <!-- Finance (static UI; can be wired later) -->
@@ -199,6 +249,228 @@
   function menu(){const items=[["home","Home"],["calendar-days","Bookings"],["bar-chart-3","Analytics"],["message-square","Cleaners Dashboard"],["settings","Profile"]];const wrap=document.getElementById('menu');wrap.innerHTML='';items.forEach((it,i)=>{const b=document.createElement('button');b.className='menu-btn';b.dataset.menu=i===0; b.innerHTML=`<i data-lucide="${it[0]}" class="icon-16"></i><span class="semibold">${it[1]}</span>`;wrap.appendChild(b);});}
   function stepsRow(){const wrap=document.getElementById('steps');wrap.innerHTML='';steps.forEach((s,i)=>{const state=comp[i]? 'done' : (i===cur? 'current':'todo');const btn=document.createElement('button');btn.className='step';btn.onclick=()=>{cur=i;renderProgress();stepsRow();};btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${s.icon}" class="icon-16"></i></div><span class="step-label">${s.label}</span>`;wrap.appendChild(btn);});}
   function calendarTail(){const nums=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,1];const frag=document.createDocumentFragment();nums.forEach(n=>{const d=document.createElement('div');let cls='day';if(n===21) cls+=' day-accent';if(n===22||n===23) cls+=' day-invert';d.className=cls;d.textContent=n;frag.appendChild(d);});document.getElementById('calTail').replaceWith(frag);}
+
+
+  // --- Mini calendar (arrows + Today) ---
+  const miniCalBase = new Date();
+  let miniCalOffset = 0;
+  let calendarBookings = []; 
+
+  
+
+function renderMiniCalendar() {
+  const target = new Date(
+    miniCalBase.getFullYear(),
+    miniCalBase.getMonth() + miniCalOffset,
+    1
+  );
+  const year = target.getFullYear();
+  const month = target.getMonth();
+
+  // Update month title
+  const titleEl = document.getElementById('monthTitle');
+  if (titleEl) {
+    const monthName = target.toLocaleString('default', { month: 'long' });
+    titleEl.textContent = `${monthName} ${year}`;
+  }
+
+  const grid = document.getElementById('calendarGrid');
+  if (!grid) return;
+
+  // Keep the first 7 children (the weekday headings) and remove the rest
+  while (grid.children.length > 7) {
+    grid.removeChild(grid.lastElementChild);
+  }
+
+  const firstDay   = new Date(year, month, 1).getDay();      // 0–6
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const today = new Date();
+  const tY = today.getFullYear();
+  const tM = today.getMonth();
+  const tD = today.getDate();
+
+  // Helper to build YYYY-MM-DD for a given day in this month
+  const dayKey = (d) =>
+    `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  // Pre-compute which days in this month are booked / check-in / check-out
+  const bookedDays   = new Set();
+  const checkInDays  = new Set();
+  const checkOutDays = new Set();
+
+    const bookingSpans = [];  // for continuous outlines across the row
+
+
+    if (Array.isArray(calendarBookings)) {
+    calendarBookings.forEach((b) => {
+      if (!b || b.cancelled) return;
+      if (!b.checkIn || !b.checkOut) return;
+
+        const start = new Date(b.checkIn);
+      const end   = new Date(b.checkOut);
+      if (isNaN(start) || isNaN(end)) return;
+
+      // Track which days in *this month* are actually booked for this booking
+      let firstDayInMonth = null;
+      let lastDayInMonth  = null;
+
+      // Nights of the stay: from check-in up to (but not including) check-out
+      const cur = new Date(start);
+      while (cur < end) {
+        if (cur.getFullYear() === year && cur.getMonth() === month) {
+          const dNum = cur.getDate();
+          bookedDays.add(dayKey(dNum));
+
+          if (firstDayInMonth === null || dNum < firstDayInMonth) firstDayInMonth = dNum;
+          if (lastDayInMonth  === null || dNum > lastDayInMonth)  lastDayInMonth  = dNum;
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      if (start.getFullYear() === year && start.getMonth() === month) {
+        checkInDays.add(dayKey(start.getDate()));
+      }
+      if (end.getFullYear() === year && end.getMonth() === month) {
+        checkOutDays.add(dayKey(end.getDate()));
+      }
+
+      // Decide what the visible span should be: nights in this month,
+// extended to include the checkout day if it also falls in this month.
+let spanStart = firstDayInMonth;
+let spanEnd   = lastDayInMonth;
+
+// If checkout is in this same month, extend the pill to include it.
+if (
+  spanStart !== null &&
+  end.getFullYear() === year &&
+  end.getMonth() === month
+) {
+  const checkoutDay = end.getDate();
+  if (spanEnd === null || checkoutDay > spanEnd) {
+    spanEnd = checkoutDay;
+  }
+}
+
+// Only draw if we actually have something in this month
+if (spanStart !== null && spanEnd !== null) {
+  bookingSpans.push({
+    startDay: spanStart,
+    endDay:   spanEnd,
+  });
+}
+
+
+    });
+  }
+
+
+  // Empty cells before the first day
+  for (let i = 0; i < firstDay; i++) {
+    const empty = document.createElement('div');
+    empty.className = 'day';
+    grid.appendChild(empty);
+  }
+
+   // Actual days
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cell = document.createElement('div');
+    cell.className = 'day';
+
+    const key = dayKey(d);
+
+    if (bookedDays.has(key)) {
+      cell.classList.add('day-booked');
+    }
+    if (checkInDays.has(key)) {
+      cell.classList.add('day-checkin');
+    }
+    if (checkOutDays.has(key)) {
+      cell.classList.add('day-checkout');
+    }
+
+    // --- place this day explicitly into the grid so it can overlap with booking spans ---
+    const dateIndex = firstDay + d - 1;           // index within this month’s grid (0-based)
+    const rowIndex  = Math.floor(dateIndex / 7);  // week row (0 = first week)
+    const colIndex  = dateIndex % 7;              // column (0..6)
+
+    // +2 rows because row 1 is the weekday header
+    cell.style.gridRow = String(rowIndex + 2);
+    // +1 because CSS grid columns are 1-based
+    cell.style.gridColumn = String(colIndex + 1);
+
+    if (year === tY && month === tM && d === tD) {
+      cell.classList.add('day-accent'); // highlight today
+    }
+
+    cell.textContent = d;
+    grid.appendChild(cell);
+  }
+
+
+  // --- draw continuous booking spans behind the day circles ---
+  bookingSpans.forEach((span) => {
+    let current = span.startDay;
+
+    while (current <= span.endDay) {
+      // index of this day within the month’s grid
+      const dateIndex = firstDay + current - 1;        // 0-based
+      const rowIndex  = Math.floor(dateIndex / 7);     // which week (0 = first week)
+      const colIndex  = dateIndex % 7;                 // column in week (0..6)
+
+      // how far we can go in this week
+      const daysLeftThisWeek = 7 - colIndex;
+      const segmentEnd = Math.min(
+        span.endDay,
+        current + daysLeftThisWeek - 1
+      );
+
+      const pill = document.createElement('div');
+      pill.className = 'booking-span';
+
+      // +1 because CSS grid is 1-based, +1 more because row 1 is the weekday header
+      pill.style.gridRow = String(rowIndex + 2);
+
+      const colStart = colIndex + 1; // 1-based
+      const colEnd   = colStart + (segmentEnd - current + 1);
+      pill.style.gridColumn = `${colStart} / ${colEnd}`;
+
+      grid.appendChild(pill);
+
+      current = segmentEnd + 1;
+    }
+  });
+
+
+
+}
+
+
+  function wireCalendarControls() {
+    const prev = document.getElementById('calPrev');
+    const next = document.getElementById('calNext');
+    const todayBtn = document.getElementById('calToday');
+
+    if (prev) prev.addEventListener('click', () => {
+      miniCalOffset--;
+      renderMiniCalendar();
+    });
+
+    if (next) next.addEventListener('click', () => {
+      miniCalOffset++;
+      renderMiniCalendar();
+    });
+
+    if (todayBtn) todayBtn.addEventListener('click', () => {
+      miniCalOffset = 0;
+      renderMiniCalendar();
+    });
+  }
+
+
+
+
+
   function apply(){const t=THEMES[theme];
     document.body.style.background=grad?`linear-gradient(to bottom, ${t.bgFrom}, ${t.bgMid}, #ffffff)`:t.bgMid;
     document.getElementById('b1').style.background=t.bgFrom;
@@ -385,14 +657,92 @@ circles.forEach((c,i)=>{
 
   }
 
+
+  // ---------- INLINE "ADD GUEST" ----------
+  function toggleNewGuestRow(show) {
+    const form = document.getElementById('newGuestForm');
+    if (!form) return;
+    form.style.display = show ? 'block' : 'none';
+  }
+
+  function wireAddGuest() {
+    const form = document.getElementById('newGuestForm');
+    const cancelBtn = document.getElementById('cancelNewGuest');
+    const fab = document.getElementById('ctaB');          // bottom-right +
+    const sideBtn = document.getElementById('addGuestSide'); // sidebar "Add guest" button (if present)
+
+    const openForm = (e) => {
+      if (e) e.preventDefault();
+      toggleNewGuestRow(true);
+      // Focus first field for quick entry
+      if (form && form.elements.guestName) {
+        form.elements.guestName.focus();
+      }
+    };
+
+    if (fab) fab.addEventListener('click', openForm);
+    if (sideBtn) sideBtn.addEventListener('click', openForm);
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (form) form.reset();
+        toggleNewGuestRow(false);
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const fd = new FormData(form);
+        const data = new URLSearchParams(fd);  // convert to x-www-form-urlencoded
+
+try {
+  const res = await fetch('/save-booking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: data
+  });
+
+  if (res.ok) {
+    // Reload so the new booking shows up in the calendar + header
+    window.location.reload();
+  } else {
+    alert('Failed to save booking.');
+  }
+} catch (err) {
+  console.error('Save booking error', err);
+  alert('Error saving booking.');
+}
+
+      });
+    }
+  }
+
+
+
+
+
   // ---------- INIT ----------
-  async function init(){
-    menu(); themeDots(); stepsRow(); calendarTail(); renderProgress(); apply();
-    const bookings=await loadBookings();
-    const current=pickCurrent(bookings);
+    async function init(){
+    menu();
+    themeDots();
+    stepsRow();
+    wireCalendarControls(); // ← new
+    wireAddGuest();
+    renderProgress();
+    apply();
+
+    const bookings = await loadBookings();
+    calendarBookings = bookings || [];
+    renderMiniCalendar();
+
+    const current = pickCurrent(bookings);
     fillGuestHeader(current);
     attachActions(current);
   }
+
   document.addEventListener('DOMContentLoaded', init);
   </script>
 

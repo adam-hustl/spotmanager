@@ -102,5 +102,39 @@
     "notes": "",
     "timestamp": "2025-10-12T23:07:34.552Z",
     "emailSent": true
+  },
+  {
+    "guestName": "test",
+    "guestName2": "",
+    "checkIn": "2025-11-27",
+    "checkOut": "2025-11-13",
+    "platform": "Agoda",
+    "people": "2",
+    "notes": "",
+    "timestamp": "2025-12-02T10:29:36.529Z"
+  },
+  {
+    "guestName": "test new dash guest",
+    "checkIn": "2025-12-03",
+    "checkOut": "2025-12-04",
+    "platform": "Agoda",
+    "people": "2",
+    "timestamp": "2025-12-02T10:39:25.992Z"
+  },
+  {
+    "guestName": "test more dates",
+    "checkIn": "2025-12-10",
+    "checkOut": "2025-12-14",
+    "platform": "Booking.com",
+    "people": "2",
+    "timestamp": "2025-12-02T10:40:16.825Z"
+  },
+  {
+    "guestName": "Test border",
+    "checkIn": "2025-12-18",
+    "checkOut": "2025-12-20",
+    "platform": "Agoda",
+    "people": "2",
+    "timestamp": "2025-12-03T04:33:54.484Z"
   }
 ]
