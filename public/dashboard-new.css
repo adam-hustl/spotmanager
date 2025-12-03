@@ -295,7 +295,7 @@ body.page {
 }
 
 .day:hover { background: #e5e7eb; }
-.day-accent { background: #10B981; color: #fff; font-weight: 500; }
+.day-accent { background: #808080; color: #fff; font-weight: 500; }
 .day-invert { background: #000; color: #fff; font-weight: 500; }
 
 
