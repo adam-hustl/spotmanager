@@ -252,34 +252,56 @@ app.get('/_sftp-test', async (req, res) => {
 
 app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (req, res) => {
   const bookingId = req.params.id;
-  if (!req.files || req.files.length === 0) return res.send('No files uploaded.');
 
-  try {
-  if (IS_PROD && hasSftpCreds()) {
-    // ---- Production: push to SFTP, then delete local temp files ----
-    const sftp = await getSftp();
-    const remoteDir = `${SFTP_ROOT}/ids`;
-    try { await sftp.mkdir(remoteDir, true); } catch (_) {}
-
-    for (const f of req.files) {
-      const localPath = path.join(__dirname, 'uploads', f.filename);
-      const remotePath = `${remoteDir}/${f.filename}`;
-      await sftp.put(localPath, remotePath);
-      try { fs.unlinkSync(localPath); } catch (_) {}
-    }
-
-    await sftp.end();
-    return res.status(200).send('OK'); // frontend treats 200 as success
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).send('No files uploaded.');
   }
 
-  // ---- Local / staging without SFTP creds: keep files locally and return 200 ----
-  return res.status(200).send('OK');
-} catch (e) {
-  console.error('SFTP upload failed:', e);
-  return res.status(500).send('Failed to upload to SFTP: ' + e.message);
-}
+  try {
+    // ---- 1) Save the files (SFTP in prod, keep locally on staging/local) ----
+    if (IS_PROD && hasSftpCreds()) {
+      const sftp = await getSftp();
+      const remoteDir = `${SFTP_ROOT}/ids`;
+      try { await sftp.mkdir(remoteDir, true); } catch (_) {}
 
+      for (const f of req.files) {
+        const localPath = path.join(UPLOADS_DIR, f.filename);
+        const remotePath = `${remoteDir}/${f.filename}`;
+        await sftp.put(localPath, remotePath);
+        try { fs.unlinkSync(localPath); } catch (_) {}
+      }
+
+      await sftp.end();
+    }
+    // (On local / staging we already saved into UPLOADS_DIR via multer; nothing else to do.)
+
+    // ---- 2) Mark "ID uploaded" on the booking checklist (step1) ----
+    let bookings = readBookingsLocal();   // uses the helpers defined later in the file
+    const idx = bookings.findIndex(
+      b =>
+        String(b.timestamp) === String(bookingId) ||
+        (b.id && String(b.id) === String(bookingId))
+    );
+
+    if (idx !== -1) {
+      if (!bookings[idx].checklist) {
+        bookings[idx].checklist = {};
+      }
+      bookings[idx].checklist.step1 = true;
+
+      writeBookingsLocal(bookings);
+      // mirror to Gist, but don't block response if it fails
+      pushBookingsToGist(bookings).catch(() => {});
+    }
+
+    // ---- 3) Simple 200 response for both modal + in-page uploads ----
+    return res.status(200).send('OK');
+  } catch (e) {
+    console.error('SFTP upload failed:', e);
+    return res.status(500).send('Failed to upload to SFTP: ' + e.message);
+  }
 });
+
 
 app.get('/view-ids/:id', async (req, res) => {
   const bookingId = req.params.id;

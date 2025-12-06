@@ -280,7 +280,7 @@ body.page {
   align-self: center;
   height: 2.5rem;              /* roughly same height as the circles */
   border-radius: 9999px;
-  border: 2px solid #111827;   /* black outline */
+  border: 1px solid rgba(0,0,0,0.25);   /* softer thin grey border */
   box-sizing: border-box;
   pointer-events: none;        /* don’t block clicks on days */
   z-index: 0;                  /* stay behind the .day circles */
@@ -289,13 +289,50 @@ body.page {
 
 
 .weekday { font-size: .875rem; color: #6b7280; }
+
 .day {
-  display: inline-flex; height: 40px; width: 40px; margin: 0 auto;
-  align-items: center; justify-content: center; border-radius: 9999px; transition: background .15s ease; position: relative; z-index: 1; 
+  width: 32px;
+  height: 32px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background .15s ease;
+  position: relative;
+  z-index: 1;
 }
 
-.day:hover { background: #e5e7eb; }
-.day-accent { background: #808080; color: #fff; font-weight: 500; }
+
+
+
+
+
+/* Check-in / Check-out circles */
+.day-checkin,
+.day-checkout {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;              /* fixes vertical alignment */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #fff;
+}
+
+
+
+
+.day:hover {
+  background: #e5e7eb;
+  font-weight: 600;
+}
+
+
+
+.day-accent { background: #808080; color: #fff; font-weight: 500;  }
 .day-invert { background: #000; color: #fff; font-weight: 500; }
 
 
@@ -411,3 +448,177 @@ body.page {
 @keyframes sm-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ========== Booking sidebar (right slide-in) ========== */
+
+.booking-sidebar {
+  position: fixed;
+  top: 4.5rem;                       /* leaves room for the sticky top bar */
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: min(360px, 90vw);
+  background: #ffffff;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.16);
+  border-radius: var(--radius-3xl);  /* rounded on all sides */
+    transform: translateX(calc(100% + 1.5rem));      /* hidden off-screen by default */
+  transition: transform 0.25s ease;
+  z-index: 40;                       /* above content, below modal (z=60) */
+}
+
+.booking-sidebar.open {
+  transform: translateX(0);
+}
+
+body.booking-sidebar-open .page-grid {
+  padding-right: calc(1.5rem + min(360px, 90vw)); /* gap + sidebar width */
+  transition: padding-right 0.25s ease;
+}
+
+.booking-sidebar-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.5rem;
+}
+
+.booking-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.booking-sidebar-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.booking-sidebar-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.booking-sidebar-close {
+  border: 1px solid #e5e7eb;
+  border-radius: 9999px;
+  background: #f9fafb;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.booking-sidebar-close:hover {
+  background: #eef2ff;
+}
+
+.booking-sidebar-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+
+/* Guest block inside sidebar */
+.booking-sidebar-guest-block {
+  margin-bottom: 1rem;
+}
+
+/* Document list in sidebar */
+.booking-sidebar-doc-list {
+  margin-top: .25rem;
+  padding-top: .75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .25rem 0;
+}
+
+.doc-row-main {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.doc-name {
+  font-weight: 500;
+  color: #111827;
+}
+
+/* Status pill */
+.doc-pill {
+  font-size: .75rem;
+  line-height: 1;
+  padding: .25rem .6rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.doc-pill-pending {
+  background: #f9fafb;
+  color: #6b7280;
+  border-color: rgba(148, 163, 184, 0.7);
+}
+
+.doc-pill-complete {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+/* Upload button on the right */
+.doc-upload-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  transition:
+    background .15s ease,
+    box-shadow .15s ease,
+    transform .08s ease;
+}
+
+.doc-upload-btn:hover {
+  background: #f3f4f6;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+
+.doc-upload-icon {
+  width: 16px;
+  height: 16px;
+}
+
+
+
+
+
+.booking-sidebar-guest-name {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.booking-sidebar-stay {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+
+
+/* Make booked days feel interactive */
+.day-booked {
+  cursor: pointer;
+}
+

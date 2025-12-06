@@ -213,6 +213,73 @@
     </main>
   </div>
 
+
+  <!-- Booking sidebar (slides in when clicking a booked day) -->
+  <aside id="bookingSidebar" class="booking-sidebar">
+    <div class="booking-sidebar-inner">
+      <div class="booking-sidebar-header">
+        <div>
+          <div class="booking-sidebar-title">Guest overview</div>
+          <div id="bookingSidebarDate" class="booking-sidebar-date">—</div>
+        </div>
+        <button
+          id="bookingSidebarClose"
+          type="button"
+          class="booking-sidebar-close"
+          aria-label="Close guest overview"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="booking-sidebar-body">
+  <!-- Guest + stay info -->
+  <div class="booking-sidebar-guest-block">
+    <div id="bookingSidebarGuest" class="booking-sidebar-guest-name">—</div>
+    <div id="bookingSidebarStay" class="booking-sidebar-stay">—</div>
+  </div>
+
+  <!-- Documents list -->
+  <div class="booking-sidebar-doc-list">
+    <div class="doc-row">
+      <div class="doc-row-main">
+        <span class="doc-name">ID</span>
+        <span id="bookingSidebarIdStatus" class="doc-pill doc-pill-pending">
+          Pending
+        </span>
+      </div>
+
+      <button
+        id="bookingSidebarIdUpload"
+        type="button"
+        class="doc-upload-btn"
+        aria-label="Upload ID"
+      >
+        <i data-lucide="upload" class="doc-upload-icon"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+    </div>
+  </aside>
+
+  <!-- Hidden file input used by the sidebar upload icon -->
+<input
+  id="sidebarIdUploadInput"
+  type="file"
+  name="guestIds"
+  multiple
+  accept="image/*,application/pdf"
+  style="display:none"
+/>
+
+
+
+
+
+
   <!-- Floating CTA -->
   <div id="ctaT" class="ctaT">Add guest</div>
   <div class="ctaB-wrap">
@@ -233,6 +300,15 @@
   <input id="uploadIdInput" type="file" multiple accept="image/*,application/pdf" style="display:none">
   <input id="uploadReceiptInput" type="file" accept="image/*,application/pdf" style="display:none">
 
+    <input
+    id="sidebarIdUploadInput"
+    type="file"
+    multiple
+    accept="image/*,application/pdf"
+    style="display:none"
+  >
+
+
 
 
 
@@ -242,6 +318,10 @@
   const THEMES={emerald:{accent:"#10B981",accent50:"#ECFDF5",border:"#A7F3D0",bgFrom:"#D1FAE5",bgMid:"#ECFDF5",tint:"rgba(16,185,129,0.12)",ring:"rgba(16,185,129,0.35)",borderAlpha:"rgba(16,185,129,0.40)"}};
   const steps=[{label:"Upload ID",icon:"upload"},{label:"Send endorsement email",icon:"mail"},{label:"payment receipt",icon:"stamp"},{ label: "Access card is paid",    icon: "credit-card" }, { label: "Access card picked up",  icon: "id-card" } ];
   let theme="emerald",grad=true,comp=new Array(steps.length).fill(false),cur=0;
+  let currentBookingId = null; // id of the booking shown in the top header
+
+
+
 
   function donut(el,pct,color){el.style.backgroundImage=`conic-gradient(${color} ${pct*3.6}deg, #E5E7EB 0)`;el.innerHTML='<span>'+Math.round(pct)+'%</span>'}
   function minibars(el,data,max,idx,accent){el.innerHTML='';data.forEach((v,i)=>{const d=document.createElement('div');d.className='bar';d.style.height=Math.max(8,(v/max)*100)+'%';d.style.backgroundColor=i===idx?accent:'#E5E7EB';el.appendChild(d);});}
@@ -251,10 +331,207 @@
   function calendarTail(){const nums=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,1];const frag=document.createDocumentFragment();nums.forEach(n=>{const d=document.createElement('div');let cls='day';if(n===21) cls+=' day-accent';if(n===22||n===23) cls+=' day-invert';d.className=cls;d.textContent=n;frag.appendChild(d);});document.getElementById('calTail').replaceWith(frag);}
 
 
+      // ---------- BOOKING SIDEBAR ----------
+
+    let sidebarBooking = null; // booking object currently shown in the sidebar
+
+
+    function openBookingSidebar(dateKey, bookingsForDay = []) {
+    const panel = document.getElementById('bookingSidebar');
+    const dateLabel = document.getElementById('bookingSidebarDate');
+
+    if (panel) {
+      panel.classList.add('open');
+    }
+
+        // Push the main layout left so the sidebar doesn't overlap
+    document.body.classList.add('booking-sidebar-open');
+
+
+    // Show a nice human-readable date in the header
+    if (dateLabel && dateKey) {
+      const parts = dateKey.split('-'); // ["YYYY","MM","DD"]
+      if (parts.length === 3) {
+        const d = new Date(
+          Number(parts[0]),
+          Number(parts[1]) - 1,
+          Number(parts[2])
+        );
+        const opts = {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        };
+        dateLabel.textContent = d.toLocaleDateString('en-US', opts);
+      } else {
+        dateLabel.textContent = dateKey;
+      }
+    }
+
+        // Fill sidebar with guest + stay info
+    const guestEl = document.getElementById('bookingSidebarGuest');
+    const stayEl  = document.getElementById('bookingSidebarStay');
+
+    // We'll also keep a reference to the booking object that is shown
+    let bookingForSidebar = null;
+
+    if (guestEl && stayEl) {
+      if (Array.isArray(bookingsForDay) && bookingsForDay.length > 0) {
+        // For now just show the first booking that matches this date
+        const b = bookingsForDay[0];
+        bookingForSidebar = b;
+
+        guestEl.textContent = b.guestName || 'Guest';
+        if (b.checkIn && b.checkOut) {
+          stayEl.textContent = `${b.checkIn} – ${b.checkOut}`;
+        } else {
+          stayEl.textContent = 'Dates not available';
+        }
+      } else {
+        guestEl.textContent = 'No booking found for this date';
+        stayEl.textContent = '';
+      }
+    }
+
+    // Remember this booking globally so the upload button knows which ID to update
+    sidebarBooking = bookingForSidebar;
+
+    // ---- Set ID pill (Pending / Complete) based on booking data, if available ----
+    const idStatusEl = document.getElementById('bookingSidebarIdStatus');
+    if (idStatusEl) {
+      let hasId = false;
+
+      if (bookingForSidebar) {
+        // Adjust field names if your backend uses something different
+        hasId = bookingForSidebar.checklist 
+     && bookingForSidebar.checklist.step1 === true;
+
+
+      }
+
+      idStatusEl.textContent = hasId ? 'Complete' : 'Pending';
+      idStatusEl.classList.toggle('doc-pill-complete', hasId);
+      idStatusEl.classList.toggle('doc-pill-pending', !hasId);
+    }
+  }
+
+
+
+  function closeBookingSidebar() {
+    const panel = document.getElementById('bookingSidebar');
+    if (panel) {
+      panel.classList.remove('open');
+    }
+    document.body.classList.remove('booking-sidebar-open');
+  }
+
+   function wireBookingSidebar() {
+    const closeBtn       = document.getElementById('bookingSidebarClose');
+    const idUploadBtn    = document.getElementById('bookingSidebarIdUpload');
+    const sidebarIdInput = document.getElementById('sidebarIdUploadInput');
+    const idStatusEl     = document.getElementById('bookingSidebarIdStatus');
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeBookingSidebar);
+    }
+
+    // Clicking the upload icon: open the OS file picker
+    if (idUploadBtn && sidebarIdInput) {
+      idUploadBtn.addEventListener('click', () => {
+        if (!sidebarBooking) return; // no booking selected
+
+        // Try the faster showPicker() API first
+        try {
+          if (typeof sidebarIdInput.showPicker === 'function') {
+            sidebarIdInput.showPicker();
+          } else {
+            sidebarIdInput.click();
+          }
+        } catch (e) {
+          sidebarIdInput.click();
+        }
+      });
+
+      // When files are chosen, upload them for the selected booking
+      sidebarIdInput.addEventListener('change', async (e) => {
+        if (!sidebarBooking) return;
+
+        const files = e.target.files;
+        if (!files || !files.length) return;
+
+        const bookingId = sidebarBooking.timestamp || sidebarBooking.id;
+        if (!bookingId) {
+          console.error('No booking id found for sidebarBooking');
+          return;
+        }
+
+        const form = new FormData();
+        for (const f of files) {
+          form.append('guestIds', f); // same field name as main upload
+        }
+
+        try {
+          const res = await fetch(
+            `/upload-id/${encodeURIComponent(bookingId)}`,
+            { method: 'POST', body: form }
+          );
+
+          if (res.ok) {
+  // Mark pill as Complete
+  if (idStatusEl) {
+    idStatusEl.textContent = 'Complete';
+    idStatusEl.classList.remove('doc-pill-pending');
+    idStatusEl.classList.add('doc-pill-complete');
+  }
+
+  // Only mark the top "Upload ID" step as done
+  // if this sidebar booking is the SAME as the current upcoming guest
+  const uploadedBookingId =
+    sidebarBooking && (sidebarBooking.timestamp || sidebarBooking.id);
+
+  if (uploadedBookingId && currentBookingId && uploadedBookingId === currentBookingId) {
+    if (Array.isArray(comp)) {
+      comp[0] = true; // step 0 = Upload ID
+    }
+    const stepCircles = document.querySelectorAll('#steps .step-circle');
+    if (stepCircles[0]) {
+      stepCircles[0].classList.add('done');
+    }
+    if (typeof renderProgress === 'function') {
+      renderProgress();
+    }
+  }
+} else {
+
+  const txt = await res.text().catch(() => '');
+  console.error('Sidebar ID upload failed', res.status, res.statusText, txt);
+  alert('Failed to upload ID.');
+}
+
+        } catch (err) {
+          console.error('Sidebar ID upload error', err);
+          alert('Error uploading ID.');
+        } finally {
+          // Reset input so the same file can be chosen again later if needed
+          sidebarIdInput.value = '';
+        }
+      });
+    }
+  }
+
+
+
+
+
+
+
   // --- Mini calendar (arrows + Today) ---
   const miniCalBase = new Date();
   let miniCalOffset = 0;
   let calendarBookings = []; 
+let bookingsByDay = {};   // dateKey ("YYYY-MM-DD") -> array of bookings for that day
+
 
   
 
@@ -262,10 +539,15 @@ function renderMiniCalendar() {
   const target = new Date(
     miniCalBase.getFullYear(),
     miniCalBase.getMonth() + miniCalOffset,
-    1
+    1 
   );
+
+
   const year = target.getFullYear();
   const month = target.getMonth();
+
+  // reset mapping from dateKey -> bookings for that date in this month
+  bookingsByDay = {};
 
   // Update month title
   const titleEl = document.getElementById('monthTitle');
@@ -322,6 +604,11 @@ function renderMiniCalendar() {
           const dNum = cur.getDate();
           bookedDays.add(dayKey(dNum));
 
+                    const key = dayKey(dNum);
+          if (!bookingsByDay[key]) bookingsByDay[key] = [];
+          bookingsByDay[key].push(b);
+
+
           if (firstDayInMonth === null || dNum < firstDayInMonth) firstDayInMonth = dNum;
           if (lastDayInMonth  === null || dNum > lastDayInMonth)  lastDayInMonth  = dNum;
         }
@@ -331,9 +618,15 @@ function renderMiniCalendar() {
       if (start.getFullYear() === year && start.getMonth() === month) {
         checkInDays.add(dayKey(start.getDate()));
       }
-      if (end.getFullYear() === year && end.getMonth() === month) {
-        checkOutDays.add(dayKey(end.getDate()));
+           if (end.getFullYear() === year && end.getMonth() === month) {
+        const coDay = end.getDate();
+        const coKey = dayKey(coDay);
+        checkOutDays.add(coKey);
+
+        if (!bookingsByDay[coKey]) bookingsByDay[coKey] = [];
+        bookingsByDay[coKey].push(b);
       }
+
 
       // Decide what the visible span should be: nights in this month,
 // extended to include the checkout day if it also falls in this month.
@@ -379,9 +672,21 @@ if (spanStart !== null && spanEnd !== null) {
 
     const key = dayKey(d);
 
-    if (bookedDays.has(key)) {
+           // Treat any day that belongs to a booking (check-in, night, or check-out)
+    // as clickable for the sidebar
+        if (
+      bookedDays.has(key) ||
+      checkInDays.has(key) ||
+      checkOutDays.has(key)
+    ) {
       cell.classList.add('day-booked');
+      cell.addEventListener('click', () =>
+        openBookingSidebar(key, bookingsByDay[key] || [])
+      );
     }
+
+
+
     if (checkInDays.has(key)) {
       cell.classList.add('day-checkin');
     }
@@ -501,7 +806,13 @@ if (spanStart !== null && spanEnd !== null) {
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
   function fillGuestHeader(b){ if(!b) return; document.getElementById('guestName').textContent=b.guestName||'Guest'; const a=document.getElementById('platformLink'); a.textContent=b.platform||'Platform'; a.href=b.platform==='Booking.com'?'https://booking.com':(b.platform==='Airbnb'?'https://airbnb.com':'#'); document.getElementById('stayDates').textContent=`${b.checkIn}–${b.checkOut}`; }
 
-  function attachActions(current){ if(!current) return; const id= current.timestamp || current.id;
+  function attachActions(current){ 
+  if(!current) return; 
+  const id= current.timestamp || current.id;
+
+  // remember which booking is the "current" one in the top header
+  currentBookingId = id;
+
         let sendingEmail = false;
 
 
@@ -592,6 +903,17 @@ async function uploadReceiptDirect(bookingId, file){
 
 
     const circles=document.querySelectorAll('#steps .step-circle');
+
+    // If backend says ID is already uploaded, mark step 0 as done on load
+    if (current.checklist && current.checklist.step1 === true) {
+      comp[0] = true;                 // keep comp[] in sync
+      if (circles[0]) {
+        circles[0].classList.add('done');  // show green check overlay
+      }
+      renderProgress();               // update progress bar
+    }
+
+
     const openGET=(path,{modal=true,newtab=false}={})=>{const url=`${path}/${encodeURIComponent(id)}`; if(newtab) return window.open(url,'_blank'); if(modal) return openModal(url); window.location.href=url;};
     const postForm=async(path)=>fetch(`${path}/${encodeURIComponent(id)}`,{method:'POST'});
 
@@ -730,6 +1052,7 @@ try {
     themeDots();
     stepsRow();
     wireCalendarControls(); // ← new
+    wireBookingSidebar();
     wireAddGuest();
     renderProgress();
     apply();

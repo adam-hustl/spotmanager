@@ -119,7 +119,10 @@
     "checkOut": "2025-12-04",
     "platform": "Agoda",
     "people": "2",
-    "timestamp": "2025-12-02T10:39:25.992Z"
+    "timestamp": "2025-12-02T10:39:25.992Z",
+    "checklist": {
+      "step1": true
+    }
   },
   {
     "guestName": "test more dates",
@@ -127,7 +130,10 @@
     "checkOut": "2025-12-14",
     "platform": "Booking.com",
     "people": "2",
-    "timestamp": "2025-12-02T10:40:16.825Z"
+    "timestamp": "2025-12-02T10:40:16.825Z",
+    "checklist": {
+      "step1": true
+    }
   },
   {
     "guestName": "Test border",
@@ -135,6 +141,7 @@
     "checkOut": "2025-12-20",
     "platform": "Agoda",
     "people": "2",
-    "timestamp": "2025-12-03T04:33:54.484Z"
+    "timestamp": "2025-12-03T04:33:54.484Z",
+    "checklist": {}
   }
 ]
