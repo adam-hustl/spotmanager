@@ -319,8 +319,95 @@ app.get('/view-ids/:id', async (req, res) => {
       );
       const guestName = booking ? booking.guestName : '';
 
-      if (matching.length === 0) {
-        return res.send('No uploaded IDs found for this booking.');
+      const remaining = matching.length;
+      const notifyScript = `<script>
+        (function(){
+          try {
+            if (window.parent) {
+              window.parent.postMessage({ type: 'idsCount', bookingId: ${JSON.stringify(bookingId)}, count: ${remaining} }, '*');
+            }
+          } catch (_) {}
+        })();
+      </script>`;
+
+      if (remaining === 0) {
+        return res.send(`
+        <html>
+          <head>
+            <style>
+              :root {
+                --accent: #10b981;
+                --text: #0f172a;
+                --muted: #6b7280;
+                --border: rgba(148,163,184,0.4);
+              }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: linear-gradient(135deg, #ecfdf5, #ffffff);
+                color: var(--text);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 32px 16px;
+              }
+              .modal-card {
+                width: min(920px, 100%);
+                background: #ffffff;
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+                padding: 24px 28px 28px;
+              }
+              .modal-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 18px;
+              }
+              .title {
+                font-size: 22px;
+                font-weight: 700;
+                margin: 0;
+              }
+              .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+              .close {
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                width: 36px;
+                height: 36px;
+                background: #fff;
+                cursor: pointer;
+                font-size: 18px;
+                line-height: 1;
+              }
+              .empty {
+                padding: 20px;
+                border: 1px dashed var(--border);
+                border-radius: 12px;
+                text-align: center;
+                color: var(--muted);
+              }
+            </style>
+          </head>
+          <body>
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <div class="title">Guest IDs</div>
+                  <div class="subtitle">${guestName || ''}</div>
+                </div>
+                <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+              </div>
+              <div class="empty">No uploaded IDs found for this booking.</div>
+            </div>
+            ${notifyScript}
+          </body>
+        </html>
+        `);
       }
 
       const items = matching.map(fname => {
@@ -330,18 +417,117 @@ app.get('/view-ids/:id', async (req, res) => {
         const preview = isImage
           ? `<img class="zoomable-id" src="/uploads/${encoded}" />`
           : `<a href="/uploads/${encoded}" target="_blank">${fname}</a>`;
-        return `<div class="id-item">${preview}</div>`;
+        return `<div class="id-item">
+                  ${preview}
+                  <div class="delete-form">
+                    <form action="/delete-id/${bookingId}/${encoded}" method="POST">
+                      <button type="submit" class="delete-btn">Delete</button>
+                    </form>
+                  </div>
+                </div>`;
       }).join('');
 
       return res.send(`
         <html>
-          <head><link rel="stylesheet" href="/style.css" /></head>
+          <head>
+            <style>
+              :root {
+                --accent: #10b981;
+                --text: #0f172a;
+                --muted: #6b7280;
+                --border: rgba(148,163,184,0.4);
+              }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: linear-gradient(135deg, #ecfdf5, #ffffff);
+                color: var(--text);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 32px 16px;
+              }
+              .modal-card {
+                width: min(980px, 100%);
+                background: #ffffff;
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+                padding: 24px 28px 28px;
+              }
+              .modal-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 18px;
+              }
+              .title {
+                font-size: 22px;
+                font-weight: 700;
+                margin: 0;
+              }
+              .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+              .close {
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                width: 36px;
+                height: 36px;
+                background: #fff;
+                cursor: pointer;
+                font-size: 18px;
+                line-height: 1;
+              }
+              .id-gallery {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 14px;
+              }
+              .id-item {
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 12px;
+                background: linear-gradient(180deg, #ffffff, #f9fafb);
+                box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+              }
+              .id-item img {
+                width: 100%;
+                height: 180px;
+                object-fit: cover;
+                border-radius: 10px;
+                border: 1px solid var(--border);
+              }
+              .delete-form {
+                margin-top: 10px;
+                text-align: center;
+              }
+              .delete-btn {
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                background: #fff1f2;
+                color: #b91c1c;
+                padding: 8px 12px;
+                border-radius: 10px;
+                cursor: pointer;
+                font-weight: 600;
+              }
+              .delete-btn:hover { background: #fee2e2; }
+              a { color: var(--accent); font-weight: 600; text-decoration: none; }
+            </style>
+          </head>
           <body>
-            <div class="modal-container view-ids">
-              <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
-              <h2>Uploaded Guest IDs for guest ${guestName}</h2>
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <div class="title">Guest IDs</div>
+                  <div class="subtitle">${guestName || ''}</div>
+                </div>
+                <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+              </div>
               <div class="id-gallery">${items}</div>
             </div>
+            ${notifyScript}
           </body>
         </html>
       `);
@@ -385,8 +571,95 @@ const booking = bookings.find(
       const guestName = booking ? booking.guestName : '';
 
 
-    if (matching.length === 0) {
-      return res.send('No uploaded IDs found for this booking.');
+    const remaining = matching.length;
+    const notifyScript = `<script>
+      (function(){
+        try {
+          if (window.parent) {
+            window.parent.postMessage({ type: 'idsCount', bookingId: ${JSON.stringify(bookingId)}, count: ${remaining} }, '*');
+          }
+        } catch (_) {}
+      })();
+    </script>`;
+
+    if (remaining === 0) {
+      return res.send(`
+        <html>
+          <head>
+            <style>
+              :root {
+                --accent: #10b981;
+                --text: #0f172a;
+                --muted: #6b7280;
+                --border: rgba(148,163,184,0.4);
+              }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: linear-gradient(135deg, #ecfdf5, #ffffff);
+                color: var(--text);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 32px 16px;
+              }
+              .modal-card {
+                width: min(920px, 100%);
+                background: #ffffff;
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+                padding: 24px 28px 28px;
+              }
+              .modal-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 18px;
+              }
+              .title {
+                font-size: 22px;
+                font-weight: 700;
+                margin: 0;
+              }
+              .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+              .close {
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                width: 36px;
+                height: 36px;
+                background: #fff;
+                cursor: pointer;
+                font-size: 18px;
+                line-height: 1;
+              }
+              .empty {
+                padding: 20px;
+                border: 1px dashed var(--border);
+                border-radius: 12px;
+                text-align: center;
+                color: var(--muted);
+              }
+            </style>
+          </head>
+          <body>
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <div class="title">Guest IDs</div>
+                  <div class="subtitle">${guestName || ''}</div>
+                </div>
+                <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+              </div>
+              <div class="empty">No uploaded IDs found for this booking.</div>
+            </div>
+            ${notifyScript}
+          </body>
+        </html>
+      `);
     }
 
     const items = matching.map(fname => {
@@ -397,9 +670,9 @@ const booking = bookings.find(
         ? `<img class="zoomable-id" src="/id/${encoded}" />`
         : `<a href="/id/${encoded}" target="_blank">${fname}</a>`;
       return `<div class="id-item">${preview}
-                <div style="text-align:center;margin-top:10px">
+                <div class="delete-form">
                   <form action="/delete-id/${bookingId}/${encoded}" method="POST">
-                    <button type="submit">Delete</button>
+                    <button type="submit" class="delete-btn">Delete</button>
                   </form>
                 </div>
               </div>`;
@@ -407,13 +680,105 @@ const booking = bookings.find(
 
     res.send(`
       <html>
-        <head><link rel="stylesheet" href="/style.css" /></head>
+        <head>
+          <style>
+            :root {
+              --accent: #10b981;
+              --text: #0f172a;
+              --muted: #6b7280;
+              --border: rgba(148,163,184,0.4);
+            }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              background: linear-gradient(135deg, #ecfdf5, #ffffff);
+              color: var(--text);
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 32px 16px;
+            }
+            .modal-card {
+              width: min(980px, 100%);
+              background: #ffffff;
+              border: 1px solid var(--border);
+              border-radius: 18px;
+              box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+              padding: 24px 28px 28px;
+            }
+            .modal-head {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 12px;
+              margin-bottom: 18px;
+            }
+            .title {
+              font-size: 22px;
+              font-weight: 700;
+              margin: 0;
+            }
+            .subtitle { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+            .close {
+              border: 1px solid var(--border);
+              border-radius: 999px;
+              width: 36px;
+              height: 36px;
+              background: #fff;
+              cursor: pointer;
+              font-size: 18px;
+              line-height: 1;
+            }
+            .id-gallery {
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+              gap: 14px;
+            }
+            .id-item {
+              border: 1px solid var(--border);
+              border-radius: 12px;
+              padding: 12px;
+              background: linear-gradient(180deg, #ffffff, #f9fafb);
+              box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+            }
+            .id-item img {
+              width: 100%;
+              height: 180px;
+              object-fit: cover;
+              border-radius: 10px;
+              border: 1px solid var(--border);
+            }
+            .delete-form {
+              margin-top: 10px;
+              text-align: center;
+            }
+            .delete-btn {
+              border: 1px solid rgba(239, 68, 68, 0.3);
+              background: #fff1f2;
+              color: #b91c1c;
+              padding: 8px 12px;
+              border-radius: 10px;
+              cursor: pointer;
+              font-weight: 600;
+            }
+            .delete-btn:hover { background: #fee2e2; }
+            a { color: var(--accent); font-weight: 600; text-decoration: none; }
+          </style>
+        </head>
         <body>
-          <div class="modal-container view-ids">
-            <a href="#" class="modal-close" onclick="window.parent.closeModal();return false;">&times;</a>
-            <h2>Uploaded Guest IDs for guest ${guestName}</h2>
+          <div class="modal-card">
+            <div class="modal-head">
+              <div>
+                <div class="title">Guest IDs</div>
+                <div class="subtitle">${guestName || ''}</div>
+              </div>
+              <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+            </div>
             <div class="id-gallery">${items}</div>
           </div>
+          ${notifyScript}
         </body>
       </html>
     `);
@@ -455,12 +820,65 @@ app.get('/id/:filename', async (req, res) => {
 
 app.post('/delete-id/:id/:filename', requireAdmin, async (req, res) => {
   const bookingId = req.params.id;
-  const file = req.params.filename;
+  const file = path.basename(req.params.filename); // prevent path traversal
 
+  const markIdPending = () => {
+    try {
+      const bookings = readBookingsLocal();
+      const idx = bookings.findIndex(
+        b =>
+          String(b.timestamp) === String(bookingId) ||
+          (b.id && String(b.id) === String(bookingId))
+      );
+      if (idx !== -1) {
+        bookings[idx].checklist = bookings[idx].checklist || {};
+        bookings[idx].checklist.step1 = false;
+        writeBookingsLocal(bookings);
+        pushBookingsToGist(bookings).catch(() => {});
+      }
+    } catch (e) {
+      console.error('Failed to mark ID as pending after delete:', e);
+    }
+  };
+
+  // Local/staging: delete from uploads folder
+  if (!IS_PROD || !hasSftpCreds()) {
+    try {
+      fs.unlinkSync(path.join(UPLOADS_DIR, file));
+
+      // If no IDs remain, mark checklist as pending again
+      const remaining = fs
+        .readdirSync(UPLOADS_DIR)
+        .filter(name => name.includes(`booking-${bookingId}-`)).length;
+      if (remaining === 0) {
+        markIdPending();
+      }
+
+      return res.redirect(`/view-ids/${bookingId}`);
+    } catch (e) {
+      console.error('Local delete error:', e);
+      return res.status(500).send('Error deleting file');
+    }
+  }
+
+  // Production: delete from SFTP
   try {
     const sftp = await getSftp();
     await sftp.delete(`${SFTP_ROOT}/ids/${file}`);
+    let remaining = 0;
+    try {
+      const list = await sftp.list(`${SFTP_ROOT}/ids`);
+      remaining = list
+        .map(f => f.name)
+        .filter(name => name.includes(`booking-${bookingId}-`)).length;
+    } catch (_) {}
+
     await sftp.end();
+
+    if (remaining === 0) {
+      markIdPending();
+    }
+
     res.redirect(`/view-ids/${bookingId}`);
   } catch (e) {
     console.error('SFTP delete error:', e);
@@ -936,10 +1354,71 @@ res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, (req, res) => {
 try {
-const data = typeof readBookingsLocal === 'function'
-? readBookingsLocal()
-: JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
-res.json(data);
+  const data =
+    typeof readBookingsLocal === 'function'
+      ? readBookingsLocal()
+      : JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+
+  // On local/staging, count uploaded ID files and keep checklist in sync
+  const isLocal = !IS_PROD || !hasSftpCreds();
+  let idCounts = {};
+
+  if (isLocal) {
+    const extractIdFromFilename = (fname) => {
+      // filename shapes:
+      //   booking-<bookingId>-<timestamp>-<origName>     (ID uploads)
+      //   booking-<bookingId>-stamp-<timestamp>.<ext>   (stamp uploads) -> ignore
+      if (!fname.startsWith('booking-')) return null;
+      if (fname.includes('-stamp-')) return null; // don't count stamps as IDs
+      const m = fname.match(/^booking-(.+?)-\d{5,}-/); // non-greedy up to the numeric timestamp
+      return m ? m[1] : null;
+    };
+
+    try {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      files.forEach((fname) => {
+        const id = extractIdFromFilename(fname);
+        if (id) {
+          idCounts[id] = (idCounts[id] || 0) + 1;
+        }
+      });
+    } catch (e) {
+      console.error('Failed to read uploads dir for ID counts', e);
+    }
+  }
+
+  let changed = false;
+  const enriched = data.map((b) => {
+    const id = String(b.timestamp || b.id || '');
+    const count = isLocal ? (idCounts[id] || 0) : undefined;
+
+    if (isLocal) {
+      b.idFileCount = count;
+
+      if (count === 0) {
+        if (b.checklist && b.checklist.step1 === true) {
+          b.checklist.step1 = false;
+          changed = true;
+        }
+      } else if (count > 0) {
+        b.checklist = b.checklist || {};
+        if (b.checklist.step1 !== true) {
+          b.checklist.step1 = true;
+          changed = true;
+        }
+      }
+    }
+    return b;
+  });
+
+  if (changed && typeof writeBookingsLocal === 'function') {
+    writeBookingsLocal(data);
+    if (typeof pushBookingsToGist === 'function') {
+      pushBookingsToGist(data).catch(() => {});
+    }
+  }
+
+  res.json(enriched);
 } catch (e) {
 console.error('GET /api/bookings failed:', e);
 res.status(500).json({ error: 'Failed to read bookings' });

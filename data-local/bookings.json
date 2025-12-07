@@ -13,7 +13,8 @@
       "step2": true,
       "step3": false,
       "step4": false
-    }
+    },
+    "idFileCount": 1
   },
   {
     "guestName": "test cancel on cleaner dashboard",
@@ -23,7 +24,8 @@
     "platform": "Agoda",
     "people": "3",
     "notes": "",
-    "timestamp": "2025-08-13T14:02:30.923Z"
+    "timestamp": "2025-08-13T14:02:30.923Z",
+    "idFileCount": 0
   },
   {
     "guestName": "test igen",
@@ -39,7 +41,8 @@
       "step2": false,
       "step3": false,
       "step4": false
-    }
+    },
+    "idFileCount": 0
   },
   {
     "guestName": "test new upload",
@@ -49,7 +52,11 @@
     "platform": "Agoda",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-08-14T04:07:03.930Z"
+    "timestamp": "2025-08-14T04:07:03.930Z",
+    "idFileCount": 3,
+    "checklist": {
+      "step1": true
+    }
   },
   {
     "guestName": "test finance",
@@ -59,7 +66,8 @@
     "platform": "Agoda",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-08-22T11:21:53.154Z"
+    "timestamp": "2025-08-22T11:21:53.154Z",
+    "idFileCount": 0
   },
   {
     "guestName": "test again fin",
@@ -70,7 +78,8 @@
     "people": "2",
     "notes": "",
     "timestamp": "2025-08-22T11:25:49.245Z",
-    "cleaned": true
+    "cleaned": true,
+    "idFileCount": 0
   },
   {
     "guestName": "test add to finance",
@@ -80,7 +89,8 @@
     "platform": "Agoda",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-08-22T11:58:23.910Z"
+    "timestamp": "2025-08-22T11:58:23.910Z",
+    "idFileCount": 0
   },
   {
     "guestName": "test now",
@@ -90,7 +100,8 @@
     "platform": "Direct",
     "people": "4",
     "notes": "",
-    "timestamp": "2025-08-25T13:18:58.805Z"
+    "timestamp": "2025-08-25T13:18:58.805Z",
+    "idFileCount": 0
   },
   {
     "guestName": "Test reciept",
@@ -101,7 +112,11 @@
     "people": "2",
     "notes": "",
     "timestamp": "2025-10-12T23:07:34.552Z",
-    "emailSent": true
+    "emailSent": true,
+    "idFileCount": 14,
+    "checklist": {
+      "step1": true
+    }
   },
   {
     "guestName": "test",
@@ -111,7 +126,8 @@
     "platform": "Agoda",
     "people": "2",
     "notes": "",
-    "timestamp": "2025-12-02T10:29:36.529Z"
+    "timestamp": "2025-12-02T10:29:36.529Z",
+    "idFileCount": 0
   },
   {
     "guestName": "test new dash guest",
@@ -122,7 +138,8 @@
     "timestamp": "2025-12-02T10:39:25.992Z",
     "checklist": {
       "step1": true
-    }
+    },
+    "idFileCount": 1
   },
   {
     "guestName": "test more dates",
@@ -133,7 +150,8 @@
     "timestamp": "2025-12-02T10:40:16.825Z",
     "checklist": {
       "step1": true
-    }
+    },
+    "idFileCount": 1
   },
   {
     "guestName": "Test border",
@@ -142,6 +160,18 @@
     "platform": "Agoda",
     "people": "2",
     "timestamp": "2025-12-03T04:33:54.484Z",
-    "checklist": {}
+    "checklist": {
+      "step1": false
+    },
+    "idFileCount": 0
+  },
+  {
+    "guestName": "Test overlap",
+    "checkIn": "2025-12-04",
+    "checkOut": "2025-12-06",
+    "platform": "Booking.com",
+    "people": "2",
+    "timestamp": "2025-12-07T12:59:00.112Z",
+    "idFileCount": 0
   }
 ]

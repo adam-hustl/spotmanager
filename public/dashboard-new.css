@@ -601,6 +601,18 @@ body.booking-sidebar-open .page-grid {
   height: 16px;
 }
 
+.doc-upload-btn .icon-view {
+  display: none;
+}
+
+.doc-upload-btn.view-mode .icon-upload {
+  display: none;
+}
+
+.doc-upload-btn.view-mode .icon-view {
+  display: inline;
+}
+
 
 
 
@@ -621,4 +633,3 @@ body.booking-sidebar-open .page-grid {
 .day-booked {
   cursor: pointer;
 }
-

@@ -255,7 +255,8 @@
         class="doc-upload-btn"
         aria-label="Upload ID"
       >
-        <i data-lucide="upload" class="doc-upload-icon"></i>
+        <i data-lucide="upload" class="doc-upload-icon icon-upload"></i>
+        <i data-lucide="eye" class="doc-upload-icon icon-view"></i>
       </button>
     </div>
   </div>
@@ -334,11 +335,22 @@
       // ---------- BOOKING SIDEBAR ----------
 
     let sidebarBooking = null; // booking object currently shown in the sidebar
+    let sidebarJustOpened = false; // guard against immediate close on the same click
 
+    function setSidebarIdButtonMode(isComplete) {
+      const btn = document.getElementById('bookingSidebarIdUpload');
+      if (!btn) return;
+      btn.classList.toggle('view-mode', !!isComplete);
+      btn.setAttribute('aria-label', isComplete ? 'View uploaded ID' : 'Upload ID');
+      btn.title = isComplete ? 'View uploaded ID' : 'Upload ID';
+    }
 
     function openBookingSidebar(dateKey, bookingsForDay = []) {
     const panel = document.getElementById('bookingSidebar');
     const dateLabel = document.getElementById('bookingSidebarDate');
+
+    sidebarJustOpened = true;
+    setTimeout(() => { sidebarJustOpened = false; }, 0);
 
     if (panel) {
       panel.classList.add('open');
@@ -404,8 +416,15 @@
 
       if (bookingForSidebar) {
         // Adjust field names if your backend uses something different
-        hasId = bookingForSidebar.checklist 
-     && bookingForSidebar.checklist.step1 === true;
+        const fileCount =
+          typeof bookingForSidebar.idFileCount === 'number'
+            ? bookingForSidebar.idFileCount
+            : 0;
+        hasId =
+          fileCount > 0 ||
+          (typeof bookingForSidebar.idFileCount !== 'number' &&
+            bookingForSidebar.checklist &&
+            bookingForSidebar.checklist.step1 === true);
 
 
       }
@@ -413,6 +432,7 @@
       idStatusEl.textContent = hasId ? 'Complete' : 'Pending';
       idStatusEl.classList.toggle('doc-pill-complete', hasId);
       idStatusEl.classList.toggle('doc-pill-pending', !hasId);
+      setSidebarIdButtonMode(hasId);
     }
   }
 
@@ -424,6 +444,14 @@
       panel.classList.remove('open');
     }
     document.body.classList.remove('booking-sidebar-open');
+  }
+
+  function handleSidebarOutsideClick(e) {
+    const panel = document.getElementById('bookingSidebar');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (sidebarJustOpened) return; // avoid closing immediately after opening
+    if (panel.contains(e.target)) return; // clicks inside panel stay open
+    closeBookingSidebar();
   }
 
    function wireBookingSidebar() {
@@ -440,6 +468,14 @@
     if (idUploadBtn && sidebarIdInput) {
       idUploadBtn.addEventListener('click', () => {
         if (!sidebarBooking) return; // no booking selected
+        const isComplete = idStatusEl && idStatusEl.classList.contains('doc-pill-complete');
+        const bookingId = sidebarBooking.timestamp || sidebarBooking.id;
+
+        // If ID already uploaded, view the files instead of re-uploading
+        if (isComplete && bookingId) {
+          openModal(`/view-ids/${encodeURIComponent(bookingId)}`);
+          return;
+        }
 
         // Try the faster showPicker() API first
         try {
@@ -484,6 +520,7 @@
     idStatusEl.classList.remove('doc-pill-pending');
     idStatusEl.classList.add('doc-pill-complete');
   }
+  setSidebarIdButtonMode(true);
 
   // Only mark the top "Upload ID" step as done
   // if this sidebar booking is the SAME as the current upcoming guest
@@ -519,6 +556,60 @@
       });
     }
   }
+
+  // Listen for ID count updates from the modal (after upload/delete)
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || data.type !== 'idsCount') return;
+
+    const incomingId = data.bookingId;
+    const count = Number(data.count || 0);
+    const currentId =
+      sidebarBooking && (sidebarBooking.timestamp || sidebarBooking.id);
+
+    // Only update if the message is about the booking currently shown in the sidebar
+    if (!currentId || String(incomingId) !== String(currentId)) return;
+
+    const idStatusEl = document.getElementById('bookingSidebarIdStatus');
+    if (!idStatusEl) return;
+
+    const hasId = count > 0;
+    idStatusEl.textContent = hasId ? 'Complete' : 'Pending';
+    idStatusEl.classList.toggle('doc-pill-complete', hasId);
+    idStatusEl.classList.toggle('doc-pill-pending', !hasId);
+    setSidebarIdButtonMode(hasId);
+
+    // Persist the new state on the booking object(s) so a reopen keeps the status
+    if (sidebarBooking) {
+      sidebarBooking.idFileCount = count;
+      sidebarBooking.checklist = sidebarBooking.checklist || {};
+      sidebarBooking.checklist.step1 = hasId;
+    }
+    if (Array.isArray(calendarBookings)) {
+      calendarBookings.forEach((b) => {
+        const bid = b && (b.timestamp || b.id);
+        if (bid && String(bid) === String(incomingId)) {
+          b.idFileCount = count;
+          b.checklist = b.checklist || {};
+          b.checklist.step1 = hasId;
+        }
+      });
+    }
+
+    // Also sync the top progress step if this booking is the current one in the header
+    const uploadedBookingId = currentBookingId;
+    if (uploadedBookingId && String(uploadedBookingId) === String(incomingId)) {
+      const stepCircles = document.querySelectorAll('#steps .step-circle');
+      if (!hasId) {
+        comp[0] = false;
+        if (stepCircles[0]) stepCircles[0].classList.remove('done');
+      } else {
+        comp[0] = true;
+        if (stepCircles[0]) stepCircles[0].classList.add('done');
+      }
+      renderProgress();
+    }
+  });
 
 
 
@@ -905,7 +996,13 @@ async function uploadReceiptDirect(bookingId, file){
     const circles=document.querySelectorAll('#steps .step-circle');
 
     // If backend says ID is already uploaded, mark step 0 as done on load
-    if (current.checklist && current.checklist.step1 === true) {
+    const hasIdAlready =
+      (typeof current.idFileCount === 'number' && current.idFileCount > 0) ||
+      (typeof current.idFileCount !== 'number' &&
+        current.checklist &&
+        current.checklist.step1 === true);
+
+    if (hasIdAlready) {
       comp[0] = true;                 // keep comp[] in sync
       if (circles[0]) {
         circles[0].classList.add('done');  // show green check overlay
@@ -1053,6 +1150,7 @@ try {
     stepsRow();
     wireCalendarControls(); // ← new
     wireBookingSidebar();
+    document.addEventListener('click', handleSidebarOutsideClick);
     wireAddGuest();
     renderProgress();
     apply();
