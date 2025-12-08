@@ -154,6 +154,20 @@ body.page {
 .step-circle.done    { background: #4b5563; border-color: #4b5563; color: #fff; }
 .step-label { font-size: 10px; color: #4b5563; white-space: nowrap; }
 
+.step-circle.view {
+  background: #10B981;
+  border-color: #10B981;
+  color: #fff;
+}
+.step-circle.view::before,
+.step-circle.view::after {
+  display: none;
+}
+.step-circle.view > svg {
+  opacity: 1;
+  color: #fff;
+}
+
 
 /* --- Step completion overlay (transparent green + white check) --- */
 .step-circle.done {

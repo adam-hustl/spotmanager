@@ -62,6 +62,34 @@ const transporter = nodemailer.createTransport({
 
 });
 
+// Update checklist steps (simple toggle)
+app.post('/api/checklist/:id', requireAdmin, (req, res) => {
+  const bookingId = req.params.id;
+  const { field, value } = req.body || {};
+  const allowed = new Set(['step4', 'step5']);
+  if (!allowed.has(field)) {
+    return res.status(400).json({ error: 'Invalid field' });
+  }
+
+  try {
+    const bookings = readBookingsLocal();
+    const idx = bookings.findIndex(
+      b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+    );
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    bookings[idx].checklist = bookings[idx].checklist || {};
+    bookings[idx].checklist[field] = value === 'true' || value === true;
+    writeBookingsLocal(bookings);
+    pushBookingsToGist(bookings).catch(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('Failed to update checklist', e);
+    return res.status(500).json({ error: 'Failed to update checklist' });
+  }
+});
+
 const IS_PROD = process.env.APP_ENV === 'production';
 
 
@@ -310,7 +338,11 @@ app.get('/view-ids/:id', async (req, res) => {
   if (!IS_PROD || !hasSftpCreds()) {
     try {
       const files = fs.readdirSync(UPLOADS_DIR);
-      const matching = files.filter(name => name.includes(`booking-${bookingId}-`));
+      const matching = files.filter(
+        name =>
+          name.includes(`booking-${bookingId}-`) &&
+          !name.includes('-stamp-') // exclude payment receipts from ID viewer
+      );
 
       // Optional: read bookings to show guest name (same as your SFTP path does)
       const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
@@ -553,7 +585,11 @@ app.get('/view-ids/:id', async (req, res) => {
 
     const matching = list
       .map(f => f.name)
-      .filter(name => name.includes(`booking-${bookingId}-`));
+      .filter(
+        name =>
+          name.includes(`booking-${bookingId}-`) &&
+          !name.includes('-stamp-') // exclude payment receipts from ID viewer
+      );
 
       // 🔎 Look up this booking so we can show the guest name in the modal title
 const bookings =
@@ -1315,8 +1351,18 @@ const mailOptions = {
 
     await safeSendMail(mailOptions);
 
+    // Mark checklist step3 as complete and persist
+    booking.checklist = booking.checklist || {};
+    booking.checklist.step3 = true;
+    writeBookingsLocal(bookings);
+    pushBookingsToGist(bookings).catch(() => {});
+
     // If the client is uploading without a modal, return a simple 200.
 if (req.headers['x-no-modal'] === '1') {
+  booking.checklist = booking.checklist || {};
+  booking.checklist.step3 = true; // payment receipt sent
+  writeBookingsLocal(bookings);
+  pushBookingsToGist(bookings).catch(() => {});
   return res.status(200).send('OK');
 }
 
@@ -1330,7 +1376,10 @@ if (req.headers['x-no-modal'] === '1') {
       <script>
         if (window.parent) {
           window.parent.closeModal();
-          window.parent.location.reload();
+          window.parent.postMessage(
+            { type: 'receiptUploaded', bookingId: ${JSON.stringify(bookingId)}, count: ${matching?.length || 1} },
+            '*'
+          );
         } else {
           window.location.href = '/dashboard';
         }
@@ -1341,6 +1390,164 @@ if (req.headers['x-no-modal'] === '1') {
     console.error('Stamp send error:', err);
     res.status(500).send('Failed to send stamp email: ' + err.message);
   }
+});
+
+// View uploaded payment receipts (local uploads)
+app.get('/view-stamps/:id', requireAdmin, (req, res) => {
+  const bookingId = req.params.id;
+
+  try {
+    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+    const booking = bookings.find(
+      b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+    );
+    const guestName = booking ? booking.guestName : '';
+
+    const files = fs.readdirSync(UPLOADS_DIR);
+    const matching = files.filter(name =>
+      name.startsWith(`booking-${bookingId}-stamp-`)
+    );
+    const remaining = matching.length;
+    const notifyScript = `<script>
+      (function(){
+        try {
+          if (window.parent) {
+            window.parent.postMessage({ type: 'receiptUploaded', bookingId: ${JSON.stringify(bookingId)}, count: ${remaining} }, '*');
+          }
+        } catch (_) {}
+      })();
+    </script>`;
+
+    if (matching.length === 0) {
+      return res.send(`
+        <html>
+          <head>
+            <style>
+              :root { --accent:#10b981; --text:#0f172a; --muted:#6b7280; --border:rgba(148,163,184,0.4); }
+              * { box-sizing: border-box; }
+              body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:linear-gradient(135deg,#ecfdf5,#ffffff); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 16px; }
+              .modal-card { width:min(820px,100%); background:#fff; border:1px solid var(--border); border-radius:18px; box-shadow:0 20px 45px rgba(15,23,42,0.12); padding:24px 28px 28px; }
+              .modal-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; }
+              .title { font-size:22px; font-weight:700; margin:0; }
+              .subtitle { color:var(--muted); margin:4px 0 0; font-size:14px; }
+              .close { border:1px solid var(--border); border-radius:999px; width:36px; height:36px; background:#fff; cursor:pointer; font-size:18px; line-height:1; }
+              .empty { padding:20px; border:1px dashed var(--border); border-radius:12px; text-align:center; color:var(--muted); }
+            </style>
+          </head>
+          <body>
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <div class="title">Payment receipts</div>
+                  <div class="subtitle">${guestName || ''}</div>
+                </div>
+                <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+              </div>
+              <div class="empty">No payment receipts uploaded for this booking.</div>
+            </div>
+            ${notifyScript}
+          </body>
+        </html>
+      `);
+    }
+
+    const items = matching.map(fname => {
+      const encoded = encodeURIComponent(fname);
+      const ext = path.extname(fname).toLowerCase();
+      const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext);
+      const preview = isImage
+        ? `<img class="stamp-img" src="/uploads/${encoded}" />`
+        : `<a href="/uploads/${encoded}" target="_blank">${fname}</a>`;
+      return `<div class="stamp-item">
+                ${preview}
+                <div style="text-align:center;margin-top:10px">
+                  <form action="/delete-stamp/${bookingId}/${encoded}" method="POST">
+                    <button type="submit" style="border:1px solid rgba(239,68,68,0.3);background:#fff1f2;color:#b91c1c;padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600;">Delete</button>
+                  </form>
+                </div>
+              </div>`;
+    }).join('');
+
+    return res.send(`
+      <html>
+        <head>
+          <style>
+            :root { --accent:#10b981; --text:#0f172a; --muted:#6b7280; --border:rgba(148,163,184,0.4); }
+            * { box-sizing: border-box; }
+            body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:linear-gradient(135deg,#ecfdf5,#ffffff); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 16px; }
+            .modal-card { width:min(980px,100%); background:#fff; border:1px solid var(--border); border-radius:18px; box-shadow:0 20px 45px rgba(15,23,42,0.12); padding:24px 28px 28px; }
+            .modal-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; }
+            .title { font-size:22px; font-weight:700; margin:0; }
+            .subtitle { color:var(--muted); margin:4px 0 0; font-size:14px; }
+            .close { border:1px solid var(--border); border-radius:999px; width:36px; height:36px; background:#fff; cursor:pointer; font-size:18px; line-height:1; }
+            .stamp-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+            .stamp-item { border:1px solid var(--border); border-radius:12px; padding:12px; background:linear-gradient(180deg,#ffffff,#f9fafb); box-shadow:0 10px 20px rgba(15,23,42,0.06); }
+            .stamp-item img { width:100%; height:200px; object-fit:cover; border-radius:10px; border:1px solid var(--border); }
+            a { color:var(--accent); font-weight:600; text-decoration:none; }
+            .delete-form { margin-top:10px; text-align:center; }
+            .delete-btn { border:1px solid rgba(239,68,68,0.3); background:#fff1f2; color:#b91c1c; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+            .delete-btn:hover { background:#fee2e2; }
+          </style>
+        </head>
+        <body>
+          <div class="modal-card">
+            <div class="modal-head">
+              <div>
+                <div class="title">Payment receipts</div>
+                <div class="subtitle">${guestName || ''}</div>
+              </div>
+              <button class="close" onclick="window.parent.closeModal();return false;" aria-label="Close">&times;</button>
+            </div>
+            <div class="stamp-gallery">${items}</div>
+          </div>
+          ${notifyScript}
+        </body>
+      </html>
+    `);
+  } catch (e) {
+    console.error('Failed to list receipts:', e);
+    return res.status(500).send('Failed to list receipts.');
+  }
+});
+
+// Delete a payment receipt (local uploads only)
+app.post('/delete-stamp/:id/:filename', requireAdmin, (req, res) => {
+  const bookingId = req.params.id;
+  const file = path.basename(req.params.filename); // prevent traversal
+
+  try {
+    fs.unlinkSync(path.join(UPLOADS_DIR, file));
+  } catch (e) {
+    console.error('Delete stamp error:', e);
+    return res.status(500).send('Error deleting receipt');
+  }
+
+  // After deletion, check how many receipts remain for this booking
+  let remaining = 0;
+  try {
+    const files = fs.readdirSync(UPLOADS_DIR);
+    remaining = files.filter(
+      name => name.startsWith(`booking-${bookingId}-stamp-`)
+    ).length;
+  } catch (_) {}
+
+  // If none remain, mark checklist step3 false and persist
+  try {
+    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+    const idx = bookings.findIndex(
+      b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+    );
+    if (idx !== -1) {
+      bookings[idx].checklist = bookings[idx].checklist || {};
+      bookings[idx].checklist.step3 = remaining > 0;
+      writeBookingsLocal(bookings);
+      pushBookingsToGist(bookings).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Failed to update checklist after stamp delete:', e);
+  }
+
+  res.redirect(`/view-stamps/${bookingId}`);
 });
 
 
@@ -1362,6 +1569,7 @@ try {
   // On local/staging, count uploaded ID files and keep checklist in sync
   const isLocal = !IS_PROD || !hasSftpCreds();
   let idCounts = {};
+  let receiptCounts = {};
 
   if (isLocal) {
     const extractIdFromFilename = (fname) => {
@@ -1381,6 +1589,11 @@ try {
         if (id) {
           idCounts[id] = (idCounts[id] || 0) + 1;
         }
+        if (fname.startsWith('booking-') && fname.includes('-stamp-')) {
+          const rest = fname.slice('booking-'.length);
+          const mid = rest.split('-stamp-')[0];
+          receiptCounts[mid] = (receiptCounts[mid] || 0) + 1;
+        }
       });
     } catch (e) {
       console.error('Failed to read uploads dir for ID counts', e);
@@ -1391,9 +1604,11 @@ try {
   const enriched = data.map((b) => {
     const id = String(b.timestamp || b.id || '');
     const count = isLocal ? (idCounts[id] || 0) : undefined;
+    const receipts = isLocal ? (receiptCounts[id] || 0) : undefined;
 
     if (isLocal) {
       b.idFileCount = count;
+      b.receiptFileCount = receipts;
 
       if (count === 0) {
         if (b.checklist && b.checklist.step1 === true) {
@@ -1406,6 +1621,27 @@ try {
           b.checklist.step1 = true;
           changed = true;
         }
+      }
+      if (typeof receipts === 'number') {
+        if (receipts === 0) {
+          if (b.checklist && b.checklist.step3 === true) {
+            b.checklist.step3 = false;
+            changed = true;
+          }
+        } else if (receipts > 0) {
+          b.checklist = b.checklist || {};
+          if (b.checklist.step3 !== true) {
+            b.checklist.step3 = true;
+            changed = true;
+          }
+        }
+      }
+      // default missing fields to false for consistency
+      b.checklist = b.checklist || {};
+      if (typeof b.checklist.step4 !== 'boolean') b.checklist.step4 = false;
+      if (typeof b.checklist.step5 !== 'boolean') b.checklist.step5 = false;
+      if (typeof b.checklist.step3 !== 'boolean' && typeof receipts === 'number' && receipts === 0) {
+        b.checklist.step3 = false;
       }
     }
     return b;
@@ -1504,7 +1740,7 @@ const maybe = (html) => readOnly ? '' : html;
 
       return list.map((b) => {
         const checklist = b.checklist || {};
-        const hasIncomplete = [checklist.step1, checklist.step2, checklist.step3, checklist.step4].some(step => step !== true);
+        const hasIncomplete = [checklist.step1, checklist.step2, checklist.step3, checklist.step4, checklist.step5].some(step => step !== true);
 
         const isMarkedClean = cleanedFor.has(b.timestamp);
 
@@ -2163,8 +2399,10 @@ Adam Kischinovsky`,
   try {
     await safeSendMail(mailOptions);
     bookings[bookingIndex].emailSent = true;
+    bookings[bookingIndex].checklist = bookings[bookingIndex].checklist || {};
+    bookings[bookingIndex].checklist.step2 = true; // endorsement email sent
     writeBookingsLocal(bookings);
-pushBookingsToGist(bookings).catch(() => {});
+    pushBookingsToGist(bookings).catch(() => {});
 
     res.json({ success: true });
   } catch (err) {

@@ -238,43 +238,11 @@
     <div id="bookingSidebarGuest" class="booking-sidebar-guest-name">—</div>
     <div id="bookingSidebarStay" class="booking-sidebar-stay">—</div>
   </div>
-
-  <!-- Documents list -->
-  <div class="booking-sidebar-doc-list">
-    <div class="doc-row">
-      <div class="doc-row-main">
-        <span class="doc-name">ID</span>
-        <span id="bookingSidebarIdStatus" class="doc-pill doc-pill-pending">
-          Pending
-        </span>
-      </div>
-
-      <button
-        id="bookingSidebarIdUpload"
-        type="button"
-        class="doc-upload-btn"
-        aria-label="Upload ID"
-      >
-        <i data-lucide="upload" class="doc-upload-icon icon-upload"></i>
-        <i data-lucide="eye" class="doc-upload-icon icon-view"></i>
-      </button>
-    </div>
-  </div>
 </div>
 
 
     </div>
   </aside>
-
-  <!-- Hidden file input used by the sidebar upload icon -->
-<input
-  id="sidebarIdUploadInput"
-  type="file"
-  name="guestIds"
-  multiple
-  accept="image/*,application/pdf"
-  style="display:none"
-/>
 
 
 
@@ -301,14 +269,6 @@
   <input id="uploadIdInput" type="file" multiple accept="image/*,application/pdf" style="display:none">
   <input id="uploadReceiptInput" type="file" accept="image/*,application/pdf" style="display:none">
 
-    <input
-    id="sidebarIdUploadInput"
-    type="file"
-    multiple
-    accept="image/*,application/pdf"
-    style="display:none"
-  >
-
 
 
 
@@ -328,7 +288,33 @@
   function minibars(el,data,max,idx,accent){el.innerHTML='';data.forEach((v,i)=>{const d=document.createElement('div');d.className='bar';d.style.height=Math.max(8,(v/max)*100)+'%';d.style.backgroundColor=i===idx?accent:'#E5E7EB';el.appendChild(d);});}
   function themeDots(){const wrap=document.getElementById('themeDots');wrap.innerHTML='';Object.entries(THEMES).forEach(([k,t])=>{const b=document.createElement('button');b.className='theme-dot';b.style.backgroundColor=t.accent;b.title=k;b.onclick=()=>{theme=k;apply();};wrap.appendChild(b);});const g=document.createElement('button');g.className='theme-toggle';g.textContent=grad?'Gradient':'Solid';g.onclick=()=>{grad=!grad;g.textContent=grad?'Gradient':'Solid';apply();};wrap.appendChild(g);}
   function menu(){const items=[["home","Home"],["calendar-days","Bookings"],["bar-chart-3","Analytics"],["message-square","Cleaners Dashboard"],["settings","Profile"]];const wrap=document.getElementById('menu');wrap.innerHTML='';items.forEach((it,i)=>{const b=document.createElement('button');b.className='menu-btn';b.dataset.menu=i===0; b.innerHTML=`<i data-lucide="${it[0]}" class="icon-16"></i><span class="semibold">${it[1]}</span>`;wrap.appendChild(b);});}
-  function stepsRow(){const wrap=document.getElementById('steps');wrap.innerHTML='';steps.forEach((s,i)=>{const state=comp[i]? 'done' : (i===cur? 'current':'todo');const btn=document.createElement('button');btn.className='step';btn.onclick=()=>{cur=i;renderProgress();stepsRow();};btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${s.icon}" class="icon-16"></i></div><span class="step-label">${s.label}</span>`;wrap.appendChild(btn);});}
+  function stepsRow(){
+    const wrap=document.getElementById('steps');
+    wrap.innerHTML='';
+    steps.forEach((s,i)=>{
+      const isIdStep = i===0;
+      const isEndorseStep = i===1;
+      const isReceiptStep = i===2;
+      const isPaidStep = i===3;
+      const isPickedStep = i===4;
+      const isDone = !!comp[i];
+      const state = isDone ? ((isIdStep || isEndorseStep || isReceiptStep || isPaidStep || isPickedStep) ? 'view' : 'done') : (i===cur? 'current':'todo');
+      const icon = isDone
+        ? (isIdStep ? 'eye' : isEndorseStep ? 'file-text' : isReceiptStep ? 'file-check-2' : isPaidStep ? 'badge-check' : isPickedStep ? 'hand-heart' : s.icon)
+        : s.icon;
+      const label = isDone
+        ? (isIdStep ? 'View ID' : isEndorseStep ? 'View move-in form' : isReceiptStep ? 'View payment receipt' : isPaidStep ? 'Access card is paid' : isPickedStep ? 'Access card picked up' : s.label)
+        : s.label;
+      const btn=document.createElement('button');
+      btn.className='step';
+      btn.onclick=()=>{cur=i;renderProgress();stepsRow();};
+      btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${icon}" class="icon-16"></i></div><span class="step-label">${label}</span>`;
+      wrap.appendChild(btn);
+    });
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+  }
   function calendarTail(){const nums=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,1];const frag=document.createDocumentFragment();nums.forEach(n=>{const d=document.createElement('div');let cls='day';if(n===21) cls+=' day-accent';if(n===22||n===23) cls+=' day-invert';d.className=cls;d.textContent=n;frag.appendChild(d);});document.getElementById('calTail').replaceWith(frag);}
 
 
@@ -336,14 +322,6 @@
 
     let sidebarBooking = null; // booking object currently shown in the sidebar
     let sidebarJustOpened = false; // guard against immediate close on the same click
-
-    function setSidebarIdButtonMode(isComplete) {
-      const btn = document.getElementById('bookingSidebarIdUpload');
-      if (!btn) return;
-      btn.classList.toggle('view-mode', !!isComplete);
-      btn.setAttribute('aria-label', isComplete ? 'View uploaded ID' : 'Upload ID');
-      btn.title = isComplete ? 'View uploaded ID' : 'Upload ID';
-    }
 
     function openBookingSidebar(dateKey, bookingsForDay = []) {
     const panel = document.getElementById('bookingSidebar');
@@ -410,30 +388,7 @@
     sidebarBooking = bookingForSidebar;
 
     // ---- Set ID pill (Pending / Complete) based on booking data, if available ----
-    const idStatusEl = document.getElementById('bookingSidebarIdStatus');
-    if (idStatusEl) {
-      let hasId = false;
-
-      if (bookingForSidebar) {
-        // Adjust field names if your backend uses something different
-        const fileCount =
-          typeof bookingForSidebar.idFileCount === 'number'
-            ? bookingForSidebar.idFileCount
-            : 0;
-        hasId =
-          fileCount > 0 ||
-          (typeof bookingForSidebar.idFileCount !== 'number' &&
-            bookingForSidebar.checklist &&
-            bookingForSidebar.checklist.step1 === true);
-
-
-      }
-
-      idStatusEl.textContent = hasId ? 'Complete' : 'Pending';
-      idStatusEl.classList.toggle('doc-pill-complete', hasId);
-      idStatusEl.classList.toggle('doc-pill-pending', !hasId);
-      setSidebarIdButtonMode(hasId);
-    }
+    // (ID status line removed from sidebar)
   }
 
 
@@ -456,164 +411,31 @@
 
    function wireBookingSidebar() {
     const closeBtn       = document.getElementById('bookingSidebarClose');
-    const idUploadBtn    = document.getElementById('bookingSidebarIdUpload');
-    const sidebarIdInput = document.getElementById('sidebarIdUploadInput');
-    const idStatusEl     = document.getElementById('bookingSidebarIdStatus');
 
     if (closeBtn) {
       closeBtn.addEventListener('click', closeBookingSidebar);
     }
-
-    // Clicking the upload icon: open the OS file picker
-    if (idUploadBtn && sidebarIdInput) {
-      idUploadBtn.addEventListener('click', () => {
-        if (!sidebarBooking) return; // no booking selected
-        const isComplete = idStatusEl && idStatusEl.classList.contains('doc-pill-complete');
-        const bookingId = sidebarBooking.timestamp || sidebarBooking.id;
-
-        // If ID already uploaded, view the files instead of re-uploading
-        if (isComplete && bookingId) {
-          openModal(`/view-ids/${encodeURIComponent(bookingId)}`);
-          return;
-        }
-
-        // Try the faster showPicker() API first
-        try {
-          if (typeof sidebarIdInput.showPicker === 'function') {
-            sidebarIdInput.showPicker();
-          } else {
-            sidebarIdInput.click();
-          }
-        } catch (e) {
-          sidebarIdInput.click();
-        }
-      });
-
-      // When files are chosen, upload them for the selected booking
-      sidebarIdInput.addEventListener('change', async (e) => {
-        if (!sidebarBooking) return;
-
-        const files = e.target.files;
-        if (!files || !files.length) return;
-
-        const bookingId = sidebarBooking.timestamp || sidebarBooking.id;
-        if (!bookingId) {
-          console.error('No booking id found for sidebarBooking');
-          return;
-        }
-
-        const form = new FormData();
-        for (const f of files) {
-          form.append('guestIds', f); // same field name as main upload
-        }
-
-        try {
-          const res = await fetch(
-            `/upload-id/${encodeURIComponent(bookingId)}`,
-            { method: 'POST', body: form }
-          );
-
-          if (res.ok) {
-  // Mark pill as Complete
-  if (idStatusEl) {
-    idStatusEl.textContent = 'Complete';
-    idStatusEl.classList.remove('doc-pill-pending');
-    idStatusEl.classList.add('doc-pill-complete');
-  }
-  setSidebarIdButtonMode(true);
-
-  // Only mark the top "Upload ID" step as done
-  // if this sidebar booking is the SAME as the current upcoming guest
-  const uploadedBookingId =
-    sidebarBooking && (sidebarBooking.timestamp || sidebarBooking.id);
-
-  if (uploadedBookingId && currentBookingId && uploadedBookingId === currentBookingId) {
-    if (Array.isArray(comp)) {
-      comp[0] = true; // step 0 = Upload ID
-    }
-    const stepCircles = document.querySelectorAll('#steps .step-circle');
-    if (stepCircles[0]) {
-      stepCircles[0].classList.add('done');
-    }
-    if (typeof renderProgress === 'function') {
-      renderProgress();
-    }
-  }
-} else {
-
-  const txt = await res.text().catch(() => '');
-  console.error('Sidebar ID upload failed', res.status, res.statusText, txt);
-  alert('Failed to upload ID.');
-}
-
-        } catch (err) {
-          console.error('Sidebar ID upload error', err);
-          alert('Error uploading ID.');
-        } finally {
-          // Reset input so the same file can be chosen again later if needed
-          sidebarIdInput.value = '';
-        }
-      });
-    }
   }
 
-  // Listen for ID count updates from the modal (after upload/delete)
+  // Listen for ID count updates from the modal (after upload/delete) to keep top bar in sync
   window.addEventListener('message', (event) => {
     const data = event.data;
     if (!data || data.type !== 'idsCount') return;
-
     const incomingId = data.bookingId;
+    if (!currentBookingId || String(incomingId) !== String(currentBookingId)) return;
     const count = Number(data.count || 0);
-    const currentId =
-      sidebarBooking && (sidebarBooking.timestamp || sidebarBooking.id);
-
-    // Only update if the message is about the booking currently shown in the sidebar
-    if (!currentId || String(incomingId) !== String(currentId)) return;
-
-    const idStatusEl = document.getElementById('bookingSidebarIdStatus');
-    if (!idStatusEl) return;
-
-    const hasId = count > 0;
-    idStatusEl.textContent = hasId ? 'Complete' : 'Pending';
-    idStatusEl.classList.toggle('doc-pill-complete', hasId);
-    idStatusEl.classList.toggle('doc-pill-pending', !hasId);
-    setSidebarIdButtonMode(hasId);
-
-    // Persist the new state on the booking object(s) so a reopen keeps the status
-    if (sidebarBooking) {
-      sidebarBooking.idFileCount = count;
-      sidebarBooking.checklist = sidebarBooking.checklist || {};
-      sidebarBooking.checklist.step1 = hasId;
-    }
-    if (Array.isArray(calendarBookings)) {
-      calendarBookings.forEach((b) => {
-        const bid = b && (b.timestamp || b.id);
-        if (bid && String(bid) === String(incomingId)) {
-          b.idFileCount = count;
-          b.checklist = b.checklist || {};
-          b.checklist.step1 = hasId;
-        }
-      });
-    }
-
-    // Also sync the top progress step if this booking is the current one in the header
-    const uploadedBookingId = currentBookingId;
-    if (uploadedBookingId && String(uploadedBookingId) === String(incomingId)) {
-      const stepCircles = document.querySelectorAll('#steps .step-circle');
-      if (!hasId) {
-        comp[0] = false;
-        if (stepCircles[0]) stepCircles[0].classList.remove('done');
-      } else {
-        comp[0] = true;
-        if (stepCircles[0]) stepCircles[0].classList.add('done');
-      }
-      renderProgress();
-    }
+    setIdStepState(count > 0);
   });
 
-
-
-
+  // Listen for receipt upload completion to flip the payment step
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || data.type !== 'receiptUploaded') return;
+    const incomingId = data.bookingId;
+    if (!currentBookingId || String(incomingId) !== String(currentBookingId)) return;
+    const count = typeof data.count === 'number' ? data.count : 1;
+    setReceiptStepState(count > 0);
+  });
 
 
 
@@ -886,6 +708,106 @@ if (spanStart !== null && spanEnd !== null) {
     lucide.createIcons();
   }
   function renderProgress(){const done=comp.filter(Boolean).length;const v=Math.round((done/steps.length)*100);document.getElementById('progress').style.width=v+'%';}
+  function setIdStepState(hasId){
+    comp[0] = !!hasId;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[0];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${hasId ? 'eye' : 'upload'}" class="icon-16"></i>`;
+      if (hasId) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = hasId ? 'View ID' : 'Upload ID';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+    renderProgress();
+  }
+
+  function setEmailStepState(hasForm){
+    comp[1] = !!hasForm;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[1];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${hasForm ? 'file-text' : 'mail'}" class="icon-16"></i>`;
+      if (hasForm) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = hasForm ? 'View move-in form' : 'Send endorsement email';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+    renderProgress();
+  }
+
+  function setReceiptStepState(hasReceipt){
+    comp[2] = !!hasReceipt;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[2];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${hasReceipt ? 'file-check-2' : 'stamp'}" class="icon-16"></i>`;
+      if (hasReceipt) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = hasReceipt ? 'View payment receipt' : 'payment receipt';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+    renderProgress();
+  }
+
+  function setAccessPaidState(isPaid, persist=true){
+    comp[3] = !!isPaid;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[3];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${isPaid ? 'badge-check' : 'credit-card'}" class="icon-16"></i>`;
+      if (isPaid) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = 'Access card is paid';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+    renderProgress();
+    if (persist && currentBookingId) {
+      try { localStorage.setItem(`paid_${currentBookingId}`, isPaid ? '1' : '0'); } catch (_) {}
+    }
+  }
+
+  function setAccessPickedState(isPicked, persist=true){
+    comp[4] = !!isPicked;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[4];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${isPicked ? 'hand-heart' : 'id-card'}" class="icon-16"></i>`;
+      if (isPicked) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = 'Access card picked up';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+    renderProgress();
+    if (persist && currentBookingId) {
+      try { localStorage.setItem(`picked_${currentBookingId}`, isPicked ? '1' : '0'); } catch (_) {}
+    }
+  }
 
   // ---------- MODAL helpers ----------
   function openModal(url){const root=document.getElementById('modalRoot');const frame=document.getElementById('modalFrame');frame.src=url;root.classList.add('show');}
@@ -918,7 +840,7 @@ if (spanStart !== null && spanEnd !== null) {
 
 
 
-    async function uploadIdsDirect(bookingId, files){
+async function uploadIdsDirect(bookingId, files){
       if(!files || files.length===0) return;
       const form = new FormData();
       for (const f of files) form.append('guestIds', f); // server expects "guestIds"
@@ -926,9 +848,8 @@ if (spanStart !== null && spanEnd !== null) {
 const success = res.ok;
 
 if (res.ok) {
-  comp[0] = true;
-  circles[0]?.classList.add('done');
-  renderProgress();
+  setIdStepState(true);
+  openModal(`/view-ids/${encodeURIComponent(bookingId)}`);
   return; // ✅ no redirect
 }
 
@@ -955,9 +876,7 @@ async function uploadReceiptDirect(bookingId, file){
   });
 
   if (res.ok) {
-  comp[2] = true;
-  circles[2]?.classList.add('done');
-  renderProgress();
+  setReceiptStepState(true);
   return;
 }
 
@@ -1003,16 +922,53 @@ async function uploadReceiptDirect(bookingId, file){
         current.checklist.step1 === true);
 
     if (hasIdAlready) {
-      comp[0] = true;                 // keep comp[] in sync
-      if (circles[0]) {
-        circles[0].classList.add('done');  // show green check overlay
-      }
-      renderProgress();               // update progress bar
+      setIdStepState(true);
+    }
+
+    // If endorsement already sent, reflect move-in form view state
+    const hasMoveInForm =
+      current.checklist && current.checklist.step2 === true;
+    if (hasMoveInForm) {
+      setEmailStepState(true);
+    }
+
+    // If receipt already sent, reflect view receipt state
+    const hasReceipt =
+      (typeof current.receiptFileCount === 'number' && current.receiptFileCount > 0) ||
+      (current.checklist && current.checklist.step3 === true);
+    if (hasReceipt) {
+      setReceiptStepState(true);
+    }
+
+    const storedPaid = (()=>{ try { return localStorage.getItem(`paid_${id}`);} catch(_) {return null;} })();
+    const storedPicked = (()=>{ try { return localStorage.getItem(`picked_${id}`);} catch(_) {return null;} })();
+
+    if (storedPaid !== null) {
+      setAccessPaidState(storedPaid === '1', false);
+    } else if (current.checklist && current.checklist.step4 === true) {
+      setAccessPaidState(true, false);
+    }
+
+    if (storedPicked !== null) {
+      setAccessPickedState(storedPicked === '1', false);
+    } else if (current.checklist && current.checklist.step5 === true) {
+      setAccessPickedState(true, false);
     }
 
 
     const openGET=(path,{modal=true,newtab=false}={})=>{const url=`${path}/${encodeURIComponent(id)}`; if(newtab) return window.open(url,'_blank'); if(modal) return openModal(url); window.location.href=url;};
     const postForm=async(path)=>fetch(`${path}/${encodeURIComponent(id)}`,{method:'POST'});
+    const saveChecklist = async (field, val) => {
+      try {
+        await fetch(`/api/checklist/${encodeURIComponent(id)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field, value: val })
+        });
+      } catch (e) {
+        console.error('Failed to save checklist', e);
+      }
+    };
 
     // Open the OS file dialog ASAP (pointerdown + showPicker if supported)
 function openPicker(inputEl) {
@@ -1029,8 +985,19 @@ function openPicker(inputEl) {
 
 
     const actions=[
-     ()=>{ currentUploadId = id; openPicker(fileInput); },
+     ()=>{ 
+       if (comp[0]) {
+         openModal(`/view-ids/${encodeURIComponent(id)}`);
+       } else {
+         currentUploadId = id;
+         openPicker(fileInput);
+       }
+     },
         async ()=>{ 
+    if (comp[1]) {
+      openModal(`/generate-movein/${encodeURIComponent(id)}`);
+      return;
+    }
     if (sendingEmail) return;
     sendingEmail = true;
 
@@ -1041,8 +1008,7 @@ function openPicker(inputEl) {
     try{
       const r = await fetch(`/send-email/${encodeURIComponent(id)}`);
       if(r.ok){
-        comp[1] = true;                      // mark step as complete
-        btn?.classList.add('done');          // green check overlay
+        setEmailStepState(true);             // mark as viewable move-in form
       }else{
         console.error('Email send failed:', r.status, r.statusText);
       }
@@ -1052,17 +1018,20 @@ function openPicker(inputEl) {
       btn?.classList.remove('sending');      // hide spinner
       btn?.removeAttribute('aria-busy');
       sendingEmail = false;
-      renderProgress();
     }
-  },
+      },
 
+      ()=>{ 
+        if (comp[2]) {
+          openModal(`/view-stamps/${encodeURIComponent(id)}`);
+          return;
+        }
+        currentReceiptId = id;
+        openPicker(receiptInput);
+      },
 
-      ()=>{ currentReceiptId = id; openPicker(receiptInput); },
-
-
-
-()=>{ comp[3] = !comp[3]; circles[3]?.classList.toggle('done'); renderProgress(); },
-()=>{ comp[4] = !comp[4]; circles[4]?.classList.toggle('done'); renderProgress(); }
+      ()=>{ setAccessPaidState(!comp[3]); saveChecklist('step4', !comp[3]); },
+      ()=>{ setAccessPickedState(!comp[4]); saveChecklist('step5', !comp[4]); }
 
 
 
