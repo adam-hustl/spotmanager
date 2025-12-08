@@ -1610,12 +1610,7 @@ try {
       b.idFileCount = count;
       b.receiptFileCount = receipts;
 
-      if (count === 0) {
-        if (b.checklist && b.checklist.step1 === true) {
-          b.checklist.step1 = false;
-          changed = true;
-        }
-      } else if (count > 0) {
+      if (count > 0) {
         b.checklist = b.checklist || {};
         if (b.checklist.step1 !== true) {
           b.checklist.step1 = true;
@@ -1623,12 +1618,7 @@ try {
         }
       }
       if (typeof receipts === 'number') {
-        if (receipts === 0) {
-          if (b.checklist && b.checklist.step3 === true) {
-            b.checklist.step3 = false;
-            changed = true;
-          }
-        } else if (receipts > 0) {
+        if (receipts > 0) {
           b.checklist = b.checklist || {};
           if (b.checklist.step3 !== true) {
             b.checklist.step3 = true;
@@ -1640,9 +1630,6 @@ try {
       b.checklist = b.checklist || {};
       if (typeof b.checklist.step4 !== 'boolean') b.checklist.step4 = false;
       if (typeof b.checklist.step5 !== 'boolean') b.checklist.step5 = false;
-      if (typeof b.checklist.step3 !== 'boolean' && typeof receipts === 'number' && receipts === 0) {
-        b.checklist.step3 = false;
-      }
     }
     return b;
   });

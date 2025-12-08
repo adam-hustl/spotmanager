@@ -322,59 +322,28 @@ body.page {
 
 
 
-/* Check-in / Check-out circles */
-.day-checkin,
-.day-checkout {
+/* Check-in circle */
+.day-checkin {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   width: 32px;
   height: 32px;
-  line-height: 32px;              /* fixes vertical alignment */
+  margin: auto;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
   color: #fff;
+  font-weight: 600;
 }
-
-
-
+.day-checkin.checkin-complete { background-color: #10B981; }
+.day-checkin.checkin-incomplete { background-color: #FF0000; }
 
 .day:hover {
   background: #e5e7eb;
   font-weight: 600;
 }
 
-
-
 .day-accent { background: #808080; color: #fff; font-weight: 500;  }
 .day-invert { background: #000; color: #fff; font-weight: 500; }
-
-
-
-
-.day-checkin {
-  background-color: #10B981;
-}
-
-.day-checkout {
-  background-color: #FF0000;
-}
-
-/* Make checkin/checkout circles smaller */
-.day-checkin,
-.day-checkout {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-
-  width: 32px;
-  height: 32px;
-
-  margin: auto;
-  border-radius: 50%;
-  color: #fff;           /* keep text clear */
-  font-weight: 600;
-}
 
 
 

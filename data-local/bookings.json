@@ -148,23 +148,29 @@
     "people": "2",
     "timestamp": "2025-12-02T10:39:25.992Z",
     "checklist": {
-      "step1": true
+      "step1": true,
+      "step2": true,
+      "step3": true
     },
     "idFileCount": 1,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "emailSent": true
   },
   {
-    "guestName": "test more dates",
-    "checkIn": "2025-12-10",
-    "checkOut": "2025-12-14",
+    "guestName": "Test overlap edit",
+    "checkIn": "2025-12-04",
+    "checkOut": "2025-12-06",
     "platform": "Booking.com",
     "people": "2",
     "timestamp": "2025-12-02T10:40:16.825Z",
     "checklist": {
-      "step1": true
+      "step1": true,
+      "step2": true,
+      "step3": true
     },
     "idFileCount": 1,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "emailSent": true
   },
   {
     "guestName": "Test border",
@@ -174,10 +180,13 @@
     "people": "2",
     "timestamp": "2025-12-03T04:33:54.484Z",
     "checklist": {
-      "step1": false
+      "step1": true,
+      "step2": true,
+      "step3": true
     },
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "emailSent": true
   },
   {
     "guestName": "Test overlap",

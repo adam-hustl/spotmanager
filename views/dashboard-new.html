@@ -67,11 +67,16 @@
           </div>
           <div class="subtle">Uploaded documentation for current selected guest</div>
           <div class="guest-row">
-            <div class="row">
-              <span id="guestName" class="guest-name">—</span>
-              <a id="platformLink" class="link" href="#" target="_blank" rel="noopener">—</a>
+            <div id="guestStatic">
+              <div class="row">
+                <span id="guestName" class="guest-name">—</span>
+                <a id="platformLink" class="link" href="#" target="_blank" rel="noopener">—</a>
+                <button id="editBookingBtn" class="icon-btn" type="button" title="Edit booking">
+                  <i data-lucide="pencil" class="icon-16"></i>
+                </button>
+              </div>
+              <div id="stayDates" class="dates">—</div>
             </div>
-            <div id="stayDates" class="dates">—</div>
 
 
 
@@ -122,6 +127,30 @@
     <button type="button" class="ghost-btn" disabled>Comment</button>
     <button type="button" id="cancelNewGuest" class="ghost-btn">Cancel</button>
     <button type="submit" class="ghost-btn ghost-btn--primary">Save guest</button>
+  </div>
+</form>
+
+<!-- Inline "Edit booking" row (hidden by default) -->
+<form id="editBookingFormInline" class="guest-row new-guest-row" style="display:none">
+  <div class="row new-guest-fields">
+    <input type="text" name="guestName" class="ng-input" placeholder="Guest name" required />
+    <select name="platform" class="ng-input" required>
+      <option value="">Platform</option>
+      <option value="Airbnb">Airbnb</option>
+      <option value="Booking.com">Booking.com</option>
+      <option value="Agoda">Agoda</option>
+      <option value="Direct">Direct</option>
+    </select>
+    <input type="date" name="checkIn" class="ng-input" required />
+    <input type="date" name="checkOut" class="ng-input" required />
+    <input type="number" name="people" class="ng-input ng-people" min="1" placeholder="# guests" />
+  </div>
+
+  <div class="new-guest-actions">
+    <!-- Keep Comment button for parity with add form -->
+    <button type="button" class="ghost-btn" disabled>Comment</button>
+    <button type="button" id="cancelEditBooking" class="ghost-btn">Cancel</button>
+    <button type="submit" class="ghost-btn ghost-btn--primary">Save changes</button>
   </div>
 </form>
 
@@ -280,7 +309,47 @@
   const steps=[{label:"Upload ID",icon:"upload"},{label:"Send endorsement email",icon:"mail"},{label:"payment receipt",icon:"stamp"},{ label: "Access card is paid",    icon: "credit-card" }, { label: "Access card picked up",  icon: "id-card" } ];
   let theme="emerald",grad=true,comp=new Array(steps.length).fill(false),cur=0;
   let currentBookingId = null; // id of the booking shown in the top header
+  let currentBookingData = null; // full booking object currently selected
+function bookingCompleteFromData(b){
+    if(!b) return false;
+    const idStr = String(b.timestamp || b.id || '');
+    let storedPaid = null;
+    let storedPicked = null;
+    try {
+      storedPaid = localStorage.getItem(`paid_${idStr}`);
+      storedPicked = localStorage.getItem(`picked_${idStr}`);
+    } catch (_) {}
+    const cl=b.checklist||{};
+    const step1 = cl.step1===true || (typeof b.idFileCount==='number' && b.idFileCount>0);
+    const step2 = cl.step2===true;
+    const step3 = cl.step3===true || (typeof b.receiptFileCount==='number' && b.receiptFileCount>0);
+    const step4 = cl.step4===true || storedPaid === '1';
+    const step5 = cl.step5===true || storedPicked === '1';
+    return step1 && step2 && step3 && step4 && step5;
+  }
+function updateCheckinCell(b){
+    const id=b && (b.timestamp||b.id);
+    if(!id) return;
+    const done=bookingCompleteFromData(b);
+    document.querySelectorAll(`#calendarGrid [data-booking-id=\"${id}\"]`).forEach((cell)=>{
+      cell.classList.remove('checkin-complete','checkin-incomplete');
+      cell.classList.add(done?'checkin-complete':'checkin-incomplete');
+    });
+  }
 
+  function refreshAllCheckins(){
+    if (!Array.isArray(calendarBookings)) return;
+    calendarBookings.forEach((b)=>updateCheckinCell(b));
+  }
+  function syncCalendarBooking(updated){
+    if (!Array.isArray(calendarBookings) || !updated) return;
+    const uid = String(updated.timestamp || updated.id || '');
+    const idx = calendarBookings.findIndex((b)=>String(b.timestamp||b.id||'')===uid);
+    if (idx !== -1) {
+      const mergedChecklist = { ...(calendarBookings[idx].checklist||{}), ...(updated.checklist||{}) };
+      calendarBookings[idx] = { ...calendarBookings[idx], ...updated, checklist: mergedChecklist };
+    }
+  }
 
 
 
@@ -425,6 +494,11 @@
     if (!currentBookingId || String(incomingId) !== String(currentBookingId)) return;
     const count = Number(data.count || 0);
     setIdStepState(count > 0);
+    if (currentBookingData) {
+      currentBookingData.idFileCount = count;
+      syncCalendarBooking(currentBookingData);
+      refreshAllCheckins();
+    }
   });
 
   // Listen for receipt upload completion to flip the payment step
@@ -435,6 +509,11 @@
     if (!currentBookingId || String(incomingId) !== String(currentBookingId)) return;
     const count = typeof data.count === 'number' ? data.count : 1;
     setReceiptStepState(count > 0);
+    if (currentBookingData) {
+      currentBookingData.receiptFileCount = count;
+      syncCalendarBooking(currentBookingData);
+      refreshAllCheckins();
+    }
   });
 
 
@@ -448,7 +527,7 @@ let bookingsByDay = {};   // dateKey ("YYYY-MM-DD") -> array of bookings for tha
 
   
 
-function renderMiniCalendar() {
+ function renderMiniCalendar() {
   const target = new Date(
     miniCalBase.getFullYear(),
     miniCalBase.getMonth() + miniCalOffset,
@@ -493,7 +572,7 @@ function renderMiniCalendar() {
   const bookedDays   = new Set();
   const checkInDays  = new Set();
   const checkOutDays = new Set();
-
+  const checkinPrimary = {}; // key -> primary booking for that date
     const bookingSpans = [];  // for continuous outlines across the row
 
 
@@ -529,7 +608,11 @@ function renderMiniCalendar() {
       }
 
       if (start.getFullYear() === year && start.getMonth() === month) {
-        checkInDays.add(dayKey(start.getDate()));
+        const ck = dayKey(start.getDate());
+        checkInDays.add(ck);
+        if (!checkinPrimary[ck]) {
+          checkinPrimary[ck] = b;
+        }
       }
            if (end.getFullYear() === year && end.getMonth() === month) {
         const coDay = end.getDate();
@@ -593,15 +676,27 @@ if (spanStart !== null && spanEnd !== null) {
       checkOutDays.has(key)
     ) {
       cell.classList.add('day-booked');
-      cell.addEventListener('click', () =>
-        openBookingSidebar(key, bookingsByDay[key] || [])
-      );
+      cell.addEventListener('click', () => {
+        const list = bookingsByDay[key] || [];
+        if (list.length) {
+          const booking = list[0]; // pick first booking on that day
+          fillGuestHeader(booking);
+          attachActions(booking);
+          toggleEditBooking(false);
+        }
+      });
     }
 
 
 
     if (checkInDays.has(key)) {
       cell.classList.add('day-checkin');
+      const primary = checkinPrimary[key];
+      const isDone = bookingCompleteFromData(primary);
+      cell.classList.add(isDone ? 'checkin-complete' : 'checkin-incomplete');
+      if (primary && (primary.timestamp || primary.id)) {
+        cell.dataset.bookingId = primary.timestamp || primary.id;
+      }
     }
     if (checkOutDays.has(key)) {
       cell.classList.add('day-checkout');
@@ -659,7 +754,8 @@ if (spanStart !== null && spanEnd !== null) {
     }
   });
 
-
+  // After the grid is built, ensure check-in circles reflect completion for all bookings
+  refreshAllCheckins();
 
 }
 
@@ -707,8 +803,24 @@ if (spanStart !== null && spanEnd !== null) {
     document.querySelectorAll('[data-menu]').forEach((el,idx)=>{ if(idx===0){ el.classList.add('menu-active'); } else { el.classList.remove('menu-active'); } });
     lucide.createIcons();
   }
-  function renderProgress(){const done=comp.filter(Boolean).length;const v=Math.round((done/steps.length)*100);document.getElementById('progress').style.width=v+'%';}
-  function setIdStepState(hasId){
+  function updateCheckinBadges() {
+    if (!currentBookingId) return;
+    const done = bookingCompleteFromData(currentBookingData);
+    document.querySelectorAll('#calendarGrid .day-checkin').forEach((cell) => {
+      const bid = cell.dataset.bookingId;
+      if (bid && String(bid) === String(currentBookingId)) {
+        cell.classList.remove('checkin-complete','checkin-incomplete');
+        cell.classList.add(done ? 'checkin-complete' : 'checkin-incomplete');
+      }
+    });
+  }
+  function renderProgress(){
+    const done=comp.filter(Boolean).length;
+    const v=Math.round((done/steps.length)*100);
+    document.getElementById('progress').style.width=v+'%';
+    updateCheckinBadges();
+  }
+function setIdStepState(hasId){
     comp[0] = !!hasId;
     const circles=document.querySelectorAll('#steps .step-circle');
     const circle=circles[0];
@@ -724,7 +836,15 @@ if (spanStart !== null && spanEnd !== null) {
     if (window.lucide && typeof lucide.createIcons === 'function') {
       lucide.createIcons();
     }
+    if (currentBookingData) {
+      currentBookingData.checklist = currentBookingData.checklist || {};
+      currentBookingData.checklist.step1 = !!hasId;
+      currentBookingData.idFileCount = hasId ? Math.max(1, Number(currentBookingData.idFileCount)||0) : 0;
+      syncCalendarBooking(currentBookingData);
+      updateCheckinCell(currentBookingData);
+    }
     renderProgress();
+    refreshAllCheckins();
   }
 
   function setEmailStepState(hasForm){
@@ -743,7 +863,14 @@ if (spanStart !== null && spanEnd !== null) {
     if (window.lucide && typeof lucide.createIcons === 'function') {
       lucide.createIcons();
     }
+    if (currentBookingData) {
+      currentBookingData.checklist = currentBookingData.checklist || {};
+      currentBookingData.checklist.step2 = !!hasForm;
+      syncCalendarBooking(currentBookingData);
+      updateCheckinCell(currentBookingData);
+    }
     renderProgress();
+    refreshAllCheckins();
   }
 
   function setReceiptStepState(hasReceipt){
@@ -762,7 +889,15 @@ if (spanStart !== null && spanEnd !== null) {
     if (window.lucide && typeof lucide.createIcons === 'function') {
       lucide.createIcons();
     }
+    if (currentBookingData) {
+      currentBookingData.checklist = currentBookingData.checklist || {};
+      currentBookingData.checklist.step3 = !!hasReceipt;
+      currentBookingData.receiptFileCount = hasReceipt ? Math.max(1, Number(currentBookingData.receiptFileCount)||0) : 0;
+      syncCalendarBooking(currentBookingData);
+      updateCheckinCell(currentBookingData);
+    }
     renderProgress();
+    refreshAllCheckins();
   }
 
   function setAccessPaidState(isPaid, persist=true){
@@ -781,10 +916,17 @@ if (spanStart !== null && spanEnd !== null) {
     if (window.lucide && typeof lucide.createIcons === 'function') {
       lucide.createIcons();
     }
+    if (currentBookingData) {
+      currentBookingData.checklist = currentBookingData.checklist || {};
+      currentBookingData.checklist.step4 = !!isPaid;
+      syncCalendarBooking(currentBookingData);
+      updateCheckinCell(currentBookingData);
+    }
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`paid_${currentBookingId}`, isPaid ? '1' : '0'); } catch (_) {}
     }
+    refreshAllCheckins();
   }
 
   function setAccessPickedState(isPicked, persist=true){
@@ -803,10 +945,17 @@ if (spanStart !== null && spanEnd !== null) {
     if (window.lucide && typeof lucide.createIcons === 'function') {
       lucide.createIcons();
     }
+    if (currentBookingData) {
+      currentBookingData.checklist = currentBookingData.checklist || {};
+      currentBookingData.checklist.step5 = !!isPicked;
+      syncCalendarBooking(currentBookingData);
+      updateCheckinCell(currentBookingData);
+    }
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`picked_${currentBookingId}`, isPicked ? '1' : '0'); } catch (_) {}
     }
+    refreshAllCheckins();
   }
 
   // ---------- MODAL helpers ----------
@@ -817,14 +966,34 @@ if (spanStart !== null && spanEnd !== null) {
   // ---------- DATA + ACTION WIRING ----------
   async function loadBookings(){ try{ const r=await fetch('/api/bookings'); return await r.json(); } catch(e){ console.error('Failed to load bookings',e); return []; } }
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
-  function fillGuestHeader(b){ if(!b) return; document.getElementById('guestName').textContent=b.guestName||'Guest'; const a=document.getElementById('platformLink'); a.textContent=b.platform||'Platform'; a.href=b.platform==='Booking.com'?'https://booking.com':(b.platform==='Airbnb'?'https://airbnb.com':'#'); document.getElementById('stayDates').textContent=`${b.checkIn}–${b.checkOut}`; }
+  function fillGuestHeader(b){
+    if(!b) return;
+    document.getElementById('guestName').textContent=b.guestName||'Guest';
+    const a=document.getElementById('platformLink');
+    a.textContent=b.platform||'Platform';
+    a.href=b.platform==='Booking.com'?'https://booking.com':(b.platform==='Airbnb'?'https://airbnb.com':'#');
+    const stayEl = document.getElementById('stayDates');
+    if (stayEl) {
+      const fmt = (dStr) => {
+        const d = new Date(dStr);
+        return isNaN(d) ? dStr : d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
+      };
+      stayEl.textContent = `${fmt(b.checkIn)} to ${fmt(b.checkOut)}`;
+    }
+  }
 
   function attachActions(current){ 
   if(!current) return; 
   const id= current.timestamp || current.id;
 
+  // reset comp state and rebuild steps for new selection
+  comp = new Array(steps.length).fill(false);
+  stepsRow();
+  renderProgress();
+
   // remember which booking is the "current" one in the top header
   currentBookingId = id;
+  currentBookingData = current;
 
         let sendingEmail = false;
 
@@ -954,10 +1123,61 @@ async function uploadReceiptDirect(bookingId, file){
     } else if (current.checklist && current.checklist.step5 === true) {
       setAccessPickedState(true, false);
     }
+    currentBookingData = current;
+    updateCheckinCell(currentBookingData);
 
 
     const openGET=(path,{modal=true,newtab=false}={})=>{const url=`${path}/${encodeURIComponent(id)}`; if(newtab) return window.open(url,'_blank'); if(modal) return openModal(url); window.location.href=url;};
     const postForm=async(path)=>fetch(`${path}/${encodeURIComponent(id)}`,{method:'POST'});
+    const editBtn = document.getElementById('editBookingBtn');
+    const editForm = document.getElementById('editBookingFormInline');
+    const editCancel = document.getElementById('cancelEditBooking');
+
+    if (editBtn && editForm) {
+      const populateEditForm = (b) => {
+        if (!b) return;
+        editForm.elements.guestName.value = b.guestName || '';
+        editForm.elements.platform.value = b.platform || '';
+        editForm.elements.checkIn.value = b.checkIn || '';
+        editForm.elements.checkOut.value = b.checkOut || '';
+        editForm.elements.people.value = b.people || '';
+      };
+
+      editBtn.onclick = (e) => {
+        e.preventDefault();
+        populateEditForm(current);
+        toggleEditBooking(true);
+        editForm.elements.guestName.focus();
+      };
+
+      if (editCancel) {
+        editCancel.onclick = (e) => {
+          e.preventDefault();
+          toggleEditBooking(false);
+        };
+      }
+
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(editForm);
+        const data = new URLSearchParams(fd);
+        try {
+          const res = await fetch(`/edit-booking/${encodeURIComponent(id)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: data
+          });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            alert('Failed to save booking.');
+          }
+        } catch (err) {
+          console.error('Edit booking error', err);
+          alert('Error saving booking.');
+        }
+      });
+    }
     const saveChecklist = async (field, val) => {
       try {
         await fetch(`/api/checklist/${encodeURIComponent(id)}`, {
@@ -994,12 +1214,12 @@ function openPicker(inputEl) {
        }
      },
         async ()=>{ 
-    if (comp[1]) {
-      openModal(`/generate-movein/${encodeURIComponent(id)}`);
-      return;
-    }
-    if (sendingEmail) return;
-    sendingEmail = true;
+   if (comp[1]) {
+     openModal(`/generate-movein/${encodeURIComponent(id)}`);
+     return;
+   }
+   if (sendingEmail) return;
+   sendingEmail = true;
 
     const btn = circles[1];
     btn?.classList.add('sending');           // show spinner
@@ -1051,6 +1271,12 @@ circles.forEach((c,i)=>{
     const form = document.getElementById('newGuestForm');
     if (!form) return;
     form.style.display = show ? 'block' : 'none';
+  }
+  function toggleEditBooking(show) {
+    const form = document.getElementById('editBookingFormInline');
+    const info = document.getElementById('guestStatic');
+    if (form) form.style.display = show ? 'block' : 'none';
+    if (info) info.style.display = show ? 'none' : 'block';
   }
 
   function wireAddGuest() {
