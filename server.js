@@ -49,6 +49,12 @@ app.use(session({
   cookie: { maxAge: 3600000 } // 1 hour session
 }));
 
+// Body parsers (needed for early API routes like checklist/comment)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -87,6 +93,26 @@ app.post('/api/checklist/:id', requireAdmin, (req, res) => {
   } catch (e) {
     console.error('Failed to update checklist', e);
     return res.status(500).json({ error: 'Failed to update checklist' });
+  }
+});
+
+// Add or update a booking comment/notes
+app.post('/api/comment/:id', requireAdmin, (req, res) => {
+  const bookingId = req.params.id;
+  const { notes } = req.body || {};
+  try {
+    const bookings = readBookingsLocal();
+    const idx = bookings.findIndex(
+      b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+    );
+    if (idx === -1) return res.status(404).json({ error: 'Booking not found' });
+    bookings[idx].notes = typeof notes === 'string' ? notes : '';
+    writeBookingsLocal(bookings);
+    pushBookingsToGist(bookings).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Failed to save comment', e);
+    res.status(500).json({ error: 'Failed to save comment' });
   }
 });
 

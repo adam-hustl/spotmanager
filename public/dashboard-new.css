@@ -44,6 +44,8 @@ body.page {
 
 .icon-btn { position: relative; padding: .5rem; border-radius: 9999px; border: none; background: transparent; cursor: pointer; }
 .icon-btn:hover { background: #f3f4f6; }
+.next-guest-btn { margin-left: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid #d1d5db; background: #fff; color: #111827; font-weight: 600; cursor: pointer; }
+.next-guest-btn:hover { background: #f3f4f6; }
 .notify-dot { position: absolute; top: -2px; right: -2px; height: 10px; width: 10px; background: #F97316; border-radius: 9999px; }
 .user-btn { display: flex; align-items: center; gap: .5rem; padding: .375rem .75rem; border-radius: 9999px; border: 1px solid var(--border); background: var(--white); box-shadow: var(--shadow-sm); cursor: pointer; }
 .user-btn:hover { box-shadow: var(--shadow-md); }
@@ -79,6 +81,14 @@ body.page {
 @media (min-width: 1024px) {
   .sidebar { grid-column: 1 / span 2; }
   .main    { grid-column: 3 / -1; }
+}
+
+/* Make the left menu sticky so it stays visible while scrolling */
+.sidebar {
+  position: sticky;
+  top: 5.5rem; /* stay clear of the sticky top bar; adjust if header height changes */
+  align-self: start;
+  height: fit-content;
 }
 
 /* Cards & shells */
@@ -452,8 +462,9 @@ body.page {
   transform: translateX(0);
 }
 
+/* Let the sidebar float over the layout so the left menu doesn't get squeezed */
 body.booking-sidebar-open .page-grid {
-  padding-right: calc(1.5rem + min(360px, 90vw)); /* gap + sidebar width */
+  padding-right: 1rem;
   transition: padding-right 0.25s ease;
 }
 
@@ -512,6 +523,47 @@ body.booking-sidebar-open .page-grid {
   margin-top: .25rem;
   padding-top: .75rem;
   border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.booking-sidebar-comment {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+.comment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.comment-title {
+  font-weight: 600;
+  color: #111827;
+  font-size: 0.95rem;
+}
+.comment-status {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+.comment-input {
+  width: 100%;
+  min-height: 100px;
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  resize: vertical;
+  font-family: inherit;
+}
+.comment-input:focus {
+  outline: 2px solid #10B98133;
+  border-color: #10B981;
+  background: #fff;
+}
+.comment-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .doc-row {

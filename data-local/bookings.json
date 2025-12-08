@@ -166,11 +166,13 @@
     "checklist": {
       "step1": true,
       "step2": true,
-      "step3": true
+      "step3": true,
+      "step5": false
     },
     "idFileCount": 1,
     "receiptFileCount": 0,
-    "emailSent": true
+    "emailSent": true,
+    "notes": "test another booking"
   },
   {
     "guestName": "Test border",
@@ -212,6 +214,7 @@
     },
     "emailSent": true,
     "idFileCount": 1,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "notes": "test comment for Thorbjørn test edit"
   }
 ]

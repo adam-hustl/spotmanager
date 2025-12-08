@@ -74,6 +74,7 @@
                 <button id="editBookingBtn" class="icon-btn" type="button" title="Edit booking">
                   <i data-lucide="pencil" class="icon-16"></i>
                 </button>
+                <button id="nextGuestBtn" class="next-guest-btn" type="button" style="display:none">Next guest</button>
               </div>
               <div id="stayDates" class="dates">—</div>
             </div>
@@ -123,8 +124,7 @@
   </div>
 
   <div class="new-guest-actions">
-    <!-- You can add a real Comment flow later; for now it's just visual -->
-    <button type="button" class="ghost-btn" disabled>Comment</button>
+    <button type="button" id="newGuestCommentBtn" class="ghost-btn">Comment</button>
     <button type="button" id="cancelNewGuest" class="ghost-btn">Cancel</button>
     <button type="submit" class="ghost-btn ghost-btn--primary">Save guest</button>
   </div>
@@ -147,8 +147,7 @@
   </div>
 
   <div class="new-guest-actions">
-    <!-- Keep Comment button for parity with add form -->
-    <button type="button" class="ghost-btn" disabled>Comment</button>
+    <button type="button" id="editBookingCommentBtn" class="ghost-btn">Comment</button>
     <button type="button" id="cancelEditBooking" class="ghost-btn">Cancel</button>
     <button type="submit" class="ghost-btn ghost-btn--primary">Save changes</button>
   </div>
@@ -248,7 +247,7 @@
     <div class="booking-sidebar-inner">
       <div class="booking-sidebar-header">
         <div>
-          <div class="booking-sidebar-title">Guest overview</div>
+          <div id="bookingSidebarTitle" class="booking-sidebar-title">Guest overview</div>
           <div id="bookingSidebarDate" class="booking-sidebar-date">—</div>
         </div>
         <button
@@ -266,6 +265,17 @@
   <div class="booking-sidebar-guest-block">
     <div id="bookingSidebarGuest" class="booking-sidebar-guest-name">—</div>
     <div id="bookingSidebarStay" class="booking-sidebar-stay">—</div>
+  </div>
+
+  <div class="booking-sidebar-comment">
+    <div class="comment-head">
+      <div id="commentLabel" class="comment-title">Add comment</div>
+      <span id="commentStatus" class="comment-status"></span>
+    </div>
+    <textarea id="commentInput" class="comment-input" placeholder="Add notes for this guest..."></textarea>
+    <div class="comment-actions">
+      <button id="commentSaveBtn" type="button" class="ghost-btn ghost-btn--primary">Save</button>
+    </div>
   </div>
 </div>
 
@@ -310,6 +320,8 @@
   let theme="emerald",grad=true,comp=new Array(steps.length).fill(false),cur=0;
   let currentBookingId = null; // id of the booking shown in the top header
   let currentBookingData = null; // full booking object currently selected
+  let defaultBookingData = null; // next upcoming booking used for "Next guest"
+  let latestBookings = []; // cache of fetched bookings for quick lookups
 function bookingCompleteFromData(b){
     if(!b) return false;
     const idStr = String(b.timestamp || b.id || '');
@@ -326,6 +338,17 @@ function bookingCompleteFromData(b){
     const step4 = cl.step4===true || storedPaid === '1';
     const step5 = cl.step5===true || storedPicked === '1';
     return step1 && step2 && step3 && step4 && step5;
+  }
+  function setNextGuestButton(show){
+    const btn = document.getElementById('nextGuestBtn');
+    if (!btn) return;
+    btn.style.display = show ? 'inline-flex' : 'none';
+  }
+  function goToDefaultBooking(){
+    if (!defaultBookingData) return;
+    fillGuestHeader(defaultBookingData);
+    attachActions(defaultBookingData);
+    toggleEditBooking(false);
   }
 function updateCheckinCell(b){
     const id=b && (b.timestamp||b.id);
@@ -392,9 +415,10 @@ function updateCheckinCell(b){
     let sidebarBooking = null; // booking object currently shown in the sidebar
     let sidebarJustOpened = false; // guard against immediate close on the same click
 
-    function openBookingSidebar(dateKey, bookingsForDay = []) {
+  function openBookingSidebar(dateKey, bookingsForDay = []) {
     const panel = document.getElementById('bookingSidebar');
     const dateLabel = document.getElementById('bookingSidebarDate');
+    const titleEl = document.getElementById('bookingSidebarTitle');
 
     sidebarJustOpened = true;
     setTimeout(() => { sidebarJustOpened = false; }, 0);
@@ -402,6 +426,7 @@ function updateCheckinCell(b){
     if (panel) {
       panel.classList.add('open');
     }
+    if (titleEl) titleEl.textContent = 'Guest overview';
 
         // Push the main layout left so the sidebar doesn't overlap
     document.body.classList.add('booking-sidebar-open');
@@ -459,6 +484,38 @@ function updateCheckinCell(b){
     // ---- Set ID pill (Pending / Complete) based on booking data, if available ----
     // (ID status line removed from sidebar)
   }
+  function openCommentSidebar(forBooking = null) {
+      const panel = document.getElementById('bookingSidebar');
+      const dateLabel = document.getElementById('bookingSidebarDate');
+      const titleEl = document.getElementById('bookingSidebarTitle');
+      const guestEl = document.getElementById('bookingSidebarGuest');
+      const stayEl  = document.getElementById('bookingSidebarStay');
+      const commentEl = document.getElementById('commentInput');
+      const commentLabel = document.getElementById('commentLabel');
+      const commentStatus = document.getElementById('commentStatus');
+
+      sidebarJustOpened = true;
+      setTimeout(() => { sidebarJustOpened = false; }, 0);
+
+      if (panel) panel.classList.add('open');
+      document.body.classList.add('booking-sidebar-open');
+      if (titleEl) titleEl.textContent = 'Comments';
+      if (dateLabel) dateLabel.textContent = 'Add or review notes';
+
+      const source = forBooking || currentBookingData || defaultBookingData;
+      if (guestEl) guestEl.textContent = source?.guestName || 'Guest';
+      if (stayEl) {
+        if (source?.checkIn && source?.checkOut) {
+          stayEl.textContent = `${source.checkIn} – ${source.checkOut}`;
+        } else {
+          stayEl.textContent = '—';
+        }
+      }
+
+      if (commentEl) commentEl.value = source?.notes || '';
+      if (commentLabel) commentLabel.textContent = source?.notes ? 'Edit comment' : 'Add comment';
+      if (commentStatus) commentStatus.textContent = source?.notes ? 'Existing note' : '';
+    }
 
 
 
@@ -994,6 +1051,9 @@ function setIdStepState(hasId){
   // remember which booking is the "current" one in the top header
   currentBookingId = id;
   currentBookingData = current;
+  const defaultId = defaultBookingData && (defaultBookingData.timestamp || defaultBookingData.id);
+  const isDefault = defaultId && String(defaultId) === String(id);
+  setNextGuestButton(!isDefault);
 
         let sendingEmail = false;
 
@@ -1334,6 +1394,59 @@ try {
     }
   }
 
+  function wireCommentButtons(){
+    const newBtn = document.getElementById('newGuestCommentBtn');
+    if (newBtn) newBtn.addEventListener('click', (e)=>{ e.preventDefault(); openCommentSidebar(); });
+    const editBtn = document.getElementById('editBookingCommentBtn');
+    if (editBtn) editBtn.addEventListener('click', (e)=>{ e.preventDefault(); openCommentSidebar(currentBookingData); });
+
+    const saveBtn = document.getElementById('commentSaveBtn');
+    const input = document.getElementById('commentInput');
+    if (saveBtn && input) {
+      saveBtn.addEventListener('click', async (e)=>{
+        e.preventDefault();
+        const target = currentBookingData || defaultBookingData;
+        if (!target) return;
+        const bookingId = target.timestamp || target.id;
+        const note = input.value || '';
+        try {
+          const res = await fetch(`/api/comment/${encodeURIComponent(bookingId)}`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ notes: note })
+          });
+          if (res.ok) {
+            // update local data cache
+            target.notes = note;
+            if (currentBookingData && (currentBookingData.timestamp||currentBookingData.id) === bookingId) {
+              currentBookingData.notes = note;
+            }
+            calendarBookings = (calendarBookings||[]).map((b)=> {
+              const id = b.timestamp || b.id;
+              return String(id) === String(bookingId) ? { ...b, notes: note } : b;
+            });
+            if (latestBookings && Array.isArray(latestBookings)) {
+              latestBookings = latestBookings.map((b)=>{
+                const id = b.timestamp || b.id;
+                return String(id) === String(bookingId) ? { ...b, notes: note } : b;
+              });
+            }
+            const label = document.getElementById('commentLabel');
+            const status = document.getElementById('commentStatus');
+            if (label) label.textContent = note ? 'Edit comment' : 'Add comment';
+            if (status) status.textContent = note ? 'Saved' : '';
+            setTimeout(()=>{ if (status) status.textContent=''; }, 1200);
+          } else {
+            alert('Failed to save comment.');
+          }
+        } catch (err) {
+          console.error('Comment save error', err);
+          alert('Error saving comment.');
+        }
+      });
+    }
+  }
+
 
 
 
@@ -1347,16 +1460,24 @@ try {
     wireBookingSidebar();
     document.addEventListener('click', handleSidebarOutsideClick);
     wireAddGuest();
+    wireCommentButtons();
     renderProgress();
     apply();
 
     const bookings = await loadBookings();
     calendarBookings = bookings || [];
+    latestBookings = bookings || [];
     renderMiniCalendar();
 
     const current = pickCurrent(bookings);
+    defaultBookingData = current;
     fillGuestHeader(current);
     attachActions(current);
+
+    const nextBtn = document.getElementById('nextGuestBtn');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', (e)=>{ e.preventDefault(); goToDefaultBooking(); });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
