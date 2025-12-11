@@ -2130,6 +2130,23 @@ app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Undo a cancellation
+app.post('/uncancel-booking/:id', requireAdmin, async (req, res) => {
+  try {
+    const data = await fs.promises.readFile(bookingsFile, 'utf8');
+    const bookings = JSON.parse(data || '[]');
+    const idx = bookings.findIndex(b => String(b.timestamp) === String(req.params.id) || (b.id && String(b.id) === String(req.params.id)));
+    if (idx === -1) return res.status(404).send('Booking not found');
+    delete bookings[idx].cancelled;
+    writeBookingsLocal(bookings);
+    pushBookingsToGist(bookings).catch(() => {});
+    res.redirect('/cancelled-bookings');
+  } catch (e) {
+    console.error('Failed to uncancel booking', e);
+    res.status(500).send('Failed to uncancel booking');
+  }
+});
+
 
 
 // ✅ Updated /checklist/:id POST route
@@ -2635,6 +2652,120 @@ app.post('/unmark-cleaned', forbidViewer, (req, res) => {
 // route to serve the cleaner dashboard (new static page)
 app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'cleaner-dashboard.html'));
+});
+
+// Simple cancelled bookings list
+app.get('/cancelled-bookings', requireAnyUser, (req, res) => {
+  try {
+    const data = readBookingsLocal();
+    const cancelled = (data || []).filter(b => b && b.cancelled).sort((a,b)=> new Date(a.checkIn) - new Date(b.checkIn));
+    const rows = cancelled.map(b => {
+      const ci = new Date(b.checkIn).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'2-digit' });
+      const co = new Date(b.checkOut).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'2-digit' });
+      return `<li class="item">
+        <div class="title">${b.guestName || 'Guest'}</div>
+        <div class="muted">${b.platform || ''} • ${ci} → ${co}</div>
+        <div class="muted">Guests: ${b.people || '-'}</div>
+        <form action="/uncancel-booking/${encodeURIComponent(b.timestamp || b.id || '')}" method="POST" class="undo-form">
+          <button type="submit" class="undo-btn">Undo cancellation</button>
+        </form>
+      </li>`;
+    }).join('') || '<li class="item muted">No cancelled bookings.</li>';
+
+    res.send(`
+      <html>
+        <head>
+          <title>Cancelled bookings</title>
+          <style>
+            :root {
+              --accent:#10b981;
+              --accent-50:#ecfdf5;
+              --border:rgba(16,185,129,0.35);
+              --text:#0f172a;
+              --muted:#6b7280;
+              --bg:#ecfdf5;
+              --shadow:0 18px 40px rgba(16,185,129,0.18);
+            }
+            * { box-sizing: border-box; }
+            body {
+              font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+              margin:0; padding:28px;
+              background: linear-gradient(140deg, #d1fae5, #ecfdf5, #ffffff);
+              color:var(--text);
+            }
+            .shell {
+              max-width: 900px;
+              margin: 0 auto;
+            }
+            .card {
+              background:#fff;
+              border:1px solid var(--border);
+              border-radius:24px;
+              box-shadow: var(--shadow);
+              padding:24px 26px;
+            }
+            h1 { margin:0 0 10px; font-size:24px; }
+            .sub { color:var(--muted); margin:0 0 18px; }
+            ul { list-style:none; padding:0; margin:0; }
+            .item {
+              padding:14px 0;
+              border-bottom:1px solid rgba(16,185,129,0.15);
+              display:flex;
+              flex-direction:column;
+              gap:4px;
+            }
+            .item:last-child { border-bottom:none; }
+            .title { font-weight:700; font-size:16px; }
+            .row { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:14px; flex-wrap:wrap; }
+            .pill {
+              background: var(--accent-50);
+              color: #047857;
+              border:1px solid var(--border);
+              padding:4px 10px;
+              border-radius: 999px;
+              font-weight:600;
+              font-size:13px;
+            }
+            a.back {
+              display:inline-flex; align-items:center; gap:6px;
+              margin-bottom:16px; color:#047857; text-decoration:none; font-weight:700;
+            }
+            .empty {
+              padding:16px;
+              background:#f9fafb;
+              border:1px dashed var(--border);
+              border-radius:14px;
+              color:var(--muted);
+            }
+            .undo-form { margin-top:6px; }
+            .undo-btn {
+              border:1px solid var(--border);
+              background: var(--accent-50);
+              color:#047857;
+              border-radius:12px;
+              padding:8px 12px;
+              font-weight:700;
+              cursor:pointer;
+            }
+            .undo-btn:hover { background:#d1fae5; }
+          </style>
+        </head>
+        <body>
+          <div class="shell">
+            <a class="back" href="/dashboard-new">← Back to dashboard</a>
+            <div class="card">
+              <h1>Cancelled bookings</h1>
+              <p class="sub">All cancelled stays in one place.</p>
+              <ul>${rows || '<li class="empty">No cancelled bookings.</li>'}</ul>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (e) {
+    console.error('Cancelled bookings page failed', e);
+    res.status(500).send('Failed to load cancelled bookings');
+  }
 });
 
 // --------------- Finance Tab (MVP) ---------------

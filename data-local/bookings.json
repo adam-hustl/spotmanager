@@ -16,7 +16,8 @@
     },
     "idFileCount": 1,
     "receiptFileCount": 0,
-    "seen": true
+    "seen": true,
+    "cleaned": true
   },
   {
     "guestName": "test cancel on cleaner dashboard",
@@ -28,7 +29,8 @@
     "notes": "",
     "timestamp": "2025-08-13T14:02:30.923Z",
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "test igen",
@@ -46,7 +48,8 @@
       "step4": false
     },
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "test new upload",
@@ -101,7 +104,8 @@
     "notes": "",
     "timestamp": "2025-08-22T11:58:23.910Z",
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "test now",
@@ -113,7 +117,8 @@
     "notes": "",
     "timestamp": "2025-08-25T13:18:58.805Z",
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "Test reciept",
@@ -130,7 +135,8 @@
       "step1": true,
       "step3": true
     },
-    "receiptFileCount": 4
+    "receiptFileCount": 4,
+    "cleaned": true
   },
   {
     "guestName": "test",
@@ -142,7 +148,8 @@
     "notes": "",
     "timestamp": "2025-12-02T10:29:36.529Z",
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "test new dash guest",
@@ -159,24 +166,9 @@
     },
     "idFileCount": 1,
     "receiptFileCount": 0,
-    "emailSent": true
-  },
-  {
-    "guestName": "Test border",
-    "checkIn": "2025-12-18",
-    "checkOut": "2025-12-20",
-    "platform": "Agoda",
-    "people": "2",
-    "timestamp": "2025-12-03T04:33:54.484Z",
-    "checklist": {
-      "step1": true,
-      "step2": true,
-      "step3": true,
-      "step5": false
-    },
-    "idFileCount": 0,
-    "receiptFileCount": 0,
-    "emailSent": true
+    "emailSent": true,
+    "cleaned": true,
+    "cancelled": true
   },
   {
     "guestName": "Test today date",
@@ -185,7 +177,8 @@
     "platform": "Booking.com",
     "people": "4",
     "timestamp": "2025-12-10T23:40:27.036Z",
-    "seen": true
+    "seen": true,
+    "notes": "Test comment"
   },
   {
     "guestName": "Test mark cleaned",
@@ -202,7 +195,23 @@
     "checkOut": "2025-12-06",
     "platform": "Booking.com",
     "people": "2",
-    "timestamp": "2025-12-11T00:40:34.366Z",
-    "cleaned": true
+    "timestamp": "2025-12-11T00:40:34.366Z"
+  },
+  {
+    "guestName": "Next guest",
+    "checkIn": "2025-12-16",
+    "checkOut": "2025-12-19",
+    "platform": "Booking.com",
+    "people": "2",
+    "timestamp": "2025-12-11T06:55:57.592Z"
+  },
+  {
+    "guestName": "Test after cancelled",
+    "checkIn": "2025-12-03",
+    "checkOut": "2025-12-04",
+    "platform": "Booking.com",
+    "people": "2",
+    "timestamp": "2025-12-11T07:14:59.466Z",
+    "cancelled": true
   }
 ]

@@ -193,11 +193,6 @@ body.cd-body {
   gap: 12px;
 }
 
-.cd-list--grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
 .cd-card-item {
   border: 1px solid var(--border);
   border-radius: 18px;

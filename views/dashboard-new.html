@@ -30,10 +30,16 @@
           <i data-lucide="bell" class="icon-20"></i>
           <span class="notify-dot"></span>
         </button>
-        <button class="user-btn">
-          <i data-lucide="user-circle" class="icon-24"></i>
-          <span class="user-name sm-inline">Adam</span>
-        </button>
+        <div class="user-menu-wrap">
+          <button id="userMenuToggle" class="user-btn" type="button">
+            <i data-lucide="user-circle" class="icon-24"></i>
+            <span class="user-name sm-inline">Adam</span>
+            <i data-lucide="chevron-down" class="icon-16"></i>
+          </button>
+          <div id="userMenu" class="user-menu" style="display:none;">
+            <a href="/cancelled-bookings" class="user-menu-item">Cancelled bookings</a>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -80,6 +86,9 @@
               <div class="row gap-8 align-center">
                 <div id="guestCount" class="dates guest-count">—</div>
                 <div id="cleanStatus" class="dates clean-status">—</div>
+              </div>
+              <div class="row gap-8" style="margin-top:6px;">
+                <button id="cancelBookingBtn" type="button" class="ghost-btn ghost-btn--danger">Cancel booking</button>
               </div>
             </div>
 
@@ -305,6 +314,18 @@
     <div class="modal card-white modal-size">
       <button onclick="closeModal()" class="modal-close">✕</button>
       <iframe id="modalFrame" class="modal-frame" src="about:blank"></iframe>
+    </div>
+  </div>
+
+  <!-- Cancel confirm -->
+  <div id="confirmOverlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-card">
+      <div class="confirm-title">Cancel booking?</div>
+      <div class="confirm-sub">This will remove it from the active schedule.</div>
+      <div class="confirm-actions">
+        <button id="cancelConfirmNo" class="ghost-btn">Keep booking</button>
+        <button id="cancelConfirmYes" class="ghost-btn ghost-btn--danger">Cancel booking</button>
+      </div>
     </div>
   </div>
 
@@ -723,6 +744,14 @@ let bookingsByDay = {};   // dateKey ("YYYY-MM-DD") -> array of bookings for tha
         cur.setDate(cur.getDate() + 1);
       }
 
+      // If checkout is the 1st of this month and there were no nights in this month,
+      // still show a span/border on the 1st.
+      if (firstDayInMonth === null && end.getFullYear() === year && end.getMonth() === month && end.getDate() === 1) {
+        firstDayInMonth = 1;
+        lastDayInMonth = 1;
+        bookedDays.add(dayKey(1));
+      }
+
       if (start.getFullYear() === year && start.getMonth() === month) {
         const ck = dayKey(start.getDate());
         checkInDays.add(ck);
@@ -1130,6 +1159,36 @@ function setIdStepState(hasId){
   const defaultId = defaultBookingData && (defaultBookingData.timestamp || defaultBookingData.id);
   const isDefault = defaultId && String(defaultId) === String(id);
   setNextGuestButton(!isDefault);
+  const cancelBtn = document.getElementById('cancelBookingBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = current.cancelled ? 'none' : 'inline-flex';
+    cancelBtn.onclick = async (e)=>{
+      e.preventDefault();
+      const overlay = document.getElementById('confirmOverlay');
+      const yesBtn = document.getElementById('cancelConfirmYes');
+      const noBtn = document.getElementById('cancelConfirmNo');
+      if (!overlay || !yesBtn || !noBtn) return;
+      overlay.style.display = 'flex';
+      const hide = ()=> overlay.style.display = 'none';
+      noBtn.onclick = (evt)=>{ evt.preventDefault(); hide(); };
+      yesBtn.onclick = async (evt)=>{
+        evt.preventDefault();
+        try {
+          const res = await fetch(`/cancel-booking/${encodeURIComponent(id)}`, { method:'POST' });
+          if (res.ok) {
+            window.location.reload();
+          } else {
+            alert('Failed to cancel booking.');
+          }
+        } catch (err) {
+          console.error('Cancel booking error', err);
+          alert('Error cancelling booking.');
+        } finally {
+          hide();
+        }
+      };
+    };
+  }
 
         let sendingEmail = false;
 
@@ -1554,6 +1613,21 @@ try {
     const nextBtn = document.getElementById('nextGuestBtn');
     if (nextBtn) {
       nextBtn.addEventListener('click', (e)=>{ e.preventDefault(); goToDefaultBooking(); });
+    }
+
+    const userToggle = document.getElementById('userMenuToggle');
+    const userMenu = document.getElementById('userMenu');
+    if (userToggle && userMenu) {
+      userToggle.addEventListener('click', (e)=>{
+        e.preventDefault();
+        const show = userMenu.style.display === 'none' || userMenu.style.display === '';
+        userMenu.style.display = show ? 'block' : 'none';
+      });
+      document.addEventListener('click', (e)=>{
+        if (!userMenu.contains(e.target) && !userToggle.contains(e.target)) {
+          userMenu.style.display = 'none';
+        }
+      });
     }
   }
 
