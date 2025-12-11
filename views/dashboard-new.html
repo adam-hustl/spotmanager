@@ -77,6 +77,10 @@
                 <button id="nextGuestBtn" class="next-guest-btn" type="button" style="display:none">Next guest</button>
               </div>
               <div id="stayDates" class="dates">—</div>
+              <div class="row gap-8 align-center">
+                <div id="guestCount" class="dates guest-count">—</div>
+                <div id="cleanStatus" class="dates clean-status">—</div>
+              </div>
             </div>
 
 
@@ -322,6 +326,61 @@
   let currentBookingData = null; // full booking object currently selected
   let defaultBookingData = null; // next upcoming booking used for "Next guest"
   let latestBookings = []; // cache of fetched bookings for quick lookups
+  let cleanReadySet = new Set(); // bookings whose unit is cleaned for their arrival
+  function getNextBooking(){
+    const pool = (latestBookings && latestBookings.length) ? latestBookings : (calendarBookings || []);
+    return pickCurrent(pool);
+  }
+  const getBookingId = (b)=> b && (b.timestamp || b.id);
+  function isCleanFlag(val){
+    return val===true || val==='true' || val===1 || val==='1';
+  }
+  function computeReadyForBooking(target, bookings){
+    if (!target) return false;
+    const list = Array.isArray(bookings) ? [...bookings].filter(Boolean) : [];
+    if (!list.length) return false;
+    // Sort chronologically by check-in
+    list.sort((a,b)=>new Date(a.checkIn)-new Date(b.checkIn));
+    const tid = String(getBookingId(target) || '');
+    const tCheckIn = new Date(target.checkIn);
+    // Find index of target in sorted list
+    const idx = list.findIndex(b=>String(getBookingId(b)||'')===tid);
+    if (idx === -1) return false;
+    // Look only at the immediate prior stay (not the stay itself)
+    for (let i=idx-1;i>=0;i--){
+      const prev = list[i];
+      if (!prev || prev.cancelled) continue;
+      const prevCheckOut = new Date(prev.checkOut);
+      if (prevCheckOut <= tCheckIn && isCleanFlag(prev.cleaned)) {
+        return true;
+      }
+      // Once we hit a prior stay (cleaned or not), stop looking further back
+      break;
+    }
+    return false;
+  }
+  function computeCleanReady(bookings){
+    cleanReadySet = new Set();
+    if (!Array.isArray(bookings)) return;
+    // Sort by check-in so we can walk chronologically
+    const sorted = [...bookings].filter(Boolean).sort((a,b)=>new Date(a.checkIn)-new Date(b.checkIn));
+    let lastCleanedCheckout = null;
+    sorted.forEach((bk)=>{
+      const isClean = bk.cleaned===true || bk.cleaned==='true' || bk.cleaned===1 || bk.cleaned==='1';
+      const bkId = String(getBookingId(bk) || '');
+      const checkInDate = new Date(bk.checkIn);
+      if (isClean) {
+        if (bkId) cleanReadySet.add(bkId);           // the cleaned stay itself
+        lastCleanedCheckout = new Date(bk.checkOut); // carry forward for the very next stay
+      } else {
+        if (lastCleanedCheckout && lastCleanedCheckout <= checkInDate && bkId) {
+          cleanReadySet.add(bkId); // previous stay was cleaned, so this arrival is ready
+        }
+        // if this stay is not cleaned, break the chain until a new cleaned stay
+        lastCleanedCheckout = null;
+      }
+    });
+  }
 function bookingCompleteFromData(b){
     if(!b) return false;
     const idStr = String(b.timestamp || b.id || '');
@@ -1037,6 +1096,23 @@ function setIdStepState(hasId){
       };
       stayEl.textContent = `${fmt(b.checkIn)} to ${fmt(b.checkOut)}`;
     }
+    const countEl = document.getElementById('guestCount');
+    if (countEl) {
+      const n = Number(b.people);
+      if (!isNaN(n) && n > 0) {
+        countEl.textContent = `${n} guest${n === 1 ? '' : 's'} checking in`;
+      } else {
+        countEl.textContent = '—';
+      }
+    }
+    const cleanEl = document.getElementById('cleanStatus');
+    if (cleanEl) {
+      // Show readiness based on the current booking: itself cleaned, or immediate prior stay cleaned
+      const isClean = computeReadyForBooking(b, latestBookings);
+      cleanEl.textContent = isClean ? 'Cleaned and ready' : 'Not cleaned';
+      cleanEl.classList.toggle('clean-yes', isClean);
+      cleanEl.classList.toggle('clean-no', !isClean);
+    }
   }
 
   function attachActions(current){ 
@@ -1467,6 +1543,7 @@ try {
     const bookings = await loadBookings();
     calendarBookings = bookings || [];
     latestBookings = bookings || [];
+    computeCleanReady(latestBookings);
     renderMiniCalendar();
 
     const current = pickCurrent(bookings);

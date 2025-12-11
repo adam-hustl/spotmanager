@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cleaner Dashboard</title>
+  <link rel="stylesheet" href="/cleaner-dashboard.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="cd-body">
+  <div class="cd-bg"></div>
+
+  <div class="cd-shell">
+    <header class="cd-top">
+      <div>
+        <p class="cd-kicker">Hello, Adam</p>
+        <h1 class="cd-title">Cleaners Dashboard</h1>
+        <p class="cd-subtitle">Overview of upcoming cleans and which units are ready for check-in.</p>
+      </div>
+      <div class="cd-top-actions">
+        <button class="cd-date-pill" id="todayChip"></button>
+        <span id="roleChip" class="cd-chip">Role: —</span>
+        <button id="refreshBtn" class="cd-btn ghost">Refresh</button>
+        <a class="cd-btn outline" href="/dashboard">Admin dashboard</a>
+      </div>
+    </header>
+
+    <section class="cd-card queue">
+      <div class="cd-section-head">
+        <div class="cd-tabs">
+          <button class="cd-tab active" data-filter="all" id="tab-all">Upcoming</button>
+          <button class="cd-tab" data-filter="cleaned" id="tab-cleaned">Already cleaned</button>
+        </div>
+        <div class="cd-filter">
+          <button class="cd-pill active" data-filter="all">Any</button>
+          <button class="cd-pill" data-filter="soon">Next 7 days</button>
+        </div>
+      </div>
+      <div id="queueList" class="cd-list"></div>
+    </section>
+
+    <section class="cd-card done">
+      <div class="cd-section-head">
+        <div>
+          <p class="cd-kicker">Finished</p>
+          <h2 class="cd-section-title">Recently cleaned</h2>
+        </div>
+      </div>
+      <div id="doneList" class="cd-list cd-list--grid"></div>
+    </section>
+  </div>
+
+  <div id="toast" class="cd-toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const state = {
+      bookings: [],
+      filter: 'all',
+      readOnly: false,
+      role: 'cleaner'
+    };
+
+    const els = {
+      queueList: document.getElementById('queueList'),
+      doneList: document.getElementById('doneList'),
+      roleChip: document.getElementById('roleChip'),
+      toast: document.getElementById('toast'),
+      todayChip: document.getElementById('todayChip')
+    };
+
+    const formatDate = (d, opts = { weekday: 'short', month: 'short', day: 'numeric' }) => {
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString('en-US', opts);
+    };
+
+    const startOfToday = () => {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const escapeHTML = (str = '') => str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    function decorateBookings(raw = []) {
+      const list = (raw || []).filter((b) => !b.cancelled);
+      const byCheckIn = [...list].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+      const meta = new Map();
+
+      byCheckIn.forEach((b) => {
+        const currentCheckOut = new Date(b.checkOut);
+        const next = byCheckIn.find((other) => {
+          if (other === b) return false;
+          const otherCheckIn = new Date(other.checkIn);
+          return otherCheckIn >= currentCheckOut;
+        });
+
+        const sameDay = next
+          && currentCheckOut.getFullYear() === new Date(next.checkIn).getFullYear()
+          && currentCheckOut.getMonth() === new Date(next.checkIn).getMonth()
+          && currentCheckOut.getDate() === new Date(next.checkIn).getDate();
+
+        meta.set(b.timestamp || b.id, {
+          nextGuestPeople: next ? next.people : null,
+          sameDayTurnover: !!sameDay
+        });
+      });
+
+      return list.map((b) => {
+        const checkInDate = new Date(b.checkIn);
+        const checkOutDate = new Date(b.checkOut);
+        const today = startOfToday();
+        const diffDays = Math.floor((checkOutDate - today) / (1000 * 60 * 60 * 24));
+        const bucket = checkOutDate < today ? 'past' : diffDays === 0 ? 'today' : diffDays <= 7 ? 'soon' : 'later';
+        const metaInfo = meta.get(b.timestamp || b.id) || {};
+        const cutoff = new Date(`${b.checkOut}T11:00:00`);
+
+        return {
+          ...b,
+          checkInDate,
+          checkOutDate,
+          bucket,
+          canMarkCleaned: Date.now() >= cutoff.getTime(),
+          sameDayTurnover: metaInfo.sameDayTurnover || false,
+          nextGuestPeople: metaInfo.nextGuestPeople
+        };
+      });
+    }
+
+    function computeStats(list) {
+      const pending = list.filter((b) => !b.cleaned);
+      const cleaned = list.filter((b) => b.cleaned);
+      const sameDay = pending.filter((b) => b.sameDayTurnover).length;
+      const dueToday = pending.filter((b) => b.bucket === 'today').length;
+      return { pending: pending.length, cleaned: cleaned.length, sameDay, dueToday };
+    }
+
+    function statCard(label, value, sub = '', tone = '') {
+      return `
+        <div class="cd-stat ${tone}">
+          <div class="cd-stat-label">${label}</div>
+          <div class="cd-stat-value">${value}</div>
+          ${sub ? `<div class="cd-stat-label">${sub}</div>` : ''}
+        </div>
+      `;
+    }
+
+    function badgeForBooking(b) {
+      if (b.bucket === 'today') return { text: 'Today', class: 'accent' };
+      if (b.bucket === 'past') return { text: 'Overdue', class: 'warn' };
+      if (b.bucket === 'soon') return { text: 'Next 7 days', class: 'muted' };
+      return { text: 'Later', class: 'muted' };
+    }
+
+    function renderQueue() {
+      const cleanedItems = state.bookings.filter((b) => b.cleaned).sort((a, b) => b.checkOutDate - a.checkOutDate);
+      let items = state.filter === 'cleaned'
+        ? cleanedItems
+        : state.bookings.filter((b) => !b.cleaned);
+
+      if (state.filter === 'today') items = items.filter((b) => b.bucket === 'today');
+      if (state.filter === 'soon') items = items.filter((b) => b.bucket === 'today' || b.bucket === 'soon');
+      if (state.filter !== 'cleaned') items.sort((a, b) => a.checkOutDate - b.checkOutDate);
+
+      if (!items.length) {
+        els.queueList.innerHTML = '<div class="cd-empty">No cleans in this bucket. Enjoy the breather!</div>';
+        return;
+      }
+
+      els.queueList.innerHTML = items.map(renderBookingCard).join('');
+    }
+
+    function renderDone() {
+      const cleaned = state.bookings.filter((b) => b.cleaned).sort((a, b) => b.checkOutDate - a.checkOutDate).slice(0, 12);
+
+      if (!cleaned.length) {
+        els.doneList.innerHTML = '<div class="cd-empty">Nothing marked as cleaned yet.</div>';
+        return;
+      }
+
+      els.doneList.innerHTML = cleaned.map((b) => renderDoneCard(b)).join('');
+    }
+
+    function dateBadge(date) {
+      if (!date || Number.isNaN(date.getTime())) return '<div class="cd-badge">—</div>';
+      const month = date.toLocaleDateString('en-US', { month: 'short' });
+      const day = date.getDate();
+      return `<div class="cd-date-pill">${month} ${String(day).padStart(2, '0')}</div>`;
+    }
+
+    function renderBookingCard(b) {
+      const id = b.timestamp || b.id;
+      const badge = badgeForBooking(b);
+      const notes = b.notes ? `<div class="cd-note">Note: ${escapeHTML(b.notes)}</div>` : '';
+      const sameDay = b.sameDayTurnover ? '<span class="cd-badge warn">Same-day check-in</span>' : '';
+      const nextGuests = typeof b.nextGuestPeople !== 'undefined' && b.nextGuestPeople !== null
+        ? `${b.nextGuestPeople} arriving next`
+        : 'Next guest TBD';
+      const nextGuestsDisplay = typeof b.nextGuestPeople !== 'undefined' && b.nextGuestPeople !== null
+        ? b.nextGuestPeople
+        : b.people;
+      const cleanDisabled = state.readOnly || !b.canMarkCleaned;
+      const cleanTitle = !b.canMarkCleaned ? 'Available after checkout (11:00)' : '';
+      const statusTag = b.cleaned ? '<span class="cd-badge accent">Cleaned</span>' : `<span class="cd-badge ${badge.class}">${badge.text}</span>`;
+
+      return `
+        <article class="cd-card-item" data-id="${id}">
+          ${dateBadge(b.checkOutDate)}
+          <div>
+            <div class="cd-card-head" style="justify-content: space-between;">
+              <div class="cd-guest">
+                ${escapeHTML(b.guestName || 'Guest')}
+                <span class="cd-platform">${escapeHTML(b.platform || 'Platform')}</span>
+              </div>
+              <div class="cd-tag-row">
+                ${statusTag}
+                ${sameDay}
+              </div>
+            </div>
+            <div class="cd-dates">
+              Guests arriving: ${escapeHTML(nextGuestsDisplay || '—')}
+            </div>
+            <div class="cd-tag-row">
+              <span class="cd-badge accent">${escapeHTML(nextGuests)}</span>
+            </div>
+            ${notes}
+            <div class="cd-card-actions">
+              <button class="cd-btn primary" data-action="toggle-clean" data-id="${id}" ${cleanDisabled ? 'disabled' : ''} title="${cleanTitle}">
+                ${b.cleaned ? 'Undo cleaned' : 'Mark as cleaned'}
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderDoneCard(b) {
+      const id = b.timestamp || b.id;
+      return `
+        <article class="cd-card-item" data-id="${id}">
+          ${dateBadge(b.checkOutDate)}
+          <div>
+            <div class="cd-card-head" style="justify-content: space-between;">
+              <div class="cd-guest">
+                ${escapeHTML(b.guestName || 'Guest')}
+                <span class="cd-platform">${escapeHTML(b.platform || '')}</span>
+              </div>
+              <span class="cd-badge accent">Cleaned</span>
+            </div>
+            <div class="cd-dates">Check-out ${formatDate(b.checkOutDate)}</div>
+            ${b.notes ? `<div class="cd-note">${escapeHTML(b.notes)}</div>` : ''}
+            <div class="cd-card-actions">
+              <button class="cd-btn ghost" data-action="toggle-clean" data-id="${id}" ${state.readOnly ? 'disabled' : ''}>Undo</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderAll() {
+      renderQueue();
+      renderDone();
+      if (els.roleChip) {
+        const roleLabel = state.role + (state.readOnly ? ' (read-only)' : '');
+        els.roleChip.textContent = `Role: ${roleLabel}`;
+      }
+      updateTabLabels();
+      setTodayChip();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function fetchJSON(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    }
+
+    function setTodayChip() {
+      if (!els.todayChip) return;
+      const now = new Date();
+      const label = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      els.todayChip.textContent = label;
+    }
+
+    function updateTabLabels() {
+      const pendingCount = state.bookings.filter((b) => !b.cleaned).length;
+      const cleanedCount = state.bookings.filter((b) => b.cleaned).length;
+      const tabAll = document.getElementById('tab-all');
+      const tabCleaned = document.getElementById('tab-cleaned');
+      if (tabAll) tabAll.textContent = `Upcoming (${pendingCount})`;
+      if (tabCleaned) tabCleaned.textContent = `Already cleaned (${cleanedCount})`;
+    }
+
+    async function loadData() {
+      document.body.classList.add('is-loading');
+      try {
+        const [bookings, role] = await Promise.all([
+          fetchJSON('/api/bookings').catch(() => []),
+          fetchJSON('/api/session-role').catch(() => ({ role: 'cleaner' }))
+        ]);
+        state.role = role.role || 'cleaner';
+        state.readOnly = state.role === 'viewer';
+        state.bookings = decorateBookings(bookings || []);
+        renderAll();
+      } catch (err) {
+        showToast('Failed to load bookings.');
+        console.error(err);
+      } finally {
+        document.body.classList.remove('is-loading');
+      }
+    }
+
+    async function postAction(path, timestamp) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json'
+        },
+        body: `timestamp=${encodeURIComponent(timestamp)}`
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText);
+        throw new Error(msg || 'Request failed');
+      }
+    }
+
+    function showToast(message) {
+      if (!els.toast) return;
+      els.toast.textContent = message;
+      els.toast.classList.add('show');
+      setTimeout(() => els.toast.classList.remove('show'), 1800);
+    }
+
+    async function handleAction(action, timestamp) {
+      const booking = state.bookings.find((b) => String(b.timestamp || b.id) === String(timestamp));
+      if (!booking) return;
+      try {
+        if (action === 'toggle-clean') {
+          const path = booking.cleaned ? '/unmark-cleaned' : '/mark-cleaned';
+          await postAction(path, timestamp);
+          showToast(booking.cleaned ? 'Marked as not cleaned.' : 'Marked as cleaned.');
+        }
+        if (action === 'mark-seen' && !booking.seen) {
+          await postAction('/mark-seen', timestamp);
+          showToast('Marked as seen.');
+        }
+        await loadData();
+      } catch (err) {
+        console.error(err);
+        showToast('Action failed. Do you have permission?');
+      }
+    }
+
+    function wireEvents() {
+      document.addEventListener('click', (e) => {
+        const tab = e.target.closest('.cd-tab');
+        if (tab && tab.dataset.filter) {
+          document.querySelectorAll('.cd-tab').forEach((btn) => btn.classList.remove('active'));
+          tab.classList.add('active');
+          state.filter = tab.dataset.filter;
+          renderQueue();
+          return;
+        }
+
+        const pill = e.target.closest('.cd-pill');
+        if (pill && pill.dataset.filter) {
+          document.querySelectorAll('.cd-pill').forEach((btn) => btn.classList.remove('active'));
+          pill.classList.add('active');
+          state.filter = pill.dataset.filter;
+          renderQueue();
+          return;
+        }
+
+        const actionBtn = e.target.closest('[data-action]');
+        if (actionBtn) {
+          e.preventDefault();
+          const action = actionBtn.dataset.action;
+          const id = actionBtn.dataset.id;
+          if (action && id) handleAction(action, id);
+        }
+      });
+
+      const refreshBtn = document.getElementById('refreshBtn');
+      if (refreshBtn) refreshBtn.addEventListener('click', () => loadData());
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      wireEvents();
+      loadData();
+    });
+  </script>
+</body>
+</html>

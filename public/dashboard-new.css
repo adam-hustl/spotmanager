@@ -293,6 +293,10 @@ body.page {
 
 .guest-name { font-weight: 600; }
 .dates { font-size: .875rem; color: #374151; }
+.guest-count { color: #6b7280; font-size: 0.9rem; }
+.clean-status { font-size: .875rem; padding: 0.15rem 0.65rem; border-radius: 999px; border: 1px solid transparent; }
+.clean-yes { color: #047857; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); }
+.clean-no { color: #b91c1c; background: #fff1f2; border-color: rgba(239,68,68,0.35); }
 
 /* Calendar */
 .calendar-grid {

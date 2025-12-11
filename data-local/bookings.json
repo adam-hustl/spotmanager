@@ -15,7 +15,8 @@
       "step4": false
     },
     "idFileCount": 1,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "seen": true
   },
   {
     "guestName": "test cancel on cleaner dashboard",
@@ -60,7 +61,8 @@
     "checklist": {
       "step1": true
     },
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "cleaned": true
   },
   {
     "guestName": "test finance",
@@ -72,7 +74,9 @@
     "notes": "",
     "timestamp": "2025-08-22T11:21:53.154Z",
     "idFileCount": 0,
-    "receiptFileCount": 0
+    "receiptFileCount": 0,
+    "seen": true,
+    "cleaned": true
   },
   {
     "guestName": "test again fin",
@@ -150,29 +154,12 @@
     "checklist": {
       "step1": true,
       "step2": true,
-      "step3": true
-    },
-    "idFileCount": 1,
-    "receiptFileCount": 0,
-    "emailSent": true
-  },
-  {
-    "guestName": "Test overlap edit",
-    "checkIn": "2025-12-04",
-    "checkOut": "2025-12-06",
-    "platform": "Booking.com",
-    "people": "2",
-    "timestamp": "2025-12-02T10:40:16.825Z",
-    "checklist": {
-      "step1": true,
-      "step2": true,
       "step3": true,
       "step5": false
     },
     "idFileCount": 1,
     "receiptFileCount": 0,
-    "emailSent": true,
-    "notes": "test another booking"
+    "emailSent": true
   },
   {
     "guestName": "Test border",
@@ -184,37 +171,38 @@
     "checklist": {
       "step1": true,
       "step2": true,
-      "step3": true
+      "step3": true,
+      "step5": false
     },
     "idFileCount": 0,
     "receiptFileCount": 0,
     "emailSent": true
   },
   {
-    "guestName": "Test overlap",
-    "checkIn": "2025-12-04",
+    "guestName": "Test today date",
+    "checkIn": "2025-12-09",
+    "checkOut": "2025-12-11",
+    "platform": "Booking.com",
+    "people": "4",
+    "timestamp": "2025-12-10T23:40:27.036Z",
+    "seen": true
+  },
+  {
+    "guestName": "Test mark cleaned",
+    "checkIn": "2025-11-28",
+    "checkOut": "2025-12-01",
+    "platform": "Booking.com",
+    "people": "2",
+    "timestamp": "2025-12-11T00:11:39.148Z",
+    "cleaned": true
+  },
+  {
+    "guestName": "Test 6th cleaned",
+    "checkIn": "2025-12-05",
     "checkOut": "2025-12-06",
     "platform": "Booking.com",
     "people": "2",
-    "timestamp": "2025-12-07T12:59:00.112Z",
-    "idFileCount": 0,
-    "receiptFileCount": 0
-  },
-  {
-    "guestName": "test med Thorbjørn",
-    "checkIn": "2025-12-08",
-    "checkOut": "2025-12-09",
-    "platform": "Airbnb",
-    "people": "2",
-    "timestamp": "2025-12-07T15:23:23.779Z",
-    "checklist": {
-      "step1": true,
-      "step2": true,
-      "step3": true
-    },
-    "emailSent": true,
-    "idFileCount": 1,
-    "receiptFileCount": 0,
-    "notes": "test comment for Thorbjørn test edit"
+    "timestamp": "2025-12-11T00:40:34.366Z",
+    "cleaned": true
   }
 ]

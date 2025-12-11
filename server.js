@@ -1627,7 +1627,7 @@ try {
   }
 
   let changed = false;
-  const enriched = data.map((b) => {
+  const enriched = dedupeBookings(data).map((b) => {
     const id = String(b.timestamp || b.id || '');
     const count = isLocal ? (idCounts[id] || 0) : undefined;
     const receipts = isLocal ? (receiptCounts[id] || 0) : undefined;
@@ -1670,8 +1670,13 @@ try {
   res.json(enriched);
 } catch (e) {
 console.error('GET /api/bookings failed:', e);
-res.status(500).json({ error: 'Failed to read bookings' });
-}
+  res.status(500).json({ error: 'Failed to read bookings' });
+  }
+});
+
+// expose session role so frontends can adapt UI state
+app.get('/api/session-role', requireAnyUser, (req, res) => {
+  res.json({ role: req.session.role || 'viewer' });
 });
 
 
@@ -2546,77 +2551,73 @@ function isAuthenticated(req, res, next) {
   }
 }
 
-//  route mark-cleaned
+// Helper: keep only one booking per unique id/timestamp (prefer last occurrence)
+function dedupeBookings(list = []) {
+  const seen = new Map();
+  list.forEach((b) => {
+    const key = String(
+      b?.timestamp ||
+      b?.id ||
+      `${b?.checkIn || ''}|${b?.checkOut || ''}`
+    );
+    if (!key) return;
+    // prefer the later entry in the array for merged data
+    seen.set(key, { ...seen.get(key), ...b });
+  });
+  return Array.from(seen.values());
+}
+
+function cleanerActionResponse(req, res) {
+  const wantsJSON = (req.headers.accept || '').includes('application/json');
+  return wantsJSON ? res.json({ ok: true }) : res.redirect('/cleaner-dashboard');
+}
+
+// Mark a booking as seen by cleaner
 app.post('/mark-seen', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
-  const { timestamp } = req.body;
+  const { timestamp } = req.body || {};
 
-  const updated = bookingsData.map(b => {
-    if (b.timestamp === timestamp) {
-      return {
-        ...b,
-        seen: true
-      };
-    }
-    return b;
-  });
+  const updated = bookingsData.map((b) =>
+    b.timestamp === timestamp
+      ? {
+          ...b,
+          seen: true
+        }
+      : b
+  );
 
   writeBookingsLocal(updated);
-pushBookingsToGist(updated).catch(() => {});
+  pushBookingsToGist(updated).catch(() => {});
 
-  res.redirect('/cleaner-dashboard');
+  return cleanerActionResponse(req, res);
 });
 
-
-// route to serve the cleaner dashboard
-app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
-  // new: exclude cancelled from all cleaner views
-const allBookings = JSON.parse(fs.readFileSync(bookingsFile));
-const bookingsData = allBookings.filter(b => !b.cancelled);
-const today = new Date().toISOString().split('T')[0];
-
-
-  // Step: Sort all bookings by check-in date
-const sortedByCheckIn = [...bookingsData].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-
-
-// ---- read-only helpers for "viewer" role (same pattern as admin dashboard) ----
-const readOnly = req.session.role === 'viewer';
-const disabledAttr = readOnly
-  ? 'disabled aria-disabled="true" style="opacity:.55; pointer-events:none"'
-  : '';
-const blockSubmit = readOnly ? ' onsubmit="return false"' : '';
-
-
-
-
-  app.post('/mark-cleaned', forbidViewer, (req, res) => {
+// Mark a stay as cleaned
+app.post('/mark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
-  const { timestamp } = req.body;
+  const { timestamp } = req.body || {};
 
-
-  const updated = bookingsData.map(b => {
-    if (b.timestamp === timestamp) {
-      return {
-        ...b,
-        cleaned: true
-      };
-    }
-    return b;
-  });
-  
+  const updated = bookingsData.map((b) =>
+    b.timestamp === timestamp
+      ? {
+          ...b,
+          cleaned: true
+        }
+      : b
+  );
 
   writeBookingsLocal(updated);
-pushBookingsToGist(updated).catch(() => {});
+  pushBookingsToGist(updated).catch(() => {});
 
-  res.redirect('/cleaner-dashboard');
+  return cleanerActionResponse(req, res);
 });
 
+// Undo a cleaned mark
 app.post('/unmark-cleaned', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
-  const { timestamp } = req.body;
+  const { timestamp } = req.body || {};
 
-  const updated = bookingsData.map(b => {
+  const updated = bookingsData.map((b) => {
     if (b.timestamp === timestamp) {
       const copy = { ...b };
       delete copy.cleaned;
@@ -2626,298 +2627,14 @@ app.post('/unmark-cleaned', forbidViewer, (req, res) => {
   });
 
   writeBookingsLocal(updated);
-pushBookingsToGist(updated).catch(() => {});
+  pushBookingsToGist(updated).catch(() => {});
 
-  res.redirect('/cleaner-dashboard');
+  return cleanerActionResponse(req, res);
 });
 
-sortedByCheckIn.forEach((b, index) => {
-  const bCheckOut = new Date(b.checkOut);
-
-  // Find the next booking (excluding the current one)
-  const next = sortedByCheckIn.find(other => {
-    if (other.timestamp === b.timestamp) return false;
-    const otherCheckIn = new Date(other.checkIn);
-    return otherCheckIn >= bCheckOut;
-  });
-
-  b.nextGuestPeople = next ? next.people : 'N/A';
-
-  if (next) {
-    const nextCheckin = new Date(next.checkIn);
-    b.sameDayTurnover = (
-      bCheckOut.getFullYear() === nextCheckin.getFullYear() &&
-      bCheckOut.getMonth() === nextCheckin.getMonth() &&
-      bCheckOut.getDate() === nextCheckin.getDate()
-    );
-  } else {
-    b.sameDayTurnover = false;
-  }
-});
-
-  
-
-
-
-  // Define upcoming and alreadyCleaned bookings
-  const upcoming = bookingsData
-  .filter(b => !b.cleaned)
-  .sort((a, b) => new Date(a.checkOut) - new Date(b.checkOut));
-
-  const alreadyCleaned = bookingsData
-  .filter(b => b.cleaned)
-  .sort((a, b) => new Date(a.checkOut) - new Date(b.checkOut));
-
-
-  // Function to render bookings as HTML list items
-  function renderBookings(bookings) {
-
-
-    return bookings.map(b => {
-
-            const checkoutTime = new Date(b.checkOut + 'T11:00:00Z');
-
-            const now = new Date();
-            const isPastCheckout = now > checkoutTime;
-
-      return `
-        <li>
-          <div class="booking-info" style="position: relative;">
-
-          ${b.sameDayTurnover ? `
-            <div class="same-day-alert">
-              <i class="fas fa-exclamation-circle"></i> same day check-in
-            </div>
-          ` : ''}
-
-
-              
-        
-
-
-            Cleaning date: ${b.checkOut || ''}<br>
-            Guests arriving: ${b.nextGuestPeople || 'N/A'}<br>
-            
-            
-
-            ${!b.cleaned ? `
-              <form method="POST" class="logout-form" action="/mark-cleaned" style="margin-top:5px"${blockSubmit}>
-              <input type="hidden" name="timestamp" value="${b.timestamp}">
-              <button ${disabledAttr} class="mark-cleaned" type="submit" ${isPastCheckout ? '' : 'disabled style="background-color: grey; cursor: not-allowed;"'}>Mark as Cleaned</button>
-              </form>
-
-            ` : 
-
-            `<form method="POST" class="logout-form" action="/unmark-cleaned" style="margin-top:5px"${blockSubmit}>
-            <input type="hidden" name="timestamp" value="${b.timestamp}">
-            <button ${disabledAttr} class="button-unmark-cleaned" type="submit">Unmark as Cleaned</button>
-          </form>
-          `
-          }
-
-
-
-            
-        </form>
-
-          <form method="POST" class="seen-form" action="/mark-seen"${blockSubmit}>
-          <input type="hidden" name="timestamp" value="${b.timestamp}">
-          <button ${disabledAttr} class="seen-button ${b.seen ? 'seen-true' : ''}" type="submit">
-            👁️
-          </button>
-        </form>
-
-          </div>
-        </li>
-      `;
-    }).join('');
-  }
-
-  const showAdminButton = (req.session.role === 'admin' || req.session.role === 'viewer');
-
-
-
-
-  res.send(`
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Cleaner Dashboard</title>
-        <link rel="stylesheet" href="/style.css">
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#007bff" />
-
-
-                <!-- OneSignal SDK Script -->
-        <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-        <script>
-          window.OneSignalDeferred = window.OneSignalDeferred || [];
-          OneSignalDeferred.push(async function(OneSignal) {
-            await OneSignal.init({
-              appId: "${ONESIGNAL_APP_ID}"
-
-            });
-          });
-        </script>
-
-
-
-      </head>
-      <body>
-
-
-      <form action="/logout" method="POST" class="logout-form">
-  <button type="submit" class="button-logout">Log Out</button>
-</form>
-
-<form action="/logout" method="POST" class="logout-form-phone">
-  <button type="submit" class="button-logout-phone">Log Out</button>
-</form>
-
-
-
-
-        ${showAdminButton ? `
-          
-            <a href="/dashboard" class="view-cleaner-dashboard-button">View admin Dashboard</a>
-          ` : ''}
-
-          ${showAdminButton ? `
-          
-            <a href="/dashboard" class="view-cleaner-dashboard-button-phone">View admin Dashboard</a>
-          ` : ''}
-
-        <h1>Cleaner Dashboard</h1>
-
-
-
-
-        <div class="tab-buttons">
-          <button class="tab-btn active" onclick="showTab('upcoming')">Upcoming (${upcoming.length})</button>
-          <button class="tab-btn" onclick="showTab('cleaned')">Already Cleaned (${alreadyCleaned.length})</button>
-        </div>
-
-        
-
-        <div class="view-toggle">
-          <button id="listViewBtn" class="view-icon active" onclick="toggleView('list')">
-            <i class="fas fa-list"></i>
-          </button>
-          <button id="calendarViewBtn" class="view-icon" onclick="toggleView('calendar')">
-            <i class="fas fa-calendar-alt"></i>
-          </button>
-        </div>
-
-        <div id="calendarContainer" style="display:none;"></div>
-
-        <div id="upcoming" class="tab-content" style="display:block">
-          <ul>${renderBookings(upcoming)}</ul>
-        </div>
-
-        <div id="cleaned" class="tab-content" style="display:none">
-          <ul>${renderBookings(alreadyCleaned)}</ul>
-        </div>
-
-
-        <script>
-          function showTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(tabId).style.display = 'block';
-            event.target.classList.add('active');
-          }
-        </script>
-
-        <script>
-          let currentMonthOffset = 0;
-
-          function toggleView(view) {
-            const calendarContainer = document.getElementById('calendarContainer');
-            const listViewBtn = document.getElementById('listViewBtn');
-            const calendarViewBtn = document.getElementById('calendarViewBtn');
-
-            // Hide all tab contents and tab buttons
-            const allTabs = document.querySelectorAll('.tab-content');
-            const tabButtons = document.querySelector('.tab-buttons');
-
-            listViewBtn.classList.remove('active');
-            calendarViewBtn.classList.remove('active');
-
-            if (view === 'list') {
-              if (tabButtons) tabButtons.style.display = 'flex';
-              allTabs.forEach(tab => tab.style.display = 'none');
-              const activeTab = document.querySelector('.tab-btn.active');
-              if (activeTab) {
-                const tabId = activeTab.textContent.includes('Upcoming') ? 'upcoming' : 'cleaned';
-                document.getElementById(tabId).style.display = 'block';
-              }
-              calendarContainer.style.display = 'none';
-              listViewBtn.classList.add('active');
-            } else {
-              if (tabButtons) tabButtons.style.display = 'none';
-              allTabs.forEach(tab => tab.style.display = 'none');
-              calendarContainer.style.display = 'block';
-              calendarViewBtn.classList.add('active');
-              renderCalendar(currentMonthOffset);
-            }
-          }
-
-
-          function renderCalendar(monthOffset) {
-            currentMonthOffset = monthOffset;
-            const today = new Date();
-            const target = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
-            const year = target.getFullYear();
-            const month = target.getMonth();
-
-            const firstDay = new Date(year, month, 1);
-            const lastDay = new Date(year, month + 1, 0);
-            const daysInMonth = lastDay.getDate();
-
-            let html = '<div class="calendar-header">' +
-              '<button onclick="renderCalendar(' + (monthOffset - 1) + ')">&#10094;</button>' +
-              '<strong>' + target.toLocaleString("default", { month: "long" }) + ' ' + year + '</strong>' +
-              '<button onclick="renderCalendar(' + (monthOffset + 1) + ')">&#10095;</button>' +
-              '</div>';
-
-            html += '<div style="position: relative;">';
-            html += '<div class="calendar-grid calendar-grid-with-rows">';
-            const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            weekdays.forEach(function(d) {
-              html += '<div class="calendar-day-name">' + d + '</div>';
-            });
-
-            for (let i = 0; i < firstDay.getDay(); i++) {
-              html += '<div class="calendar-empty"></div>';
-            }
-
-            const upcoming = ${JSON.stringify(upcoming)};
-
-            for (let day = 1; day <= daysInMonth; day++) {
-              const currentDate = new Date(Date.UTC(year, month, day)).toISOString().split('T')[0];
-              const matches = upcoming.filter(b => b.checkOut === currentDate);
-
-              html += '<div class="calendar-cell">';
-              html += '<strong>' + day + '</strong>';
-              matches.forEach(b => {
-                html += '<div class="calendar-booking">' + b.checkOut + ' - ' + b.people + ' Guest' + (parseInt(b.people) > 1 ? 's' : '') + '</div>';
-              });
-              html += '</div>';
-            }
-
-            html += '</div></div>';
-            document.getElementById('calendarContainer').innerHTML = html;
-          }
-        </script>
-
-
-       
-
-
-      </body>
-    </html>
-  `);
+// route to serve the cleaner dashboard (new static page)
+app.get('/cleaner-dashboard', requireAnyUser, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'cleaner-dashboard.html'));
 });
 
 // --------------- Finance Tab (MVP) ---------------
