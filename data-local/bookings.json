@@ -178,7 +178,11 @@
     "people": "4",
     "timestamp": "2025-12-10T23:40:27.036Z",
     "seen": true,
-    "notes": "Test comment"
+    "notes": "Test comment",
+    "checklist": {
+      "step5": true,
+      "step4": true
+    }
   },
   {
     "guestName": "Test mark cleaned",
@@ -195,7 +199,9 @@
     "checkOut": "2025-12-06",
     "platform": "Booking.com",
     "people": "2",
-    "timestamp": "2025-12-11T00:40:34.366Z"
+    "timestamp": "2025-12-11T00:40:34.366Z",
+    "notes": "hej dette er en kommentar\nnummer 2 kommentar",
+    "cleaned": true
   },
   {
     "guestName": "Next guest",
@@ -203,7 +209,11 @@
     "checkOut": "2025-12-19",
     "platform": "Booking.com",
     "people": "2",
-    "timestamp": "2025-12-11T06:55:57.592Z"
+    "timestamp": "2025-12-11T06:55:57.592Z",
+    "checklist": {
+      "step4": true,
+      "step5": true
+    }
   },
   {
     "guestName": "Test after cancelled",

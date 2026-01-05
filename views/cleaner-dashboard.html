@@ -29,16 +29,26 @@
 
     <section class="cd-card queue">
       <div class="cd-section-head">
-        <div class="cd-tabs">
+        <div class="cd-tabs" id="tabWrap">
           <button class="cd-tab active" data-filter="all" id="tab-all">Upcoming</button>
           <button class="cd-tab" data-filter="cleaned" id="tab-cleaned">Already cleaned</button>
         </div>
         <div class="cd-filter">
-          <button class="cd-pill active" data-filter="all">Any</button>
-          <button class="cd-pill" data-filter="soon">Next 7 days</button>
+          <div class="cd-view-toggle">
+            <button class="cd-pill cd-view-btn active" data-view="list">List view</button>
+            <button class="cd-pill cd-view-btn" data-view="calendar">Calendar view</button>
+          </div>
         </div>
       </div>
       <div id="queueList" class="cd-list"></div>
+      <div id="calendarView" class="cd-calendar" style="display:none">
+        <div class="cd-calendar-head">
+          <button class="cd-btn ghost cd-cal-nav" data-dir="-1">◀</button>
+          <div id="calTitle" class="cd-calendar-title"></div>
+          <button class="cd-btn ghost cd-cal-nav" data-dir="1">▶</button>
+        </div>
+        <div class="cd-calendar-grid" id="calGrid"></div>
+      </div>
     </section>
 
   </div>
@@ -50,14 +60,20 @@
       bookings: [],
       filter: 'all',
       readOnly: false,
-      role: 'cleaner'
+      role: 'cleaner',
+      view: 'list',
+      calOffset: 0
     };
 
     const els = {
       queueList: document.getElementById('queueList'),
       roleChip: document.getElementById('roleChip'),
       toast: document.getElementById('toast'),
-      todayChip: document.getElementById('todayChip')
+      todayChip: document.getElementById('todayChip'),
+      calendarView: document.getElementById('calendarView'),
+      calGrid: document.getElementById('calGrid'),
+      calTitle: document.getElementById('calTitle'),
+      tabWrap: document.getElementById('tabWrap')
     };
 
     const formatDate = (d, opts = { weekday: 'short', month: 'short', day: 'numeric' }) => {
@@ -149,6 +165,11 @@
     }
 
     function renderQueue() {
+      if (state.view !== 'list') {
+        if (els.queueList) els.queueList.style.display = 'none';
+        return;
+      }
+      if (els.queueList) els.queueList.style.display = '';
       const cleanedItems = state.bookings.filter((b) => b.cleaned).sort((a, b) => b.checkOutDate - a.checkOutDate);
       let items = state.filter === 'cleaned'
         ? cleanedItems
@@ -164,6 +185,73 @@
       }
 
       els.queueList.innerHTML = items.map(renderBookingCard).join('');
+    }
+
+    function renderCalendar() {
+      if (state.view !== 'calendar') return;
+      const grid = els.calGrid;
+      if (!grid) return;
+      const base = new Date();
+      const target = new Date(base.getFullYear(), base.getMonth() + state.calOffset, 1);
+      const year = target.getFullYear();
+      const month = target.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      if (els.calTitle) {
+        els.calTitle.textContent = target.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+
+      grid.innerHTML = '';
+      const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      weekdays.forEach((w)=> {
+        const h = document.createElement('div');
+        h.className = 'cd-cal-weekday';
+        h.textContent = w;
+        grid.appendChild(h);
+      });
+
+      for (let i=0;i<firstDay;i++){
+        const empty = document.createElement('div');
+        empty.className = 'cd-cal-cell empty';
+        grid.appendChild(empty);
+      }
+
+      const tasks = state.bookings.filter((b)=>!b.cancelled);
+      const byDay = {};
+      tasks.forEach((b)=>{
+        const d = new Date(b.checkOut);
+        if (Number.isNaN(d.getTime())) return;
+        if (d.getFullYear() !== year || d.getMonth() !== month) return;
+        const key = d.getDate();
+        if (!byDay[key]) byDay[key] = [];
+        byDay[key].push(b);
+      });
+
+      for (let day=1; day<=daysInMonth; day++){
+        const cell = document.createElement('div');
+        cell.className = 'cd-cal-cell';
+        const label = document.createElement('div');
+        label.className = 'cd-cal-day';
+        label.textContent = day;
+        cell.appendChild(label);
+        const list = byDay[day] || [];
+        if (list.length) {
+          list.forEach((task)=>{
+            const taskRow = document.createElement('div');
+            taskRow.className = 'cd-cal-task' + (task.cleaned ? ' cleaned' : '');
+            const check = document.createElement('span');
+            check.className = 'cd-cal-check';
+            check.textContent = task.cleaned ? '✓' : '•';
+            const label = document.createElement('span');
+            label.textContent = 'Cleaning task';
+            taskRow.appendChild(check);
+            taskRow.appendChild(label);
+            cell.appendChild(taskRow);
+          });
+        }
+        grid.appendChild(cell);
+      }
     }
 
     function dateBadge(date) {
@@ -193,10 +281,7 @@
           ${dateBadge(b.checkOutDate)}
           <div>
             <div class="cd-card-head" style="justify-content: space-between;">
-              <div class="cd-guest">
-                ${escapeHTML(b.guestName || 'Guest')}
-                <span class="cd-platform">${escapeHTML(b.platform || 'Platform')}</span>
-              </div>
+              <div class="cd-guest">Cleaning task</div>
               <div class="cd-tag-row">
                 ${statusTag}
                 ${sameDay}
@@ -221,6 +306,8 @@
 
     function renderAll() {
       renderQueue();
+      renderCalendar();
+      if (els.tabWrap) els.tabWrap.style.display = state.view === 'list' ? '' : 'none';
       if (els.roleChip) {
         const roleLabel = state.role + (state.readOnly ? ' (read-only)' : '');
         els.roleChip.textContent = `Role: ${roleLabel}`;
@@ -321,18 +408,11 @@
           tab.classList.add('active');
           state.filter = tab.dataset.filter;
           renderQueue();
+          renderCalendar();
           return;
         }
 
-        const pill = e.target.closest('.cd-pill');
-        if (pill && pill.dataset.filter) {
-          document.querySelectorAll('.cd-pill').forEach((btn) => btn.classList.remove('active'));
-          pill.classList.add('active');
-          state.filter = pill.dataset.filter;
-          renderQueue();
-          return;
-        }
-
+        const pill = e.target.closest('.cd-filter-btn');
         const actionBtn = e.target.closest('[data-action]');
         if (actionBtn) {
           e.preventDefault();
@@ -340,10 +420,32 @@
           const id = actionBtn.dataset.id;
           if (action && id) handleAction(action, id);
         }
+
+        const viewBtn = e.target.closest('.cd-view-btn');
+        if (viewBtn && viewBtn.dataset.view) {
+          document.querySelectorAll('.cd-view-btn').forEach((btn)=>btn.classList.remove('active'));
+          viewBtn.classList.add('active');
+          state.view = viewBtn.dataset.view;
+          if (els.queueList) els.queueList.style.display = state.view === 'list' ? '' : 'none';
+          if (els.calendarView) els.calendarView.style.display = state.view === 'calendar' ? '' : 'none';
+          if (els.tabWrap) els.tabWrap.style.display = state.view === 'list' ? '' : 'none';
+          if (els.filterPills) els.filterPills.style.display = state.view === 'list' ? '' : 'none';
+          renderQueue();
+          renderCalendar();
+          return;
+        }
       });
 
       const refreshBtn = document.getElementById('refreshBtn');
       if (refreshBtn) refreshBtn.addEventListener('click', () => loadData());
+
+      document.querySelectorAll('.cd-cal-nav').forEach((btn)=>{
+        btn.addEventListener('click', ()=>{
+          const dir = Number(btn.dataset.dir || 0);
+          state.calOffset += dir;
+          renderCalendar();
+        });
+      });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
