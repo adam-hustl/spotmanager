@@ -74,21 +74,34 @@
           <div class="subtle">Uploaded documentation for current selected guest</div>
           <div class="guest-row">
             <div id="guestStatic">
-              <div class="row">
-                <span id="guestName" class="guest-name">—</span>
-                <a id="platformLink" class="link" href="#" target="_blank" rel="noopener">—</a>
-                <button id="editBookingBtn" class="icon-btn" type="button" title="Edit booking">
-                  <i data-lucide="pencil" class="icon-16"></i>
-                </button>
+              <div class="row gap-8 align-center wrap">
+                <input id="viewGuestName" class="view-field" type="text" disabled placeholder="Guest name" />
+                <select id="viewPlatform" class="view-field" disabled>
+                  <option value="">Platform</option>
+                  <option value="Airbnb">Airbnb</option>
+                  <option value="Booking.com">Booking.com</option>
+                  <option value="Agoda">Agoda</option>
+                  <option value="Direct">Direct</option>
+                </select>
+                <input id="viewCheckIn" class="view-field" type="text" disabled placeholder="Check-in" />
+                <input id="viewCheckOut" class="view-field" type="text" disabled placeholder="Check-out" />
+                <input id="viewPeople" class="view-field view-people" type="text" disabled placeholder="# guests" />
                 <button id="nextGuestBtn" class="next-guest-btn" type="button" style="display:none">Next guest</button>
               </div>
-              <div id="stayDates" class="dates">—</div>
-              <div class="row gap-8 align-center">
-                <div id="guestCount" class="dates guest-count">—</div>
-                <div id="cleanStatus" class="dates clean-status">—</div>
-              </div>
-              <div class="row gap-8" style="margin-top:6px;">
-                <button id="cancelBookingBtn" type="button" class="ghost-btn ghost-btn--danger">Cancel booking</button>
+              <div class="divider"></div>
+              <div class="guest-action-bar">
+                <button id="editBookingBtn" class="action-btn" type="button">
+                  <span class="action-icon" data-lucide="pencil"></span>
+                  <span class="action-label">Edit booking</span>
+                </button>
+                <button id="cancelBookingBtn" type="button" class="action-btn action-danger">
+                  <span class="action-icon" data-lucide="x"></span>
+                  <span class="action-label">Cancel / delete booking</span>
+                </button>
+                <button id="commentBookingBtn" type="button" class="action-btn">
+                  <span class="action-icon" data-lucide="message-circle"></span>
+                  <span class="action-label">Comment</span>
+                </button>
               </div>
             </div>
 
@@ -341,7 +354,14 @@
   <script>
   // ---------- THEME -----------
   const THEMES={emerald:{accent:"#10B981",accent50:"#ECFDF5",border:"#A7F3D0",bgFrom:"#D1FAE5",bgMid:"#ECFDF5",tint:"rgba(16,185,129,0.12)",ring:"rgba(16,185,129,0.35)",borderAlpha:"rgba(16,185,129,0.40)"}};
-  const steps=[{label:"Upload ID",icon:"upload"},{label:"Send endorsement email",icon:"mail"},{label:"payment receipt",icon:"stamp"},{ label: "Access card is paid",    icon: "credit-card" }, { label: "Access card picked up",  icon: "id-card" } ];
+  const steps=[
+    {label:"Upload ID",icon:"upload"},
+    {label:"Send endorsement email",icon:"mail"},
+    {label:"payment receipt",icon:"stamp"},
+    { label: "Access card is paid",    icon: "credit-card" },
+    { label: "Access card picked up",  icon: "id-card" },
+    { label: "Cleaning status", icon:"brush" }
+  ];
   let theme="emerald",grad=true,comp=new Array(steps.length).fill(false),cur=0;
   let currentBookingId = null; // id of the booking shown in the top header
   let currentBookingData = null; // full booking object currently selected
@@ -367,6 +387,8 @@
     // Find index of target in sorted list
     const idx = list.findIndex(b=>String(getBookingId(b)||'')===tid);
     if (idx === -1) return false;
+    // If this stay itself is marked cleaned, it's ready
+    if (isCleanFlag(target.cleaned)) return true;
     // Look only at the immediate prior stay (not the stay itself)
     for (let i=idx-1;i>=0;i--){
       const prev = list[i];
@@ -469,14 +491,15 @@ function updateCheckinCell(b){
       const isReceiptStep = i===2;
       const isPaidStep = i===3;
       const isPickedStep = i===4;
+      const isCleanStep = i===5;
       const isDone = !!comp[i];
-      const state = isDone ? ((isIdStep || isEndorseStep || isReceiptStep || isPaidStep || isPickedStep) ? 'view' : 'done') : (i===cur? 'current':'todo');
+      const state = isDone ? ((isIdStep || isEndorseStep || isReceiptStep || isPaidStep || isPickedStep || isCleanStep) ? 'view' : 'done') : (i===cur? 'current':'todo');
       const icon = isDone
-        ? (isIdStep ? 'eye' : isEndorseStep ? 'file-text' : isReceiptStep ? 'file-check-2' : isPaidStep ? 'badge-check' : isPickedStep ? 'hand-heart' : s.icon)
-        : s.icon;
+        ? (isIdStep ? 'eye' : isEndorseStep ? 'file-text' : isReceiptStep ? 'file-check-2' : isPaidStep ? 'badge-check' : isPickedStep ? 'hand-heart' : isCleanStep ? 'sparkles' : s.icon)
+        : (isCleanStep ? 'brush' : s.icon);
       const label = isDone
-        ? (isIdStep ? 'View ID' : isEndorseStep ? 'View move-in form' : isReceiptStep ? 'View payment receipt' : isPaidStep ? 'Access card is paid' : isPickedStep ? 'Access card picked up' : s.label)
-        : s.label;
+        ? (isIdStep ? 'View ID' : isEndorseStep ? 'View move-in form' : isReceiptStep ? 'View payment receipt' : isPaidStep ? 'Access card is paid' : isPickedStep ? 'Access card picked up' : isCleanStep ? 'Cleaned and ready' : s.label)
+        : (isCleanStep ? 'Not cleaned' : s.label);
       const btn=document.createElement('button');
       btn.className='step';
       btn.onclick=()=>{cur=i;renderProgress();stepsRow();};
@@ -940,7 +963,6 @@ if (spanStart !== null && spanEnd !== null) {
     const guest=document.getElementById('guest'); guest.style.borderColor=t.borderAlpha; guest.style.backgroundColor=t.tint;
     document.getElementById('calendar').style.borderColor=t.border;
     const net=document.getElementById('net'); net.style.borderColor=t.border; net.style.backgroundColor=t.accent50;
-    document.getElementById('platformLink').style.color=t.accent;
     document.getElementById('progress').style.backgroundColor=t.accent;
     donut(document.getElementById('d1'),72,t.accent);
     donut(document.getElementById('d2'),38,'#EF4444');
@@ -960,8 +982,9 @@ if (spanStart !== null && spanEnd !== null) {
     });
   }
   function renderProgress(){
-    const done=comp.filter(Boolean).length;
-    const v=Math.round((done/steps.length)*100);
+    const tracked = comp.slice(0,5); // exclude cleaning status from progress
+    const done=tracked.filter(Boolean).length;
+    const v=Math.round((done/tracked.length)*100);
     document.getElementById('progress').style.width=v+'%';
     updateCheckinBadges();
   }
@@ -1074,7 +1097,7 @@ function setIdStepState(hasId){
     refreshAllCheckins();
   }
 
-  function setAccessPickedState(isPicked, persist=true){
+function setAccessPickedState(isPicked, persist=true){
     comp[4] = !!isPicked;
     const circles=document.querySelectorAll('#steps .step-circle');
     const circle=circles[4];
@@ -1102,6 +1125,23 @@ function setIdStepState(hasId){
     }
     refreshAllCheckins();
   }
+  function setCleanStepState(isReady){
+    comp[5] = !!isReady;
+    const circles=document.querySelectorAll('#steps .step-circle');
+    const circle=circles[5];
+    if (circle) {
+      circle.classList.remove('done','view');
+      circle.innerHTML = `<i data-lucide="${isReady ? 'sparkles' : 'brush'}" class="icon-16"></i>`;
+      if (isReady) circle.classList.add('view');
+      const labelEl = circle.parentElement?.querySelector('.step-label');
+      if (labelEl) {
+        labelEl.textContent = isReady ? 'Cleaned and ready' : 'Not cleaned';
+      }
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+      lucide.createIcons();
+    }
+  }
 
   // ---------- MODAL helpers ----------
   function openModal(url){const root=document.getElementById('modalRoot');const frame=document.getElementById('modalFrame');frame.src=url;root.classList.add('show');}
@@ -1113,27 +1153,20 @@ function setIdStepState(hasId){
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
   function fillGuestHeader(b){
     if(!b) return;
-    document.getElementById('guestName').textContent=b.guestName||'Guest';
-    const a=document.getElementById('platformLink');
-    a.textContent=b.platform||'Platform';
-    a.href=b.platform==='Booking.com'?'https://booking.com':(b.platform==='Airbnb'?'https://airbnb.com':'#');
-    const stayEl = document.getElementById('stayDates');
-    if (stayEl) {
-      const fmt = (dStr) => {
-        const d = new Date(dStr);
-        return isNaN(d) ? dStr : d.toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'numeric'});
-      };
-      stayEl.textContent = `${fmt(b.checkIn)} to ${fmt(b.checkOut)}`;
-    }
-    const countEl = document.getElementById('guestCount');
-    if (countEl) {
-      const n = Number(b.people);
-      if (!isNaN(n) && n > 0) {
-        countEl.textContent = `${n} guest${n === 1 ? '' : 's'} checking in`;
-      } else {
-        countEl.textContent = '—';
-      }
-    }
+    const fmt = (dStr) => {
+      const d = new Date(dStr);
+      return isNaN(d) ? dStr : d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'. ');
+    };
+    const gn = document.getElementById('viewGuestName');
+    if (gn) gn.value = b.guestName || '';
+    const plat = document.getElementById('viewPlatform');
+    if (plat) plat.value = b.platform || '';
+    const ci = document.getElementById('viewCheckIn');
+    if (ci) ci.value = b.checkIn ? fmt(b.checkIn) : '';
+    const co = document.getElementById('viewCheckOut');
+    if (co) co.value = b.checkOut ? fmt(b.checkOut) : '';
+    const ppl = document.getElementById('viewPeople');
+    if (ppl) ppl.value = b.people || '';
     const cleanEl = document.getElementById('cleanStatus');
     if (cleanEl) {
       // Show readiness based on the current booking: itself cleaned, or immediate prior stay cleaned
@@ -1318,6 +1351,9 @@ async function uploadReceiptDirect(bookingId, file){
     } else if (current.checklist && current.checklist.step5 === true) {
       setAccessPickedState(true, false);
     }
+    // Cleaning readiness (view-only)
+    const isCleanReady = computeReadyForBooking(current, latestBookings);
+    setCleanStepState(isCleanReady);
     currentBookingData = current;
     updateCheckinCell(currentBookingData);
 
@@ -1446,7 +1482,8 @@ function openPicker(inputEl) {
       },
 
       ()=>{ setAccessPaidState(!comp[3]); saveChecklist('step4', !comp[3]); },
-      ()=>{ setAccessPickedState(!comp[4]); saveChecklist('step5', !comp[4]); }
+      ()=>{ setAccessPickedState(!comp[4]); saveChecklist('step5', !comp[4]); },
+      ()=>{} // cleaning status (view-only)
 
 
 
@@ -1534,6 +1571,8 @@ try {
     if (newBtn) newBtn.addEventListener('click', (e)=>{ e.preventDefault(); openCommentSidebar(); });
     const editBtn = document.getElementById('editBookingCommentBtn');
     if (editBtn) editBtn.addEventListener('click', (e)=>{ e.preventDefault(); openCommentSidebar(currentBookingData); });
+    const topCommentBtn = document.getElementById('commentBookingBtn');
+    if (topCommentBtn) topCommentBtn.addEventListener('click', (e)=>{ e.preventDefault(); openCommentSidebar(currentBookingData); });
 
     const saveBtn = document.getElementById('commentSaveBtn');
     const input = document.getElementById('commentInput');

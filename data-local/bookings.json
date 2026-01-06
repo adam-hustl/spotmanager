@@ -171,18 +171,18 @@
     "cancelled": true
   },
   {
-    "guestName": "Test today date",
+    "guestName": "Test today date ",
     "checkIn": "2025-12-09",
     "checkOut": "2025-12-11",
     "platform": "Booking.com",
     "people": "4",
     "timestamp": "2025-12-10T23:40:27.036Z",
     "seen": true,
-    "notes": "Test comment",
     "checklist": {
       "step5": true,
       "step4": true
-    }
+    },
+    "cleaned": true
   },
   {
     "guestName": "Test mark cleaned",
@@ -201,7 +201,11 @@
     "people": "2",
     "timestamp": "2025-12-11T00:40:34.366Z",
     "notes": "hej dette er en kommentar\nnummer 2 kommentar",
-    "cleaned": true
+    "cleaned": true,
+    "checklist": {
+      "step5": true,
+      "step4": true
+    }
   },
   {
     "guestName": "Next guest",
@@ -223,5 +227,25 @@
     "people": "2",
     "timestamp": "2025-12-11T07:14:59.466Z",
     "cancelled": true
+  },
+  {
+    "guestName": "Test new line ",
+    "checkIn": "2026-01-09",
+    "checkOut": "2026-01-13",
+    "platform": "Booking.com",
+    "people": "3",
+    "timestamp": "2026-01-05T23:49:14.190Z",
+    "checklist": {
+      "step5": true,
+      "step4": true
+    }
+  },
+  {
+    "guestName": "test with 5",
+    "checkIn": "2026-01-16",
+    "checkOut": "2026-01-23",
+    "platform": "Booking.com",
+    "people": "5",
+    "timestamp": "2026-01-06T00:05:25.876Z"
   }
 ]

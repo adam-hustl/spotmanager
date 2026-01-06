@@ -339,6 +339,42 @@ body.page {
 .clean-status { font-size: .875rem; padding: 0.15rem 0.65rem; border-radius: 999px; border: 1px solid transparent; }
 .clean-yes { color: #047857; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); }
 .clean-no { color: #b91c1c; background: #fff1f2; border-color: rgba(239,68,68,0.35); }
+.view-field {
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.35);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 140px;
+  font-size: 0.95rem;
+  color: #111827;
+}
+.view-field:disabled { color: #6b7280; }
+.view-people { max-width: 90px; }
+.divider { height: 1px; width: 100%; background: rgba(16,185,129,0.25); margin: 10px 0; }
+.guest-action-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  font-weight: 700;
+  cursor: pointer;
+}
+.action-btn:hover { text-decoration: underline; }
+.action-icon { display: inline-flex; }
+.action-danger {
+  color: #b91c1c;
+}
+.action-danger:hover { text-decoration: underline; }
 
 /* Calendar */
 .calendar-grid {
