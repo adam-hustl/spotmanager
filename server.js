@@ -1,7 +1,20 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const app = express();
 const fs = require('fs');
+
+const { Pool } = require('pg');
+
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      // Neon requires SSL; this makes pg happy even in serverless envs
+      ssl: { rejectUnauthorized: false },
+    })
+  : null;
+
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data-local');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const finance = require('./finance');
@@ -1177,6 +1190,25 @@ app.get('/about', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'about.html'));
 });
 
+
+
+// DB ping (no auth) - verifies DATABASE_URL works
+app.get('/api/db-ping', async (req, res) => {
+  if (!process.env.DATABASE_URL) {
+    return res.status(500).json({ ok: false, error: 'DATABASE_URL not set' });
+  }
+  if (!pool) {
+    return res.status(500).json({ ok: false, error: 'DB pool not initialized' });
+  }
+
+  try {
+    const result = await pool.query('SELECT 1 AS ok');
+    return res.json({ ok: true, db: 'connected', result: result.rows[0] });
+  } catch (e) {
+    console.error('DB ping failed:', e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 
 
