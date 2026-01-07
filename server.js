@@ -132,6 +132,21 @@ app.post('/api/comment/:id', requireAdmin, (req, res) => {
 const IS_PROD = process.env.APP_ENV === 'production';
 
 
+const bcrypt = require('bcrypt');
+
+// Fetch user from DB by username
+async function getUserByUsername(username) {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    'SELECT id, username, password_hash, role FROM users WHERE username = $1 LIMIT 1',
+    [username]
+  );
+  return rows[0] || null;
+}
+
+
+
+
 // ---- Per-environment credentials (hardcoded) ----
 // ✅ Replace the sample values with your real ones.
 const ADMIN_USER = IS_PROD ? 'admin' : 'admin';
@@ -1085,14 +1100,66 @@ function formatDateForMessage(date) {
 }
 
 
+// Create a user (TEMP) - admin only
+app.post('/api/users/create', requireAdmin, async (req, res) => {
+  const { username, password, role } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({ ok: false, error: 'username and password required' });
+  }
+
+  const safeRole = role || 'admin';
+
+  try {
+    const hash = await bcrypt.hash(password, 12);
+
+    await pool.query(
+      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+      [username, hash, safeRole]
+    );
+
+    return res.json({ ok: true });
+  } catch (e) {
+    // Most common error: duplicate username
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 
 
 
 
 // Handle login
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
+
   const { username, password } = req.body;
+
+
+
+
+  // 1) DB login first
+  try {
+    const user = await getUserByUsername(username);
+    if (user) {
+      const ok = await bcrypt.compare(password, user.password_hash);
+      if (ok) {
+        req.session.loggedIn = true;
+        req.session.role = user.role;
+        // Redirect based on role
+        if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
+        return res.redirect('/dashboard');
+      }
+      return res.redirect('/?error=1');
+    }
+  } catch (e) {
+    console.error('DB login failed:', e.message);
+    // If DB is down, we fall back to the old env/hardcoded login below.
+  }
+
+
+
+
+
 
   // Admin (env-specific)
   if (username === ADMIN_USER && password === ADMIN_PASS) {
