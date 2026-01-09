@@ -134,12 +134,12 @@ const IS_PROD = process.env.APP_ENV === 'production';
 
 const bcrypt = require('bcrypt');
 
-// Fetch user from DB by username
-async function getUserByUsername(username) {
+// Fetch user from DB by phone
+async function getUserByPhone(phone) {
   if (!pool) return null;
   const { rows } = await pool.query(
-    'SELECT id, username, password_hash, role FROM users WHERE username = $1 LIMIT 1',
-    [username]
+    'SELECT id, phone, password_hash, role FROM users WHERE phone = $1 LIMIT 1',
+    [phone]
   );
   return rows[0] || null;
 }
@@ -1107,14 +1107,15 @@ function formatDateForMessage(date) {
 // Handle login
 app.post('/login', async (req, res) => {
 
-  const { username, password } = req.body;
+  const { phone, username, password } = req.body;
+  const loginPhone = phone || username; // keep backward compat with old field name
 
 
 
 
   // 1) DB login first
   try {
-    const user = await getUserByUsername(username);
+    const user = await getUserByPhone(loginPhone);
     if (user) {
       const ok = await bcrypt.compare(password, user.password_hash);
       if (ok) {
@@ -1171,6 +1172,32 @@ app.get('/logout', (req, res) => {
     }
     res.redirect('/'); // Redirect to login after logout
   });
+});
+
+// Signup (admin role)
+app.get('/signup', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'signup.html'));
+});
+
+app.post('/signup', async (req, res) => {
+  const { fullName, phone, email, password } = req.body || {};
+  if (!pool) {
+    console.error('Signup attempted but no database configured.');
+    return res.redirect('/signup?error=1');
+  }
+  try {
+    const hash = await bcrypt.hash(password || '', 10);
+    await pool.query(
+      'INSERT INTO users (full_name, phone, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)',
+      [fullName || '', phone || '', email || '', hash, 'admin']
+    );
+    req.session.loggedIn = true;
+    req.session.role = 'admin';
+    return res.redirect('/dashboard');
+  } catch (e) {
+    console.error('Signup failed:', e.message);
+    return res.redirect('/signup?error=1');
+  }
 });
 
 function isAuthenticated(req, res, next) {
