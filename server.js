@@ -1100,31 +1100,6 @@ function formatDateForMessage(date) {
 }
 
 
-// Create a user (TEMP) - admin only
-app.post('/api/users/create', requireAdmin, async (req, res) => {
-  const { username, password, role } = req.body || {};
-
-  if (!username || !password) {
-    return res.status(400).json({ ok: false, error: 'username and password required' });
-  }
-
-  const safeRole = role || 'admin';
-
-  try {
-    const hash = await bcrypt.hash(password, 12);
-
-    await pool.query(
-      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-      [username, hash, safeRole]
-    );
-
-    return res.json({ ok: true });
-  } catch (e) {
-    // Most common error: duplicate username
-    return res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
 
 
 
