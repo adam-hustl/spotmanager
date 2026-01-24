@@ -1782,102 +1782,133 @@ res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
 
 
 // === Lightweight API for wiring UI later ===
-app.get('/api/bookings', requireAnyUser, (req, res) => {
-try {
-  if (usePgBookings(req)) {
-    pgFetchBookings(req.session.workspaceId)
-      .then((rows)=>res.json(rows))
-      .catch((err)=>{
-        console.error('GET /api/bookings pg failed:', err);
-        res.status(500).json({ error: 'Failed to read bookings' });
-      });
-    return;
-  }
-
-  const data =
-    typeof readBookingsLocal === 'function'
-      ? readBookingsLocal()
-      : JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
-
-  // On local/staging, count uploaded ID files and keep checklist in sync
-  const isLocal = !IS_PROD || !hasSftpCreds();
-  let idCounts = {};
-  let receiptCounts = {};
-
-  if (isLocal) {
-    const extractIdFromFilename = (fname) => {
-      // filename shapes:
-      //   booking-<bookingId>-<timestamp>-<origName>     (ID uploads)
-      //   booking-<bookingId>-stamp-<timestamp>.<ext>   (stamp uploads) -> ignore
-      if (!fname.startsWith('booking-')) return null;
-      if (fname.includes('-stamp-')) return null; // don't count stamps as IDs
-      const m = fname.match(/^booking-(.+?)-\d{5,}-/); // non-greedy up to the numeric timestamp
-      return m ? m[1] : null;
-    };
-
-    try {
-      const files = fs.readdirSync(UPLOADS_DIR);
-      files.forEach((fname) => {
-        const id = extractIdFromFilename(fname);
-        if (id) {
-          idCounts[id] = (idCounts[id] || 0) + 1;
-        }
-        if (fname.startsWith('booking-') && fname.includes('-stamp-')) {
-          const rest = fname.slice('booking-'.length);
-          const mid = rest.split('-stamp-')[0];
-          receiptCounts[mid] = (receiptCounts[mid] || 0) + 1;
-        }
-      });
-    } catch (e) {
-      console.error('Failed to read uploads dir for ID counts', e);
+app.get('/api/bookings', requireAnyUser, async (req, res) => {
+  try {
+    const usePg = usePgBookings(req);
+    if (usePg) {
+      console.log('Bookings backend: postgres');
+      if (!req.session.workspaceId) {
+        console.error('GET /api/bookings: workspaceId missing in session');
+        return res.status(400).json({ error: 'workspace not set' });
+      }
+      const { rows } = await pool.query(
+        `SELECT id, guest_name, check_in, check_out, platform, people, notes,
+                step1, step2, step3, step4, step5, email_sent, cleaned, cancelled, created_at, updated_at
+         FROM bookings
+         WHERE workspace_id = $1
+         ORDER BY check_in ASC`,
+        [req.session.workspaceId]
+      );
+      const mapped = rows.map((r) => ({
+        id: r.id,
+        timestamp: r.id,
+        guestName: r.guest_name,
+        checkIn: r.check_in,
+        checkOut: r.check_out,
+        platform: r.platform,
+        people: r.people,
+        notes: r.notes,
+        checklist: {
+          step1: r.step1,
+          step2: r.step2,
+          step3: r.step3,
+          step4: r.step4,
+          step5: r.step5,
+        },
+        emailSent: r.email_sent,
+        cleaned: r.cleaned,
+        cancelled: r.cancelled,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+      return res.json(mapped);
     }
-  }
 
-  let changed = false;
-  const enriched = dedupeBookings(data).map((b) => {
-    const id = String(b.timestamp || b.id || '');
-    const count = isLocal ? (idCounts[id] || 0) : undefined;
-    const receipts = isLocal ? (receiptCounts[id] || 0) : undefined;
+    console.log('Bookings backend: localjson');
+    const data =
+      typeof readBookingsLocal === 'function'
+        ? readBookingsLocal()
+        : JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+
+    // On local/staging, count uploaded ID files and keep checklist in sync
+    const isLocal = !IS_PROD || !hasSftpCreds();
+    let idCounts = {};
+    let receiptCounts = {};
 
     if (isLocal) {
-      b.idFileCount = count;
-      b.receiptFileCount = receipts;
+      const extractIdFromFilename = (fname) => {
+        // filename shapes:
+        //   booking-<bookingId>-<timestamp>-<origName>     (ID uploads)
+        //   booking-<bookingId>-stamp-<timestamp>.<ext>   (stamp uploads) -> ignore
+        if (!fname.startsWith('booking-')) return null;
+        if (fname.includes('-stamp-')) return null; // don't count stamps as IDs
+        const m = fname.match(/^booking-(.+?)-\d{5,}-/); // non-greedy up to the numeric timestamp
+        return m ? m[1] : null;
+      };
 
-      if (count > 0) {
-        b.checklist = b.checklist || {};
-        if (b.checklist.step1 !== true) {
-          b.checklist.step1 = true;
-          changed = true;
-        }
+      try {
+        const files = fs.readdirSync(UPLOADS_DIR);
+        files.forEach((fname) => {
+          const id = extractIdFromFilename(fname);
+          if (id) {
+            idCounts[id] = (idCounts[id] || 0) + 1;
+          }
+          if (fname.startsWith('booking-') && fname.includes('-stamp-')) {
+            const rest = fname.slice('booking-'.length);
+            const mid = rest.split('-stamp-')[0];
+            receiptCounts[mid] = (receiptCounts[mid] || 0) + 1;
+          }
+        });
+      } catch (e) {
+        console.error('Failed to read uploads dir for ID counts', e);
       }
-      if (typeof receipts === 'number') {
-        if (receipts > 0) {
+    }
+
+    let changed = false;
+    const enriched = dedupeBookings(data).map((b) => {
+      const id = String(b.timestamp || b.id || '');
+      const count = isLocal ? (idCounts[id] || 0) : undefined;
+      const receipts = isLocal ? (receiptCounts[id] || 0) : undefined;
+
+      if (isLocal) {
+        b.idFileCount = count;
+        b.receiptFileCount = receipts;
+
+        if (count > 0) {
           b.checklist = b.checklist || {};
-          if (b.checklist.step3 !== true) {
-            b.checklist.step3 = true;
+          if (b.checklist.step1 !== true) {
+            b.checklist.step1 = true;
             changed = true;
           }
         }
+        if (typeof receipts === 'number') {
+          if (receipts > 0) {
+            b.checklist = b.checklist || {};
+            if (b.checklist.step3 !== true) {
+              b.checklist.step3 = true;
+              changed = true;
+            }
+          }
+        }
+        // default missing fields to false for consistency
+        b.checklist = b.checklist || {};
+        if (typeof b.checklist.step4 !== 'boolean') b.checklist.step4 = false;
+        if (typeof b.checklist.step5 !== 'boolean') b.checklist.step5 = false;
       }
-      // default missing fields to false for consistency
-      b.checklist = b.checklist || {};
-      if (typeof b.checklist.step4 !== 'boolean') b.checklist.step4 = false;
-      if (typeof b.checklist.step5 !== 'boolean') b.checklist.step5 = false;
-    }
-    return b;
-  });
+      return b;
+    });
 
-  if (changed && typeof writeBookingsLocal === 'function') {
-    writeBookingsLocal(data);
-    if (typeof pushBookingsToGist === 'function') {
-      pushBookingsToGist(data).catch(() => {});
+    if (changed && typeof writeBookingsLocal === 'function') {
+      writeBookingsLocal(data);
+      if (typeof pushBookingsToGist === 'function') {
+        pushBookingsToGist(data).catch(() => {});
+      }
     }
-  }
 
-  res.json(enriched);
-} catch (e) {
-console.error('GET /api/bookings failed:', e);
-  res.status(500).json({ error: 'Failed to read bookings' });
+    res.json(enriched);
+  } catch (e) {
+    console.error('GET /api/bookings failed:', e);
+    res.status(500).json({ error: 'Failed to read bookings' });
   }
 });
 
