@@ -3084,10 +3084,11 @@ function cleanerActionResponse(req, res) {
 // Mark a booking as seen by cleaner
 app.post('/mark-seen', forbidViewer, (req, res) => {
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
-  const { timestamp } = req.body || {};
+  const { timestamp, id } = req.body || {};
+  const key = String(timestamp || id || '');
 
   const updated = bookingsData.map((b) =>
-    b.timestamp === timestamp
+    String(b.timestamp || b.id || '') === key
       ? {
           ...b,
           seen: true
@@ -3103,10 +3104,12 @@ app.post('/mark-seen', forbidViewer, (req, res) => {
 
 // Mark a stay as cleaned
 app.post('/mark-cleaned', forbidViewer, (req, res) => {
-  const { timestamp } = req.body || {};
+  const { timestamp, id } = req.body || {};
+  const bookingKey = String(timestamp || id || '');
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
-    pgSetCleaned(req.session.workspaceId, timestamp, true)
+    if (!req.session.workspaceId) return res.status(400).send('workspace not set');
+    pgSetCleaned(req.session.workspaceId, bookingKey, true)
       .then(()=> cleanerActionResponse(req, res))
       .catch((e)=>{ console.error('mark-cleaned pg failed', e); res.status(500).send('Error marking cleaned');});
     return;
@@ -3114,7 +3117,7 @@ app.post('/mark-cleaned', forbidViewer, (req, res) => {
 
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const updated = bookingsData.map((b) =>
-    b.timestamp === timestamp
+    String(b.timestamp || b.id || '') === bookingKey
       ? {
           ...b,
           cleaned: true
@@ -3130,10 +3133,12 @@ app.post('/mark-cleaned', forbidViewer, (req, res) => {
 
 // Undo a cleaned mark
 app.post('/unmark-cleaned', forbidViewer, (req, res) => {
-  const { timestamp } = req.body || {};
+  const { timestamp, id } = req.body || {};
+  const bookingKey = String(timestamp || id || '');
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
-    pgSetCleaned(req.session.workspaceId, timestamp, false)
+    if (!req.session.workspaceId) return res.status(400).send('workspace not set');
+    pgSetCleaned(req.session.workspaceId, bookingKey, false)
       .then(()=> cleanerActionResponse(req, res))
       .catch((e)=>{ console.error('unmark-cleaned pg failed', e); res.status(500).send('Error unmarking cleaned');});
     return;
@@ -3141,7 +3146,7 @@ app.post('/unmark-cleaned', forbidViewer, (req, res) => {
 
   const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const updated = bookingsData.map((b) => {
-    if (b.timestamp === timestamp) {
+    if (String(b.timestamp || b.id || '') === bookingKey) {
       const copy = { ...b };
       delete copy.cleaned;
       return copy;
