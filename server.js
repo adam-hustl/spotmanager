@@ -2846,6 +2846,15 @@ app.get('/edit-booking/:id', (req, res) => {
 app.post('/edit-booking/:id', requireAdmin, (req, res) => {
 
   const bookingId = req.params.id;
+  const backend = usePgBookings(req) ? 'postgres' : 'localjson';
+  if (!IS_PROD) {
+    console.log('[edit-booking] backend=%s id=%s bodyKeys=%s workspace=%s',
+      backend,
+      bookingId,
+      Object.keys(req.body || {}).join(','),
+      req.session.workspaceId || null
+    );
+  }
 
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
