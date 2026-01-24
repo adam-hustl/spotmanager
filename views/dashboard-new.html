@@ -1365,12 +1365,18 @@ async function uploadReceiptDirect(bookingId, file){
     const editCancel = document.getElementById('cancelEditBooking');
 
     if (editBtn && editForm) {
+      const toInputDate = (val) => {
+        if (!val) return '';
+        const d = new Date(val);
+        if (isNaN(d)) return val;
+        return d.toISOString().slice(0, 10); // yyyy-mm-dd for date inputs
+      };
       const populateEditForm = (b) => {
         if (!b) return;
         editForm.elements.guestName.value = b.guestName || '';
         editForm.elements.platform.value = b.platform || '';
-        editForm.elements.checkIn.value = b.checkIn || '';
-        editForm.elements.checkOut.value = b.checkOut || '';
+        editForm.elements.checkIn.value = toInputDate(b.checkIn);
+        editForm.elements.checkOut.value = toInputDate(b.checkOut);
         editForm.elements.people.value = b.people || '';
       };
 
