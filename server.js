@@ -2850,13 +2850,15 @@ app.post('/edit-booking/:id', requireAdmin, (req, res) => {
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
     const { guestName, platform, checkIn, checkOut, people, notes } = req.body || {};
+    const bid = req.params.id;
+    if (!bid) return res.status(400).send('Missing booking id');
     pool.query(
       `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, updated_at=NOW()
        WHERE id=$7 AND workspace_id=$8
        RETURNING id`,
-      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, bookingId, req.session.workspaceId]
+      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, bid, req.session.workspaceId]
     ).then(({ rowCount })=>{
-      if (rowCount === 0) return res.status(404).send('Booking not found');
+      if (rowCount !== 1) return res.status(404).send('Booking not found');
       return res.sendStatus(200);
     }).catch((e)=>{
       console.error('Edit booking pg failed', e);
