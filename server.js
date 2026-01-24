@@ -1585,8 +1585,13 @@ app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) return res.send('Error reading bookings file.');
     const bookings = JSON.parse(data);
-    const booking = bookings.find(b => b.timestamp === bookingId);
+    const booking = bookings.find(
+      b =>
+        String(b.timestamp) === String(bookingId) ||
+        (b.id && String(b.id) === String(bookingId))
+    );
     if (!booking) return res.send('Booking not found.');
+    const uploadTarget = booking.id || booking.timestamp;
 
     res.send(`
       <html>
@@ -1600,7 +1605,7 @@ app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
             <h1>Receipt for access card for ${booking.guestName}</h1>
             <p>Upload the payment receipt for the access card here.</p>
 
-            <form id="stampForm" class="modal-form" enctype="multipart/form-data" method="POST" action="/upload-stamp/${booking.timestamp}">
+            <form id="stampForm" class="modal-form" enctype="multipart/form-data" method="POST" action="/upload-stamp/${uploadTarget}">
               <input type="file" name="stamp" accept="image/*" capture="environment" required />
               <br><br>
               <button type="submit">Upload & Send</button>
@@ -1621,12 +1626,26 @@ app.get('/upload-stamp/:id', requireAdmin, (req, res) => {
 
 app.post('/upload-stamp/:id', requireAdmin, uploadStamp.single('stamp'), async (req, res) => {
   const bookingId = req.params.id;
+  const noModal = req.headers['x-no-modal'] === '1';
 
   try {
-    const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
-    const booking = bookings.find(b => b.timestamp === bookingId);
-    if (!booking) return res.send('Booking not found.');
-    if (!req.file) return res.send('No image uploaded.');
+    let booking = null;
+    let bookingsLocal = null;
+    if (usePgBookings(req)) {
+      if (!req.session.workspaceId) {
+        return res.status(400).json({ ok: false, message: 'workspace not set' });
+      }
+      booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+    } else {
+      bookingsLocal = readBookingsLocal();
+      booking = bookingsLocal.find(
+        b =>
+          String(b.timestamp) === String(bookingId) ||
+          (b.id && String(b.id) === String(bookingId))
+      );
+    }
+    if (!booking) return res.status(404).send('Booking not found.');
+    if (!req.file) return res.status(400).send('No image uploaded.');
 
 
 
@@ -1659,26 +1678,33 @@ const mailOptions = {
   subject: `reciept of payment for access card for ${booking.guestName}`,
   text: `Hello, this is the receipt for payment of the access card of ${booking.guestName} that will stay in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
   attachments: [
-    { filename: req.file.filename, path: path.join(__dirname, 'uploads', req.file.filename) }
+    { filename: req.file.filename, path: path.join(UPLOADS_DIR, req.file.filename) }
   ]
 };
 
     await safeSendMail(mailOptions);
 
     // Mark checklist step3 as complete and persist
-    booking.checklist = booking.checklist || {};
-    booking.checklist.step3 = true;
-    writeBookingsLocal(bookings);
-    pushBookingsToGist(bookings).catch(() => {});
+    if (usePgBookings(req)) {
+      await pgUpdateChecklist(req.session.workspaceId, bookingId, 'step3', true);
+    } else if (bookingsLocal) {
+      const idx = bookingsLocal.findIndex(
+        b =>
+          String(b.timestamp) === String(bookingId) ||
+          (b.id && String(b.id) === String(bookingId))
+      );
+      if (idx !== -1) {
+        bookingsLocal[idx].checklist = bookingsLocal[idx].checklist || {};
+        bookingsLocal[idx].checklist.step3 = true;
+        writeBookingsLocal(bookingsLocal);
+        pushBookingsToGist(bookingsLocal).catch(() => {});
+      }
+    }
 
-    // If the client is uploading without a modal, return a simple 200.
-if (req.headers['x-no-modal'] === '1') {
-  booking.checklist = booking.checklist || {};
-  booking.checklist.step3 = true; // payment receipt sent
-  writeBookingsLocal(bookings);
-  pushBookingsToGist(bookings).catch(() => {});
-  return res.status(200).send('OK');
-}
+    // If the client is uploading without a modal, return a lightweight JSON response after sending
+    if (noModal) {
+      return res.status(200).json({ ok: true });
+    }
 
 
 
@@ -1691,7 +1717,7 @@ if (req.headers['x-no-modal'] === '1') {
         if (window.parent) {
           window.parent.closeModal();
           window.parent.postMessage(
-            { type: 'receiptUploaded', bookingId: ${JSON.stringify(bookingId)}, count: ${matching?.length || 1} },
+            { type: 'receiptUploaded', bookingId: ${JSON.stringify(bookingId)}, count: 1 },
             '*'
           );
         } else {
