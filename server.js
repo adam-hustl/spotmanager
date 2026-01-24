@@ -91,8 +91,9 @@ app.post('/api/checklist/:id', requireAdmin, (req, res) => {
   }
 
   if (usePgBookings(req)) {
+    console.log('Bookings write backend: postgres');
     pgUpdateChecklist(req.session.workspaceId, bookingId, field, value === 'true' || value === true)
-      .then((ok)=> ok ? res.json({ ok:true }) : res.status(404).json({ error:'Booking not found' }))
+      .then((bk)=> bk ? res.json(bk) : res.status(404).json({ error:'Booking not found' }))
       .catch((e)=>{ console.error('Failed to update checklist (pg)', e); res.status(500).json({ error:'Failed to update checklist' });});
     return;
   }
@@ -122,8 +123,9 @@ app.post('/api/comment/:id', requireAdmin, (req, res) => {
   const { notes } = req.body || {};
   try {
     if (usePgBookings(req)) {
+      console.log('Bookings write backend: postgres');
       pgUpdateNotes(req.session.workspaceId, bookingId, notes || '')
-        .then((ok)=> ok ? res.json({ ok:true }) : res.status(404).json({ error:'Booking not found' }))
+        .then((bk)=> bk ? res.json(bk) : res.status(404).json({ error:'Booking not found' }))
         .catch((e)=>{ console.error('Failed to save comment (pg)', e); res.status(500).json({ error:'Failed to save comment' });});
       return;
     }
@@ -1295,42 +1297,71 @@ async function pgFetchBookings(workspaceId) {
   }));
 }
 
+function mapBookingRow(r){
+  if (!r) return null;
+  return {
+    id: r.id,
+    timestamp: r.id,
+    guestName: r.guest_name,
+    checkIn: r.check_in,
+    checkOut: r.check_out,
+    platform: r.platform,
+    people: r.people,
+    notes: r.notes,
+    checklist: {
+      step1: r.step1,
+      step2: r.step2,
+      step3: r.step3,
+      step4: r.step4,
+      step5: r.step5,
+    },
+    emailSent: r.email_sent,
+    cleaned: r.cleaned,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
   const allowed = new Set(['step1', 'step2', 'step3', 'step4', 'step5']);
   if (!allowed.has(field)) return false;
-  const { rowCount } = await pool.query(
+  const { rows } = await pool.query(
     `UPDATE bookings SET ${field} = $1, updated_at = NOW()
-     WHERE workspace_id = $2 AND id = $3`,
+     WHERE workspace_id = $2 AND id = $3
+     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [val === true || val === 'true', workspaceId, bookingId]
   );
-  return rowCount > 0;
+  return mapBookingRow(rows[0]) || false;
 }
 
 async function pgUpdateNotes(workspaceId, bookingId, notes) {
-  const { rowCount } = await pool.query(
+  const { rows } = await pool.query(
     `UPDATE bookings SET notes = $1, updated_at = NOW()
-     WHERE workspace_id = $2 AND id = $3`,
+     WHERE workspace_id = $2 AND id = $3
+     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [notes || '', workspaceId, bookingId]
   );
-  return rowCount > 0;
+  return mapBookingRow(rows[0]) || false;
 }
 
 async function pgSetCleaned(workspaceId, bookingId, isCleaned) {
-  const { rowCount } = await pool.query(
+  const { rows } = await pool.query(
     `UPDATE bookings SET cleaned = $1, updated_at = NOW()
-     WHERE workspace_id = $2 AND id = $3`,
+     WHERE workspace_id = $2 AND id = $3
+     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [isCleaned, workspaceId, bookingId]
   );
-  return rowCount > 0;
+  return mapBookingRow(rows[0]) || false;
 }
 
 async function pgSetCancelled(workspaceId, bookingId, isCancelled) {
-  const { rowCount } = await pool.query(
+  const { rows } = await pool.query(
     `UPDATE bookings SET cancelled = $1, updated_at = NOW()
-     WHERE workspace_id = $2 AND id = $3`,
+     WHERE workspace_id = $2 AND id = $3
+     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [isCancelled, workspaceId, bookingId]
   );
-  return rowCount > 0;
+  return mapBookingRow(rows[0]) || false;
 }
 
 
@@ -2328,6 +2359,7 @@ app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
 
   try {
     if (usePgBookings(req)) {
+      console.log('Bookings write backend: postgres');
       const ok = await pgSetCancelled(req.session.workspaceId, req.params.id, true);
       if (!ok) return res.status(404).send('Booking not found');
       return res.sendStatus(200);
@@ -2376,6 +2408,7 @@ app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
 app.post('/uncancel-booking/:id', requireAdmin, async (req, res) => {
   try {
     if (usePgBookings(req)) {
+      console.log('Bookings write backend: postgres');
       const ok = await pgSetCancelled(req.session.workspaceId, req.params.id, false);
       if (!ok) return res.status(404).send('Booking not found');
       return res.redirect('/cancelled-bookings');
@@ -2861,6 +2894,7 @@ app.post('/mark-seen', forbidViewer, (req, res) => {
 app.post('/mark-cleaned', forbidViewer, (req, res) => {
   const { timestamp } = req.body || {};
   if (usePgBookings(req)) {
+    console.log('Bookings write backend: postgres');
     pgSetCleaned(req.session.workspaceId, timestamp, true)
       .then(()=> cleanerActionResponse(req, res))
       .catch((e)=>{ console.error('mark-cleaned pg failed', e); res.status(500).send('Error marking cleaned');});
@@ -2887,6 +2921,7 @@ app.post('/mark-cleaned', forbidViewer, (req, res) => {
 app.post('/unmark-cleaned', forbidViewer, (req, res) => {
   const { timestamp } = req.body || {};
   if (usePgBookings(req)) {
+    console.log('Bookings write backend: postgres');
     pgSetCleaned(req.session.workspaceId, timestamp, false)
       .then(()=> cleanerActionResponse(req, res))
       .catch((e)=>{ console.error('unmark-cleaned pg failed', e); res.status(500).send('Error unmarking cleaned');});
