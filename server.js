@@ -2683,7 +2683,7 @@ app.get('/send-email/:id', requireAdmin, async (req, res) => {
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
- // --- Gather ID attachments from SFTP (primary) or local uploads (fallback) ---
+// --- Gather ID attachments from SFTP (primary) or local uploads (fallback) ---
 let uploadedFiles = [];
 try {
   const sftp = await getSftp();                              // uses env + private key
@@ -2695,9 +2695,17 @@ try {
     list = [];
   }
 
+  // filter only ID uploads (exclude receipt/stamp files)
   const matching = list
     .map(f => f.name)
-    .filter(name => name.includes(`booking-${bookingId}-`));
+    .filter(name =>
+      name.includes(`booking-${bookingId}-`) &&
+      !name.includes('-stamp-')
+    );
+
+  if (!IS_PROD) {
+    console.log('[send-email] bookingId', bookingId, 'remoteDir', remoteDir, 'sftpCount', list.length, 'matching', matching);
+  }
 
   // Helper: quick mime for common types
   const mimeOf = (filename) => {
@@ -2726,7 +2734,7 @@ try {
   // Fallback: look in local /uploads if running purely local/dev
   try {
     uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
-      .filter(f => f.includes(`booking-${bookingId}-`))
+      .filter(f => f.includes(`booking-${bookingId}-`) && !f.includes('-stamp-'))
       .map(f => ({
         filename: f,
         path: path.join(__dirname, 'uploads', f)
