@@ -1266,7 +1266,7 @@ function usePgBookings(req) {
 
 async function pgFetchBookings(workspaceId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, cancelled, created_at, updated_at
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
      FROM bookings
      WHERE workspace_id = $1
      ORDER BY check_in ASC`,
@@ -1290,7 +1290,6 @@ async function pgFetchBookings(workspaceId) {
     },
     emailSent: r.email_sent,
     cleaned: r.cleaned,
-    cancelled: r.cancelled,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }));
@@ -1793,7 +1792,7 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
       }
       const { rows } = await pool.query(
         `SELECT id, guest_name, check_in, check_out, platform, people, notes,
-                step1, step2, step3, step4, step5, email_sent, cleaned, cancelled, created_at, updated_at
+                step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
          FROM bookings
          WHERE workspace_id = $1
          ORDER BY check_in ASC`,
@@ -1817,7 +1816,6 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         },
         emailSent: r.email_sent,
         cleaned: r.cleaned,
-        cancelled: r.cancelled,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       }));
