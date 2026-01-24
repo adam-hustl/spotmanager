@@ -1714,21 +1714,3 @@ try {
 
 </body>
 </html>
-  async function saveChecklist(field, val, bookingIdOverride){
-    const targetId = bookingIdOverride || window.currentBookingId || currentBookingId;
-    if (!targetId) return;
-    try{
-      const res = await fetch(`/api/checklist/${encodeURIComponent(targetId)}`, {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ field, value: val })
-      });
-      if (!res.ok) {
-        console.error('Failed to save checklist', field, val, 'status', res.status);
-      } else {
-        console.log('Checklist saved', field, val, 'booking', targetId);
-      }
-    }catch(e){
-      console.error('Failed to save checklist', field, val, e);
-    }
-  }

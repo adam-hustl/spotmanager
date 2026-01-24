@@ -85,8 +85,9 @@ const transporter = nodemailer.createTransport({
 app.post('/api/checklist/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
   const { field, value } = req.body || {};
-  const allowed = new Set(['step4', 'step5']);
+  const allowed = new Set(['step1','step2','step3','step4','step5','emailSent','cleaned']);
   if (!allowed.has(field)) {
+    if (!IS_PROD) console.error('CHECKLIST 400 invalid field', bookingId, req.body);
     return res.status(400).json({ error: 'Invalid field' });
   }
 
@@ -1354,10 +1355,20 @@ function mapBookingRow(r){
 }
 
 async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
-  const allowed = new Set(['step1', 'step2', 'step3', 'step4', 'step5']);
-  if (!allowed.has(field)) return false;
+  // Map field names to DB columns while strictly whitelisting allowed fields
+  const allowed = {
+    step1: 'step1',
+    step2: 'step2',
+    step3: 'step3',
+    step4: 'step4',
+    step5: 'step5',
+    emailSent: 'email_sent',
+    cleaned: 'cleaned',
+  };
+  const column = allowed[field];
+  if (!column) return false;
   const { rows } = await pool.query(
-    `UPDATE bookings SET ${field} = $1, updated_at = NOW()
+    `UPDATE bookings SET ${column} = $1, updated_at = NOW()
      WHERE workspace_id = $2 AND id = $3
      RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [val === true || val === 'true', workspaceId, bookingId]
