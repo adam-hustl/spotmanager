@@ -1011,6 +1011,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
+    saveChecklist('step1', !!hasId);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1037,6 +1038,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
+    saveChecklist('step2', !!hasForm);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1069,7 +1071,7 @@ function setIdStepState(hasId){
     refreshAllCheckins();
   }
 
-  function setAccessPaidState(isPaid, persist=true){
+function setAccessPaidState(isPaid, persist=true){
     comp[3] = !!isPaid;
     const circles=document.querySelectorAll('#steps .step-circle');
     const circle=circles[3];
@@ -1431,18 +1433,6 @@ async function uploadReceiptDirect(bookingId, file){
         }
       };
     }
-    const saveChecklist = async (field, val) => {
-      try {
-        await fetch(`/api/checklist/${encodeURIComponent(id)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ field, value: val })
-        });
-      } catch (e) {
-        console.error('Failed to save checklist', e);
-      }
-    };
-
     // Open the OS file dialog ASAP (pointerdown + showPicker if supported)
 function openPicker(inputEl) {
   try {
@@ -1702,3 +1692,21 @@ try {
 
 </body>
 </html>
+  async function saveChecklist(field, val, bookingIdOverride){
+    const targetId = bookingIdOverride || window.currentBookingId || currentBookingId;
+    if (!targetId) return;
+    try{
+      const res = await fetch(`/api/checklist/${encodeURIComponent(targetId)}`, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ field, value: val })
+      });
+      if (!res.ok) {
+        console.error('Failed to save checklist', field, val, 'status', res.status);
+      } else {
+        console.log('Checklist saved', field, val, 'booking', targetId);
+      }
+    }catch(e){
+      console.error('Failed to save checklist', field, val, e);
+    }
+  }
