@@ -2729,13 +2729,12 @@ Adam Kischinovsky`,
 
 app.get('/edit-booking/:id', (req, res) => {
   const bookingId = req.params.id;
-
-  fs.readFile(bookingsFile, 'utf8', (err, data) => {
-    if (err) return res.send('Error reading bookings file.');
-    const bookings = JSON.parse(data);
-    const booking = bookings.find(b => b.timestamp === bookingId);
+  const renderForm = (booking) => {
     if (!booking) return res.send('Booking not found.');
-
+    const fmt = (d) => {
+      const dt = new Date(d);
+      return isNaN(dt) ? d : dt.toISOString().slice(0,10);
+    };
     res.send(`
       <html>
         <head>
@@ -2749,7 +2748,7 @@ app.get('/edit-booking/:id', (req, res) => {
             <h1>Edit Booking</h1>
             <form id="editBookingForm" class="modal-form">
               <label>Guest Name:
-                <input type="text" name="guestName" value="${booking.guestName}" required />
+                <input type="text" name="guestName" value="${booking.guestName || ''}" required />
               </label>
               <label>Second Guest (optional):
                 <input type="text" name="guestName2" value="${booking.guestName2 || ''}" />
@@ -2764,10 +2763,10 @@ app.get('/edit-booking/:id', (req, res) => {
             <br />
               </label>
               <label>Check-in Date:
-                <input type="date" name="checkIn" value="${booking.checkIn}" required />
+                <input type="date" name="checkIn" value="${fmt(booking.checkIn)}" required />
               </label>
               <label>Check-out Date:
-                <input type="date" name="checkOut" value="${booking.checkOut}" required />
+                <input type="date" name="checkOut" value="${fmt(booking.checkOut)}" required />
               </label>
               <label>Amount of people:
                 <input type="text" name="people" value="${booking.people || ''}" />
@@ -2787,7 +2786,7 @@ app.get('/edit-booking/:id', (req, res) => {
     const data = new URLSearchParams(formData);
     
     try {
-      const response = await fetch('/edit-booking/${booking.timestamp}', {
+      const response = await fetch('/edit-booking/${booking.timestamp || booking.id}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: data
@@ -2810,12 +2809,61 @@ app.get('/edit-booking/:id', (req, res) => {
         </body>
       </html>
     `);
+  };
+
+  if (usePgBookings(req)) {
+    pool.query(
+      `SELECT id, guest_name, check_in, check_out, platform, people, notes FROM bookings WHERE id = $1 AND workspace_id = $2 LIMIT 1`,
+      [bookingId, req.session.workspaceId]
+    ).then(({ rows })=>{
+      const b = rows[0];
+      if (!b) return res.send('Booking not found.');
+      renderForm({
+        id: b.id,
+        guestName: b.guest_name,
+        guestName2: '',
+        checkIn: b.check_in,
+        checkOut: b.check_out,
+        platform: b.platform,
+        people: b.people,
+        notes: b.notes
+      });
+    }).catch((e)=>{
+      console.error('Edit booking fetch pg failed', e);
+      res.send('Error reading bookings file.');
+    });
+    return;
+  }
+
+  fs.readFile(bookingsFile, 'utf8', (err, data) => {
+    if (err) return res.send('Error reading bookings file.');
+    const bookings = JSON.parse(data);
+    const booking = bookings.find(b => b.timestamp === bookingId);
+    renderForm(booking);
   });
 });
 
 app.post('/edit-booking/:id', requireAdmin, (req, res) => {
 
   const bookingId = req.params.id;
+
+  if (usePgBookings(req)) {
+    console.log('Bookings write backend: postgres');
+    const { guestName, platform, checkIn, checkOut, people, notes } = req.body || {};
+    pool.query(
+      `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, updated_at=NOW()
+       WHERE id=$7 AND workspace_id=$8
+       RETURNING id`,
+      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, bookingId, req.session.workspaceId]
+    ).then(({ rowCount })=>{
+      if (rowCount === 0) return res.status(404).send('Booking not found');
+      return res.sendStatus(200);
+    }).catch((e)=>{
+      console.error('Edit booking pg failed', e);
+      return res.status(500).send('Error saving booking.');
+    });
+    return;
+  }
 
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) return res.send('Error loading data.');
