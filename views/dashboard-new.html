@@ -368,6 +368,28 @@
   let defaultBookingData = null; // next upcoming booking used for "Next guest"
   let latestBookings = []; // cache of fetched bookings for quick lookups
   let cleanReadySet = new Set(); // bookings whose unit is cleaned for their arrival
+  // checklist saver (global)
+  function saveChecklist(bookingId, field, value){
+    if (!bookingId) {
+      console.warn('saveChecklist skipped: no bookingId', field, value);
+      return;
+    }
+    console.log('saveChecklist called', bookingId, field, value);
+    fetch(`/api/checklist/${encodeURIComponent(bookingId)}`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ field, value })
+    }).then(res=>{
+      if (!res.ok) {
+        console.error('saveChecklist failed', field, value, 'status', res.status);
+      } else {
+        console.log('saveChecklist success', field, value, 'booking', bookingId);
+      }
+    }).catch(err=>{
+      console.error('saveChecklist error', field, value, err);
+    });
+  }
+  console.log('saveChecklist defined');
   function getNextBooking(){
     const pool = (latestBookings && latestBookings.length) ? latestBookings : (calendarBookings || []);
     return pickCurrent(pool);
@@ -1011,7 +1033,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step1', !!hasId);
+    if (currentBookingId) saveChecklist(currentBookingId, 'step1', !!hasId);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1038,7 +1060,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step2', !!hasForm);
+    if (currentBookingId) saveChecklist(currentBookingId, 'step2', !!hasForm);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1066,7 +1088,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step3', !!hasReceipt);
+    if (currentBookingId) saveChecklist(currentBookingId, 'step3', !!hasReceipt);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1093,7 +1115,7 @@ function setAccessPaidState(isPaid, persist=true){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step4', !!isPaid);
+    if (currentBookingId) saveChecklist(currentBookingId, 'step4', !!isPaid);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`paid_${currentBookingId}`, isPaid ? '1' : '0'); } catch (_) {}
@@ -1123,7 +1145,7 @@ function setAccessPickedState(isPicked, persist=true){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step5', !!isPicked);
+    if (currentBookingId) saveChecklist(currentBookingId, 'step5', !!isPicked);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`picked_${currentBookingId}`, isPicked ? '1' : '0'); } catch (_) {}
@@ -1493,8 +1515,8 @@ function openPicker(inputEl) {
         openPicker(receiptInput);
       },
 
-      ()=>{ const nv = !comp[3]; setAccessPaidState(nv); saveChecklist('step4', nv); },
-      ()=>{ const nv = !comp[4]; setAccessPickedState(nv); saveChecklist('step5', nv); },
+      ()=>{ const nv = !comp[3]; setAccessPaidState(nv); },
+      ()=>{ const nv = !comp[4]; setAccessPickedState(nv); },
       ()=>{} // cleaning status (view-only)
 
 
