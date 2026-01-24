@@ -2870,8 +2870,10 @@ app.post('/edit-booking/:id', requireAdmin, (req, res) => {
   fs.readFile(bookingsFile, 'utf8', (err, data) => {
     if (err) return res.send('Error loading data.');
     const bookings = JSON.parse(data);
-    const index = bookings.findIndex(b => b.timestamp === bookingId);
-    if (index === -1) return res.send('Booking not found.');
+    const index = bookings.findIndex(b =>
+      String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
+    );
+    if (index === -1) return res.status(404).send('Booking not found.');
 
     bookings[index] = {
       ...bookings[index],
@@ -2886,7 +2888,7 @@ app.post('/edit-booking/:id', requireAdmin, (req, res) => {
 
     writeBookingsLocal(bookings);
 pushBookingsToGist(bookings).catch(() => {});
-res.send(`<h2>Booking updated!<br><br><a href="/dashboard">Back to Dashboard</a></h2>`);
+res.sendStatus(200);
 
     });
   });
