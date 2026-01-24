@@ -1064,6 +1064,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
+    saveChecklist('step3', !!hasReceipt);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1090,6 +1091,7 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
+    saveChecklist('step4', !!isPaid);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`paid_${currentBookingId}`, isPaid ? '1' : '0'); } catch (_) {}
@@ -1119,6 +1121,7 @@ function setAccessPickedState(isPicked, persist=true){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
+    saveChecklist('step5', !!isPicked);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`picked_${currentBookingId}`, isPicked ? '1' : '0'); } catch (_) {}
@@ -1500,8 +1503,8 @@ function openPicker(inputEl) {
         openPicker(receiptInput);
       },
 
-      ()=>{ setAccessPaidState(!comp[3]); saveChecklist('step4', !comp[3]); },
-      ()=>{ setAccessPickedState(!comp[4]); saveChecklist('step5', !comp[4]); },
+      ()=>{ const nv = !comp[3]; setAccessPaidState(nv); saveChecklist('step4', nv); },
+      ()=>{ const nv = !comp[4]; setAccessPickedState(nv); saveChecklist('step5', nv); },
       ()=>{} // cleaning status (view-only)
 
 
