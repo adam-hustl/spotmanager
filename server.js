@@ -2691,63 +2691,89 @@ app.get('/send-email/:id', requireAdmin, async (req, res) => {
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
-// --- Gather ID attachments from SFTP (primary) or local uploads (fallback) ---
+// --- Gather ID attachments ---
 let uploadedFiles = [];
-try {
-  const sftp = await getSftp();                              // uses env + private key
-  const remoteDir = `${SFTP_ROOT}/ids`;
-  let list = [];
-  try {
-    list = await sftp.list(remoteDir);
-  } catch (_) {
-    list = [];
-  }
 
-  // filter only ID uploads (exclude receipt/stamp files)
-  const matching = list
-    .map(f => f.name)
-    .filter(name =>
-      name.includes(`booking-${bookingId}-`) &&
-      !name.includes('-stamp-')
+// Helper: quick mime for common types
+const mimeOf = (filename) => {
+  const ext = (require('path').extname(filename) || '').toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.pdf') return 'application/pdf';
+  return 'application/octet-stream';
+};
+
+const loadLocalIds = () => {
+  try {
+    const files = fs.readdirSync(UPLOADS_DIR);
+    const matching = files.filter(
+      f => f.includes(`booking-${bookingId}-`) && !f.includes('-stamp-')
     );
-
-  if (!IS_PROD) {
-    console.log('[send-email] bookingId', bookingId, 'remoteDir', remoteDir, 'sftpCount', list.length, 'matching', matching);
+    if (!IS_PROD) {
+      console.log('[send-email] local ids matching', matching);
+    }
+    return matching.map(f => ({
+      filename: f,
+      path: path.join(UPLOADS_DIR, f)
+    }));
+  } catch {
+    return [];
   }
+};
 
-  // Helper: quick mime for common types
-  const mimeOf = (filename) => {
-    const ext = (require('path').extname(filename) || '').toLowerCase();
-    if (ext === '.png') return 'image/png';
-    if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-    if (ext === '.gif') return 'image/gif';
-    if (ext === '.webp') return 'image/webp';
-    if (ext === '.pdf') return 'application/pdf';
-    return 'application/octet-stream';
-  };
+const shouldUseLocal = (!IS_PROD || !hasSftpCreds());
 
-  uploadedFiles = await Promise.all(matching.map(async (fname) => {
-    const remotePath = `${remoteDir}/${fname}`;
-    const buf = await sftp.get(remotePath);                  // Buffer
-    return {
-      filename: fname,
-      content: buf,                                          // attach Buffer directly
-      contentType: mimeOf(fname)
-    };
-  }));
-
-  await sftp.end();
-} catch (e) {
-  console.warn('[email] SFTP fetch of IDs failed, falling back to local uploads:', e.message);
-  // Fallback: look in local /uploads if running purely local/dev
+if (shouldUseLocal) {
+  uploadedFiles = loadLocalIds();
+} else {
   try {
-    uploadedFiles = fs.readdirSync(path.join(__dirname, 'uploads'))
-      .filter(f => f.includes(`booking-${bookingId}-`) && !f.includes('-stamp-'))
-      .map(f => ({
-        filename: f,
-        path: path.join(__dirname, 'uploads', f)
-      }));
-  } catch {}
+    const sftp = await getSftp();                              // uses env + private key
+    const remoteDir = `${SFTP_ROOT}/ids`;
+    let list = [];
+    try {
+      list = await sftp.list(remoteDir);
+    } catch (_) {
+      list = [];
+    }
+
+    // filter only ID uploads (exclude receipt/stamp files)
+    const matching = list
+      .map(f => f.name)
+      .filter(name =>
+        name.includes(`booking-${bookingId}-`) &&
+        !name.includes('-stamp-')
+      );
+
+    if (!IS_PROD) {
+      console.log('[send-email] bookingId', bookingId, 'remoteDir', remoteDir, 'sftpCount', list.length, 'matching', matching);
+    }
+
+    uploadedFiles = await Promise.all(matching.map(async (fname) => {
+      const remotePath = `${remoteDir}/${fname}`;
+      const buf = await sftp.get(remotePath);                  // Buffer
+      return {
+        filename: fname,
+        content: buf,                                          // attach Buffer directly
+        contentType: mimeOf(fname)
+      };
+    }));
+
+    // Safety fallback: if SFTP reachable but no matches, also check local uploads
+    if (uploadedFiles.length === 0) {
+      const localFallback = loadLocalIds();
+      uploadedFiles = localFallback;
+      if (!IS_PROD) {
+        console.log('[send-email] fallback to local ids, count', localFallback.length);
+      }
+    }
+
+    await sftp.end();
+  } catch (e) {
+    console.warn('[email] SFTP fetch of IDs failed, falling back to local uploads:', e.message);
+    uploadedFiles = loadLocalIds();
+  }
 }
 
 
