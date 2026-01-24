@@ -502,7 +502,18 @@ function updateCheckinCell(b){
         : (isCleanStep ? 'Not cleaned' : s.label);
       const btn=document.createElement('button');
       btn.className='step';
-      btn.onclick=()=>{cur=i;renderProgress();stepsRow();};
+      btn.onclick=()=>{
+        if (isCleanStep) return; // read-only
+        cur=i;renderProgress();stepsRow();
+        const action = {
+          0: ()=>{ actions[0]?.(); },
+          1: ()=>{ actions[1]?.(); },
+          2: ()=>{ actions[2]?.(); },
+          3: ()=>{ actions[3]?.(); },
+          4: ()=>{ actions[4]?.(); },
+        }[i];
+        if (action) action();
+      };
       btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${icon}" class="icon-16"></i></div><span class="step-label">${label}</span>`;
       wrap.appendChild(btn);
     });
