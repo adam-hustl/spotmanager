@@ -502,18 +502,7 @@ function updateCheckinCell(b){
         : (isCleanStep ? 'Not cleaned' : s.label);
       const btn=document.createElement('button');
       btn.className='step';
-      btn.onclick=()=>{
-        if (isCleanStep) return; // read-only
-        cur=i;renderProgress();stepsRow();
-        const action = {
-          0: ()=>{ actions[0]?.(); },
-          1: ()=>{ actions[1]?.(); },
-          2: ()=>{ actions[2]?.(); },
-          3: ()=>{ actions[3]?.(); },
-          4: ()=>{ actions[4]?.(); },
-        }[i];
-        if (action) action();
-      };
+      btn.onclick=()=>{cur=i;renderProgress();stepsRow();};
       btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${icon}" class="icon-16"></i></div><span class="step-label">${label}</span>`;
       wrap.appendChild(btn);
     });
@@ -1022,7 +1011,6 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step1', !!hasId);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1049,7 +1037,6 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step2', !!hasForm);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1077,7 +1064,6 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step3', !!hasReceipt);
     renderProgress();
     refreshAllCheckins();
   }
@@ -1104,7 +1090,6 @@ function setIdStepState(hasId){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step4', !!isPaid);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`paid_${currentBookingId}`, isPaid ? '1' : '0'); } catch (_) {}
@@ -1134,7 +1119,6 @@ function setAccessPickedState(isPicked, persist=true){
       syncCalendarBooking(currentBookingData);
       updateCheckinCell(currentBookingData);
     }
-    saveChecklist('step5', !!isPicked);
     renderProgress();
     if (persist && currentBookingId) {
       try { localStorage.setItem(`picked_${currentBookingId}`, isPicked ? '1' : '0'); } catch (_) {}

@@ -85,7 +85,7 @@ const transporter = nodemailer.createTransport({
 app.post('/api/checklist/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
   const { field, value } = req.body || {};
-  const allowed = new Set(['step1','step2','step3','step4','step5']);
+  const allowed = new Set(['step4', 'step5']);
   if (!allowed.has(field)) {
     return res.status(400).json({ error: 'Invalid field' });
   }
