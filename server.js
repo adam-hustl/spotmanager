@@ -90,6 +90,13 @@ app.post('/api/checklist/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Invalid field' });
   }
 
+  if (usePgBookings(req)) {
+    pgUpdateChecklist(req.session.workspaceId, bookingId, field, value === 'true' || value === true)
+      .then((ok)=> ok ? res.json({ ok:true }) : res.status(404).json({ error:'Booking not found' }))
+      .catch((e)=>{ console.error('Failed to update checklist (pg)', e); res.status(500).json({ error:'Failed to update checklist' });});
+    return;
+  }
+
   try {
     const bookings = readBookingsLocal();
     const idx = bookings.findIndex(
@@ -114,6 +121,13 @@ app.post('/api/comment/:id', requireAdmin, (req, res) => {
   const bookingId = req.params.id;
   const { notes } = req.body || {};
   try {
+    if (usePgBookings(req)) {
+      pgUpdateNotes(req.session.workspaceId, bookingId, notes || '')
+        .then((ok)=> ok ? res.json({ ok:true }) : res.status(404).json({ error:'Booking not found' }))
+        .catch((e)=>{ console.error('Failed to save comment (pg)', e); res.status(500).json({ error:'Failed to save comment' });});
+      return;
+    }
+
     const bookings = readBookingsLocal();
     const idx = bookings.findIndex(
       b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId))
@@ -130,6 +144,8 @@ app.post('/api/comment/:id', requireAdmin, (req, res) => {
 });
 
 const IS_PROD = process.env.APP_ENV === 'production';
+const BOOKINGS_BACKEND = process.env.BOOKINGS_BACKEND || 'localjson';
+const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID || null;
 
 
 const bcrypt = require('bcrypt');
@@ -138,7 +154,7 @@ const bcrypt = require('bcrypt');
 async function getUserByPhone(phone) {
   if (!pool) return null;
   const { rows } = await pool.query(
-    'SELECT id, phone, password_hash, role FROM users WHERE phone = $1 LIMIT 1',
+    'SELECT id, phone, password_hash, role, workspace_id, full_name, email FROM users WHERE phone = $1 LIMIT 1',
     [phone]
   );
   return rows[0] || null;
@@ -1121,6 +1137,7 @@ app.post('/login', async (req, res) => {
       if (ok) {
         req.session.loggedIn = true;
         req.session.role = user.role;
+        req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
         return res.redirect('/dashboard');
@@ -1185,14 +1202,19 @@ app.post('/signup', async (req, res) => {
     console.error('Signup attempted but no database configured.');
     return res.redirect('/signup?error=1');
   }
+  if (!DEFAULT_WORKSPACE_ID) {
+    console.error('Signup failed: DEFAULT_WORKSPACE_ID not set.');
+    return res.redirect('/signup?error=1');
+  }
   try {
     const hash = await bcrypt.hash(password || '', 10);
     await pool.query(
-      'INSERT INTO users (full_name, phone, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)',
-      [fullName || '', phone || '', email || '', hash, 'admin']
+      'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [fullName || '', phone || '', email || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
     );
     req.session.loggedIn = true;
     req.session.role = 'admin';
+    req.session.workspaceId = DEFAULT_WORKSPACE_ID;
     return res.redirect('/dashboard');
   } catch (e) {
     console.error('Signup failed:', e.message);
@@ -1236,6 +1258,80 @@ function requireAdminOrViewer(req, res, next) {
     return next();
   }
   return res.redirect('/access-denied-page.html');
+}
+
+function usePgBookings(req) {
+  return !IS_PROD && BOOKINGS_BACKEND === 'postgres' && pool && req.session && req.session.workspaceId;
+}
+
+async function pgFetchBookings(workspaceId) {
+  const { rows } = await pool.query(
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, cancelled, created_at, updated_at
+     FROM bookings
+     WHERE workspace_id = $1
+     ORDER BY check_in ASC`,
+    [workspaceId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    timestamp: r.id,
+    guestName: r.guest_name,
+    checkIn: r.check_in,
+    checkOut: r.check_out,
+    platform: r.platform,
+    people: r.people,
+    notes: r.notes,
+    checklist: {
+      step1: r.step1,
+      step2: r.step2,
+      step3: r.step3,
+      step4: r.step4,
+      step5: r.step5,
+    },
+    emailSent: r.email_sent,
+    cleaned: r.cleaned,
+    cancelled: r.cancelled,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
+  const allowed = new Set(['step1', 'step2', 'step3', 'step4', 'step5']);
+  if (!allowed.has(field)) return false;
+  const { rowCount } = await pool.query(
+    `UPDATE bookings SET ${field} = $1, updated_at = NOW()
+     WHERE workspace_id = $2 AND id = $3`,
+    [val === true || val === 'true', workspaceId, bookingId]
+  );
+  return rowCount > 0;
+}
+
+async function pgUpdateNotes(workspaceId, bookingId, notes) {
+  const { rowCount } = await pool.query(
+    `UPDATE bookings SET notes = $1, updated_at = NOW()
+     WHERE workspace_id = $2 AND id = $3`,
+    [notes || '', workspaceId, bookingId]
+  );
+  return rowCount > 0;
+}
+
+async function pgSetCleaned(workspaceId, bookingId, isCleaned) {
+  const { rowCount } = await pool.query(
+    `UPDATE bookings SET cleaned = $1, updated_at = NOW()
+     WHERE workspace_id = $2 AND id = $3`,
+    [isCleaned, workspaceId, bookingId]
+  );
+  return rowCount > 0;
+}
+
+async function pgSetCancelled(workspaceId, bookingId, isCancelled) {
+  const { rowCount } = await pool.query(
+    `UPDATE bookings SET cancelled = $1, updated_at = NOW()
+     WHERE workspace_id = $2 AND id = $3`,
+    [isCancelled, workspaceId, bookingId]
+  );
+  return rowCount > 0;
 }
 
 
@@ -1688,6 +1784,16 @@ res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, (req, res) => {
 try {
+  if (usePgBookings(req)) {
+    pgFetchBookings(req.session.workspaceId)
+      .then((rows)=>res.json(rows))
+      .catch((err)=>{
+        console.error('GET /api/bookings pg failed:', err);
+        res.status(500).json({ error: 'Failed to read bookings' });
+      });
+    return;
+  }
+
   const data =
     typeof readBookingsLocal === 'function'
       ? readBookingsLocal()
@@ -2192,6 +2298,12 @@ document.getElementById('calendarContainer').innerHTML = html;
 app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
 
   try {
+    if (usePgBookings(req)) {
+      const ok = await pgSetCancelled(req.session.workspaceId, req.params.id, true);
+      if (!ok) return res.status(404).send('Booking not found');
+      return res.sendStatus(200);
+    }
+
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data || '[]');
 
@@ -2234,6 +2346,12 @@ app.post('/cancel-booking/:id', requireAdmin, async (req, res) => {
 // Undo a cancellation
 app.post('/uncancel-booking/:id', requireAdmin, async (req, res) => {
   try {
+    if (usePgBookings(req)) {
+      const ok = await pgSetCancelled(req.session.workspaceId, req.params.id, false);
+      if (!ok) return res.status(404).send('Booking not found');
+      return res.redirect('/cancelled-bookings');
+    }
+
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data || '[]');
     const idx = bookings.findIndex(b => String(b.timestamp) === String(req.params.id) || (b.id && String(b.id) === String(req.params.id)));
@@ -2712,9 +2830,15 @@ app.post('/mark-seen', forbidViewer, (req, res) => {
 
 // Mark a stay as cleaned
 app.post('/mark-cleaned', forbidViewer, (req, res) => {
-  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body || {};
+  if (usePgBookings(req)) {
+    pgSetCleaned(req.session.workspaceId, timestamp, true)
+      .then(()=> cleanerActionResponse(req, res))
+      .catch((e)=>{ console.error('mark-cleaned pg failed', e); res.status(500).send('Error marking cleaned');});
+    return;
+  }
 
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const updated = bookingsData.map((b) =>
     b.timestamp === timestamp
       ? {
@@ -2732,9 +2856,15 @@ app.post('/mark-cleaned', forbidViewer, (req, res) => {
 
 // Undo a cleaned mark
 app.post('/unmark-cleaned', forbidViewer, (req, res) => {
-  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const { timestamp } = req.body || {};
+  if (usePgBookings(req)) {
+    pgSetCleaned(req.session.workspaceId, timestamp, false)
+      .then(()=> cleanerActionResponse(req, res))
+      .catch((e)=>{ console.error('unmark-cleaned pg failed', e); res.status(500).send('Error unmarking cleaned');});
+    return;
+  }
 
+  const bookingsData = JSON.parse(fs.readFileSync(bookingsFile));
   const updated = bookingsData.map((b) => {
     if (b.timestamp === timestamp) {
       const copy = { ...b };

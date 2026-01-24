@@ -246,6 +246,16 @@
     "checkOut": "2026-01-23",
     "platform": "Booking.com",
     "people": "5",
-    "timestamp": "2026-01-06T00:05:25.876Z"
+    "timestamp": "2026-01-06T00:05:25.876Z",
+    "checklist": {
+      "step1": true,
+      "step2": true,
+      "step3": true,
+      "step4": false,
+      "step5": false
+    },
+    "emailSent": true,
+    "cleaned": true,
+    "notes": "test"
   }
 ]
