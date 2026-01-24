@@ -1180,6 +1180,7 @@ function setAccessPickedState(isPicked, persist=true){
   function attachActions(current){ 
   if(!current) return; 
   const id= current.timestamp || current.id;
+  window.currentBookingId = id;
 
   // reset comp state and rebuild steps for new selection
   comp = new Array(steps.length).fill(false);
@@ -1394,18 +1395,24 @@ async function uploadReceiptDirect(bookingId, file){
         };
       }
 
-      editForm.addEventListener('submit', async (e) => {
+      editForm.onsubmit = async (e) => {
         e.preventDefault();
+        const activeId = window.currentBookingId || id;
+        console.log('Saving booking', activeId);
         const fd = new FormData(editForm);
         const data = new URLSearchParams(fd);
         try {
-          const res = await fetch(`/edit-booking/${encodeURIComponent(id)}`, {
+          const res = await fetch(`/edit-booking/${encodeURIComponent(activeId)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: data
           });
           if (res.ok) {
-            window.location.reload();
+            const refreshed = await loadBookings();
+            calendarBookings = refreshed || [];
+            latestBookings = refreshed || [];
+            renderMiniCalendar();
+            toggleEditBooking(false);
           } else {
             alert('Failed to save booking.');
           }
@@ -1413,7 +1420,7 @@ async function uploadReceiptDirect(bookingId, file){
           console.error('Edit booking error', err);
           alert('Error saving booking.');
         }
-      });
+      };
     }
     const saveChecklist = async (field, val) => {
       try {
