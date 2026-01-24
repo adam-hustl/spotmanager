@@ -1354,6 +1354,17 @@ function mapBookingRow(r){
   };
 }
 
+async function pgFetchBookingById(workspaceId, bookingId) {
+  const { rows } = await pool.query(
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+     FROM bookings
+     WHERE workspace_id = $1 AND id = $2
+     LIMIT 1`,
+    [workspaceId, bookingId]
+  );
+  return mapBookingRow(rows[0]);
+}
+
 async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
   // Map field names to DB columns while strictly whitelisting allowed fields
   const allowed = {
@@ -2593,23 +2604,24 @@ app.get('/generate-movein/:id', async (req, res) => {
   console.log('[/generate-movein] bookingId:', bookingId);
   console.log('[/generate-movein] OUTPUT_DIR:', OUTPUT_DIR);
 
-  let data;
+  let booking;
   try {
-    data = fs.readFileSync(bookingsFile, 'utf8');
-  } catch (readErr) {
-    console.error('Failed to read bookings.json:', readErr);
-    return res.status(500).send('Failed to read bookings file: ' + readErr.message);
+    if (usePgBookings(req)) {
+      if (!req.session.workspaceId) {
+        console.error('[/generate-movein] workspaceId missing in session');
+        return res.status(400).send('workspace not set');
+      }
+      booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+    } else {
+      const data = fs.readFileSync(bookingsFile, 'utf8');
+      const bookings = JSON.parse(data);
+      booking = bookings.find(b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId)));
+    }
+  } catch (err) {
+    console.error('Failed to load booking for generate-movein:', err);
+    return res.status(500).send('Failed to load booking');
   }
 
-  let bookings;
-  try {
-    bookings = JSON.parse(data);
-  } catch (parseErr) {
-    console.error('Failed to parse bookings.json:', parseErr);
-    return res.status(500).send('Failed to parse bookings file: ' + parseErr.message);
-  }
-
-  const booking = bookings.find(b => b.timestamp === bookingId);
   if (!booking) {
     return res.status(404).send('Booking not found.');
   }
@@ -2643,11 +2655,31 @@ app.get('/generate-movein/:id', async (req, res) => {
 app.get('/send-email/:id', requireAdmin, async (req, res) => {
 
   const bookingId = req.params.id;
-  const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
-  const bookingIndex = bookings.findIndex(b => b.timestamp === bookingId);
-  if (bookingIndex === -1) return res.status(404).json({ success: false, message: 'Booking not found.' });
+  let booking = null;
 
-  const booking = bookings[bookingIndex];
+  try {
+    if (usePgBookings(req)) {
+      console.log('Bookings backend: postgres (send-email)');
+      if (!req.session.workspaceId) {
+        console.error('send-email: workspaceId missing in session');
+        return res.status(400).json({ success: false, message: 'workspace not set' });
+      }
+      booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+    } else {
+      console.log('Bookings backend: localjson (send-email)');
+      const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+      const idx = bookings.findIndex(b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId)));
+      if (idx !== -1) booking = bookings[idx];
+    }
+  } catch (err) {
+    console.error('send-email: failed to load booking', err);
+    return res.status(500).json({ success: false, message: 'Failed to load booking' });
+  }
+
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found.' });
+  }
+
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
   await generateMoveInPDF(booking, outputPath);
 
@@ -2728,11 +2760,11 @@ const prodRecipients = isWeekend
 // (safeSendMail will also enforce this and prefix [STAGING] in subject)
 const stagingRecipients = ['adamkischi@hotmail.com'];
 
-// Final "to" list
-const recipients = IS_PROD ? prodRecipients : stagingRecipients;
+  // Final "to" list
+  const recipients = IS_PROD ? prodRecipients : stagingRecipients;
 
-const mailOptions = {
-  from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
+  const mailOptions = {
+    from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
   to: recipients.join(', '),
   bcc: 'adamkischi@hotmail.com',   // keep a copy to yourself on both envs
   replyTo: 'adamkischi@hotmail.com',
@@ -2756,11 +2788,19 @@ Adam Kischinovsky`,
 
   try {
     await safeSendMail(mailOptions);
-    bookings[bookingIndex].emailSent = true;
-    bookings[bookingIndex].checklist = bookings[bookingIndex].checklist || {};
-    bookings[bookingIndex].checklist.step2 = true; // endorsement email sent
-    writeBookingsLocal(bookings);
-    pushBookingsToGist(bookings).catch(() => {});
+    if (usePgBookings(req)) {
+      await pgUpdateChecklist(req.session.workspaceId, bookingId, 'emailSent', true);
+    } else {
+      const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
+      const idx = bookings.findIndex(b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId)));
+      if (idx !== -1) {
+        bookings[idx].emailSent = true;
+        bookings[idx].checklist = bookings[idx].checklist || {};
+        bookings[idx].checklist.step2 = true; // endorsement email sent
+        writeBookingsLocal(bookings);
+        pushBookingsToGist(bookings).catch(() => {});
+      }
+    }
 
     res.json({ success: true });
   } catch (err) {
