@@ -247,7 +247,7 @@ const multer = require('multer');
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
-    cb(null, `booking-${req.params.id}-${Date.now()}-${file.originalname}`);
+    cb(null, `booking-${req.params.id}-${file.originalname}`);
   }
 });
 const upload = multer({ storage });
@@ -369,12 +369,20 @@ app.post('/upload-id/:id', requireAdmin, upload.array('guestIds', 10), async (re
         const localPath = path.join(UPLOADS_DIR, f.filename);
         const remotePath = `${remoteDir}/${f.filename}`;
         await sftp.put(localPath, remotePath);
+        if (!IS_PROD) {
+          console.log(`[id-upload] saved booking-${bookingId}-${f.originalname} to ${remotePath}`);
+        }
         try { fs.unlinkSync(localPath); } catch (_) {}
       }
 
       await sftp.end();
     }
     // (On local / staging we already saved into UPLOADS_DIR via multer; nothing else to do.)
+    if (!IS_PROD) {
+      req.files.forEach(f => {
+        console.log(`[id-upload] saved booking-${bookingId}-${f.originalname} to ${f.path || (UPLOADS_DIR + '/' + f.filename)}`);
+      });
+    }
 
     // ---- 2) Mark "ID uploaded" on the booking checklist (step1) ----
     let bookings = readBookingsLocal();   // uses the helpers defined later in the file
