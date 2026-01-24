@@ -1055,6 +1055,37 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
     timestamp: new Date().toISOString()
   };
 
+  if (usePgBookings(req)) {
+    if (!req.session.workspaceId) {
+      console.error('save-booking: missing workspaceId');
+      return res.status(400).send('workspace not set');
+    }
+    console.log('Bookings write backend: postgres');
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO bookings (
+            workspace_id, guest_name, check_in, check_out, platform, people, notes,
+            step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,false,false,false,false,false,false,false,NOW(),NOW())
+         RETURNING id`,
+        [
+          req.session.workspaceId,
+          newBooking.guestName || '',
+          newBooking.checkIn || null,
+          newBooking.checkOut || null,
+          newBooking.platform || '',
+          newBooking.people || null,
+          newBooking.notes || ''
+        ]
+      );
+      const newId = rows[0]?.id;
+      return res.json({ ok: true, id: newId });
+    } catch (e) {
+      console.error('Error saving booking to postgres:', e);
+      return res.status(500).send('An error occurred while saving the booking.');
+    }
+  }
+
   try {
     const data = await fs.promises.readFile(bookingsFile, 'utf8');
     const bookings = JSON.parse(data || '[]');
