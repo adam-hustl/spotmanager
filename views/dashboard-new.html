@@ -1412,6 +1412,12 @@ async function uploadReceiptDirect(bookingId, file){
             calendarBookings = refreshed || [];
             latestBookings = refreshed || [];
             renderMiniCalendar();
+            const updated = (refreshed || []).find((b)=>String(b.timestamp||b.id||'')===String(activeId));
+            if (updated) {
+              currentBookingData = updated;
+              fillGuestHeader(updated);
+              attachActions(updated);
+            }
             toggleEditBooking(false);
           } else {
             alert('Failed to save booking.');
