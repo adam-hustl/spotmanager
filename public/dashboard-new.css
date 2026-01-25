@@ -365,8 +365,9 @@ body.page {
   padding: 4px 8px;
   border: none;
   background: transparent;
-  color: #0f172a;
-  font-weight: 700;
+  color: #4b5563;           /* match step label color */
+  font-size: 10px;          /* match step label size */
+  font-weight: 600;
   cursor: pointer;
 }
 .action-btn:hover { text-decoration: underline; }
