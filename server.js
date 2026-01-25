@@ -1182,7 +1182,7 @@ app.post('/login', async (req, res) => {
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
-        return res.redirect('/dashboard');
+        return res.redirect('/dashboard-new');
       }
       return res.redirect('/?error=1');
     }
@@ -1200,7 +1200,7 @@ app.post('/login', async (req, res) => {
   if (username === ADMIN_USER && password === ADMIN_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'admin';
-    return res.redirect('/dashboard');
+    return res.redirect('/dashboard-new');
   }
 
   // Cleaner (env-specific if you changed CLEANER_* above)
@@ -1214,7 +1214,7 @@ app.post('/login', async (req, res) => {
   if (username === VIEWER_USER && password === VIEWER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
-    return res.redirect('/dashboard');
+    return res.redirect('/dashboard-new');
   }
 
   // No match
@@ -1263,7 +1263,7 @@ app.post('/signup', async (req, res) => {
       req.session.role = user.rows[0].role || 'admin';
       req.session.workspaceId = workspaceId;
       req.session.userId = user.rows[0].id;
-      return res.redirect('/dashboard');
+      return res.redirect('/dashboard-new');
     } catch (e) {
       await client.query('ROLLBACK');
       console.error('Signup failed (pg):', e.message);
@@ -1292,7 +1292,7 @@ app.post('/signup', async (req, res) => {
     req.session.role = 'admin';
     req.session.workspaceId = DEFAULT_WORKSPACE_ID;
     req.session.userId = user.rows[0]?.id || null;
-    return res.redirect('/dashboard');
+    return res.redirect('/dashboard-new');
   } catch (e) {
     console.error('Signup failed:', e.message);
     return res.redirect('/signup?error=1');
