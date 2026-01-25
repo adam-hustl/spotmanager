@@ -371,7 +371,15 @@ body.page {
   cursor: pointer;
 }
 .action-btn:hover { text-decoration: underline; }
-.action-icon { display: inline-flex; }
+.action-icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.action-icon svg {
+  width: 12px;
+  height: 12px;
+}
 .action-danger {
   color: #b91c1c;
 }
