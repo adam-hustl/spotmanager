@@ -372,8 +372,13 @@
   const setStatus = (msg)=>{ const el=document.getElementById('statusText'); if(el) el.textContent = msg || ''; };
   function setHelloName(name){
     const el = document.querySelector('.hello-user');
+    const userNameEl = document.querySelector('.user-name');
     if (el && name) {
       el.textContent = name;
+    }
+    if (userNameEl && name) {
+      const first = name.trim().split(/\s+/)[0] || name;
+      userNameEl.textContent = first;
     }
   }
   // set name immediately from cache if present
