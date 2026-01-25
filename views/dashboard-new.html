@@ -368,6 +368,18 @@
   let defaultBookingData = null; // next upcoming booking used for "Next guest"
   let latestBookings = []; // cache of fetched bookings for quick lookups
   let cleanReadySet = new Set(); // bookings whose unit is cleaned for their arrival
+  async function loadProfile(){
+    try{
+      const res = await fetch('/api/session-profile');
+      if (!res.ok) return;
+      const data = await res.json();
+      const name = (data && data.fullName) ? data.fullName : '';
+      const el = document.querySelector('.hello-user');
+      if (el) el.textContent = name || 'Guest';
+    }catch(e){
+      console.warn('Failed to load profile', e);
+    }
+  }
   // checklist saver (global)
   function saveChecklist(bookingId, field, value){
     if (!bookingId) {
@@ -1705,6 +1717,7 @@ try {
   }
 
   document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', loadProfile);
   </script>
 
 

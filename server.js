@@ -163,6 +163,14 @@ async function getUserByPhone(phone) {
   return rows[0] || null;
 }
 
+async function getUserById(userId) {
+  if (!pool || !userId) return null;
+  const { rows } = await pool.query(
+    'SELECT id, phone, role, workspace_id, full_name, email FROM users WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+  return rows[0] || null;
+}
 
 
 
@@ -1180,6 +1188,7 @@ app.post('/login', async (req, res) => {
         req.session.loggedIn = true;
         req.session.role = user.role;
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
+        req.session.userId = user.id || null;
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
         return res.redirect('/dashboard-new');
@@ -1200,6 +1209,7 @@ app.post('/login', async (req, res) => {
   if (username === ADMIN_USER && password === ADMIN_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'admin';
+    req.session.userId = null;
     return res.redirect('/dashboard-new');
   }
 
@@ -1214,6 +1224,7 @@ app.post('/login', async (req, res) => {
   if (username === VIEWER_USER && password === VIEWER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
+    req.session.userId = null;
     return res.redirect('/dashboard-new');
   }
 
@@ -2066,6 +2077,36 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
 // expose session role so frontends can adapt UI state
 app.get('/api/session-role', requireAnyUser, (req, res) => {
   res.json({ role: req.session.role || 'viewer' });
+});
+
+// expose session profile (name/role/email) for UI headers
+app.get('/api/session-profile', requireAnyUser, async (req, res) => {
+  try {
+    // If we have a DB user id, fetch details; otherwise fallback to minimal info
+    if (pool && req.session.userId) {
+      const user = await getUserById(req.session.userId);
+      if (user) {
+        return res.json({
+          role: user.role || req.session.role || 'viewer',
+          fullName: user.full_name || '',
+          phone: user.phone || '',
+          email: user.email || '',
+          workspaceId: user.workspace_id || null
+        });
+      }
+    }
+    // Fallback
+    return res.json({
+      role: req.session.role || 'viewer',
+      fullName: '',
+      phone: '',
+      email: '',
+      workspaceId: req.session.workspaceId || null
+    });
+  } catch (e) {
+    console.error('session-profile failed:', e);
+    res.status(500).json({ error: 'failed to load profile' });
+  }
 });
 
 
