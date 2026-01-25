@@ -1716,8 +1716,18 @@ try {
     }
   }
 
-  document.addEventListener('DOMContentLoaded', init);
-  document.addEventListener('DOMContentLoaded', loadProfile);
+  let __dashboardStarted = false;
+  function startDashboard(){
+    if (__dashboardStarted) return;
+    __dashboardStarted = true;
+    loadProfile();
+    init();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startDashboard);
+  } else {
+    startDashboard();
+  }
   </script>
 
 
