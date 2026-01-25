@@ -71,7 +71,7 @@
               <div id="progress" class="progress-inner"></div>
             </div>
           </div>
-          <div class="subtle">Uploaded documentation for current selected guest</div>
+          <div class="subtle" id="statusText">Uploaded documentation for current selected guest</div>
           <div class="guest-row">
             <div id="guestStatic">
               <div class="row gap-8 align-center wrap">
@@ -368,17 +368,34 @@
   let defaultBookingData = null; // next upcoming booking used for "Next guest"
   let latestBookings = []; // cache of fetched bookings for quick lookups
   let cleanReadySet = new Set(); // bookings whose unit is cleaned for their arrival
+  const setStatus = (msg)=>{ const el=document.getElementById('statusText'); if(el) el.textContent = msg || ''; };
+  function setHelloName(name){
+    const el = document.querySelector('.hello-user');
+    if (el && name) {
+      el.textContent = name;
+    }
+  }
+  // set name immediately from cache if present
+  try {
+    const cachedName = localStorage.getItem('userFullName');
+    if (cachedName) setHelloName(cachedName);
+  } catch (_) {}
   async function loadProfile(){
+    const t0 = performance.now();
+    console.log('[perf] loadProfile start');
     try{
       const res = await fetch('/api/session-profile');
       if (!res.ok) return;
       const data = await res.json();
       const name = (data && data.fullName) ? data.fullName : '';
-      const el = document.querySelector('.hello-user');
-      if (el) el.textContent = name || 'Guest';
+      if (name) {
+        setHelloName(name);
+        try { localStorage.setItem('userFullName', name); } catch (_) {}
+      }
     }catch(e){
       console.warn('Failed to load profile', e);
     }
+    console.log('[perf] loadProfile done in', Math.round(performance.now()-t0), 'ms');
   }
   // checklist saver (global)
   function saveChecklist(bookingId, field, value){
@@ -1188,7 +1205,46 @@ function setAccessPickedState(isPicked, persist=true){
   window.closeModal = closeModal;
 
   // ---------- DATA + ACTION WIRING ----------
-  async function loadBookings(){ try{ const r=await fetch('/api/bookings'); return await r.json(); } catch(e){ console.error('Failed to load bookings',e); return []; } }
+  async function loadBookings(){
+    const t0 = performance.now();
+    console.log('[perf] loadBookings start');
+    try{
+      const r=await fetch('/api/bookings');
+      const data = await r.json();
+      console.log('[perf] loadBookings done in', Math.round(performance.now()-t0), 'ms');
+      return data;
+    } catch(e){
+      console.error('Failed to load bookings',e);
+      console.log('[perf] loadBookings failed in', Math.round(performance.now()-t0), 'ms');
+      return [];
+    }
+  }
+  function showLoadingShell(){
+    setStatus('Loading bookings…');
+    const ids = ['viewGuestName','viewPlatform','viewCheckIn','viewCheckOut','viewPeople'];
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.tagName === 'SELECT') {
+        el.value = '';
+      } else {
+        el.value = 'Loading…';
+      }
+    });
+  }
+  async function loadAndRenderBookings(){
+    const bookings = await loadBookings();
+    calendarBookings = bookings || [];
+    latestBookings = bookings || [];
+    computeCleanReady(latestBookings);
+    renderMiniCalendar();
+
+    const current = pickCurrent(bookings);
+    defaultBookingData = current;
+    fillGuestHeader(current);
+    attachActions(current);
+    setStatus('Uploaded documentation for current selected guest');
+  }
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
   function fillGuestHeader(b){
     if(!b) return;
@@ -1672,7 +1728,7 @@ try {
 
 
   // ---------- INIT ----------
-    async function init(){
+    function init(){
     menu();
     themeDots();
     stepsRow();
@@ -1683,17 +1739,10 @@ try {
     wireCommentButtons();
     renderProgress();
     apply();
+    showLoadingShell();
+    renderMiniCalendar(); // draw frame immediately, will fill after data arrives
 
-    const bookings = await loadBookings();
-    calendarBookings = bookings || [];
-    latestBookings = bookings || [];
-    computeCleanReady(latestBookings);
-    renderMiniCalendar();
-
-    const current = pickCurrent(bookings);
-    defaultBookingData = current;
-    fillGuestHeader(current);
-    attachActions(current);
+    loadAndRenderBookings(); // async, updates UI when ready
 
     const nextBtn = document.getElementById('nextGuestBtn');
     if (nextBtn) {

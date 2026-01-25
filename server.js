@@ -1189,6 +1189,7 @@ app.post('/login', async (req, res) => {
         req.session.role = user.role;
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
         req.session.userId = user.id || null;
+        req.session.fullName = user.full_name || '';
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
         return res.redirect('/dashboard-new');
@@ -1210,6 +1211,7 @@ app.post('/login', async (req, res) => {
     req.session.loggedIn = true;
     req.session.role = 'admin';
     req.session.userId = null;
+    req.session.fullName = 'Admin';
     return res.redirect('/dashboard-new');
   }
 
@@ -1225,6 +1227,7 @@ app.post('/login', async (req, res) => {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
     req.session.userId = null;
+    req.session.fullName = 'Viewer';
     return res.redirect('/dashboard-new');
   }
 
@@ -1274,6 +1277,7 @@ app.post('/signup', async (req, res) => {
       req.session.role = user.rows[0].role || 'admin';
       req.session.workspaceId = workspaceId;
       req.session.userId = user.rows[0].id;
+      req.session.fullName = fullName || '';
       return res.redirect('/dashboard-new');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -1303,6 +1307,7 @@ app.post('/signup', async (req, res) => {
     req.session.role = 'admin';
     req.session.workspaceId = DEFAULT_WORKSPACE_ID;
     req.session.userId = user.rows[0]?.id || null;
+    req.session.fullName = fullName || '';
     return res.redirect('/dashboard-new');
   } catch (e) {
     console.error('Signup failed:', e.message);
@@ -2082,6 +2087,17 @@ app.get('/api/session-role', requireAnyUser, (req, res) => {
 // expose session profile (name/role/email) for UI headers
 app.get('/api/session-profile', requireAnyUser, async (req, res) => {
   try {
+    // If session already holds profile info, return it without a DB roundtrip
+    if (req.session && (req.session.fullName || req.session.workspaceId || req.session.userId)) {
+      return res.json({
+        role: req.session.role || 'viewer',
+        fullName: req.session.fullName || '',
+        phone: '',
+        email: '',
+        workspaceId: req.session.workspaceId || null
+      });
+    }
+
     // If we have a DB user id, fetch details; otherwise fallback to minimal info
     if (pool && req.session.userId) {
       const user = await getUserById(req.session.userId);
