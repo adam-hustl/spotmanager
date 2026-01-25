@@ -1240,6 +1240,40 @@ app.get('/signup', (req, res) => {
 
 app.post('/signup', async (req, res) => {
   const { fullName, phone, email, password } = req.body || {};
+  // Postgres multi-tenant signup (dev/staging only)
+  const usePg = !IS_PROD && BOOKINGS_BACKEND === 'postgres' && pool;
+  if (usePg) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const wsName = fullName ? `${fullName}'s workspace` : 'New workspace';
+      const ws = await client.query(
+        'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
+        [wsName]
+      );
+      const workspaceId = ws.rows[0]?.id;
+      const hash = await bcrypt.hash(password || '', 10);
+      const user = await client.query(
+        'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id',
+        [fullName || '', phone || '', email || '', hash, 'admin', workspaceId]
+      );
+      await client.query('COMMIT');
+
+      req.session.loggedIn = true;
+      req.session.role = user.rows[0].role || 'admin';
+      req.session.workspaceId = workspaceId;
+      req.session.userId = user.rows[0].id;
+      return res.redirect('/dashboard');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('Signup failed (pg):', e.message);
+      return res.redirect('/signup?error=1');
+    } finally {
+      client.release();
+    }
+  }
+
+  // Legacy behavior (production or non-pg)
   if (!pool) {
     console.error('Signup attempted but no database configured.');
     return res.redirect('/signup?error=1');
@@ -1250,13 +1284,14 @@ app.post('/signup', async (req, res) => {
   }
   try {
     const hash = await bcrypt.hash(password || '', 10);
-    await pool.query(
-      'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6)',
+    const user = await pool.query(
+      'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
       [fullName || '', phone || '', email || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
     );
     req.session.loggedIn = true;
     req.session.role = 'admin';
     req.session.workspaceId = DEFAULT_WORKSPACE_ID;
+    req.session.userId = user.rows[0]?.id || null;
     return res.redirect('/dashboard');
   } catch (e) {
     console.error('Signup failed:', e.message);
