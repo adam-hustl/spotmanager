@@ -28,6 +28,8 @@ const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || '';
 // Ensure required folders/files exist
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const SIGNATURES_DIR = path.join(UPLOADS_DIR, 'signatures');
+fs.mkdirSync(SIGNATURES_DIR, { recursive: true });
 
 // Seed an empty bookings file if missing
 if (!fs.existsSync(bookingsFile)) {
@@ -172,6 +174,15 @@ async function getUserById(userId) {
   return rows[0] || null;
 }
 
+async function getDefaultUnit(workspaceId) {
+  if (!pool || !workspaceId) return null;
+  const { rows } = await pool.query(
+    'SELECT id, workspace_id, unit_number, unit_owner_name, unit_phone, name, signature_file_key FROM units WHERE workspace_id = $1 AND is_default = true LIMIT 1',
+    [workspaceId]
+  );
+  return rows[0] || null;
+}
+
 
 
 // ---- Per-environment credentials (hardcoded) ----
@@ -226,6 +237,26 @@ function getSftp() {
   }).then(() => sftp);
 }
 
+async function loadSignatureBuffer(key) {
+  if (!key) return null;
+  if (IS_PROD && hasSftpCreds()) {
+    const sftp = await getSftp();
+    try {
+      const remotePath = `${SFTP_ROOT}/${key}`;
+      const buf = await sftp.get(remotePath);
+      await sftp.end();
+      return buf;
+    } catch (e) {
+      try { await sftp.end(); } catch (_) {}
+      throw e;
+    }
+  } else {
+    const localPath = path.join(UPLOADS_DIR, key);
+    if (!fs.existsSync(localPath)) return null;
+    return fs.readFileSync(localPath);
+  }
+}
+
 
 
 
@@ -278,6 +309,16 @@ const storageStamp = multer.diskStorage({
   }
 });
 const uploadStamp = multer({ storage: storageStamp });
+
+// Signature uploads
+const signatureStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, SIGNATURES_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '.png') || '.png';
+    cb(null, `sig-temp-${Date.now()}${ext}`);
+  }
+});
+const uploadSignature = multer({ storage: signatureStorage });
 
 
 
@@ -1359,7 +1400,7 @@ function usePgBookings(req) {
 
 async function pgFetchBookings(workspaceId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, created_at, updated_at
      FROM bookings
      WHERE workspace_id = $1
      ORDER BY check_in ASC`,
@@ -1374,6 +1415,7 @@ async function pgFetchBookings(workspaceId) {
     platform: r.platform,
     people: r.people,
     notes: r.notes,
+    unit_id: r.unit_id,
     checklist: {
       step1: r.step1,
       step2: r.step2,
@@ -1399,6 +1441,7 @@ function mapBookingRow(r){
     platform: r.platform,
     people: r.people,
     notes: r.notes,
+    unit_id: r.unit_id,
     checklist: {
       step1: r.step1,
       step2: r.step2,
@@ -1415,11 +1458,11 @@ function mapBookingRow(r){
 
 async function pgFetchBookingById(workspaceId, bookingId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, created_at, updated_at
      FROM bookings
-     WHERE workspace_id = $1 AND id = $2
+     WHERE workspace_id = $1 AND id::text = $2
      LIMIT 1`,
-    [workspaceId, bookingId]
+    [workspaceId, String(bookingId)]
   );
   return mapBookingRow(rows[0]);
 }
@@ -1444,6 +1487,37 @@ async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
     [val === true || val === 'true', workspaceId, bookingId]
   );
   return mapBookingRow(rows[0]) || false;
+}
+
+async function pgFetchUnitById(workspaceId, unitId) {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    `SELECT id, workspace_id, unit_number, unit_owner_name, unit_phone, name, signature_file_key, is_default
+     FROM units
+     WHERE workspace_id = $1 AND id = $2
+     LIMIT 1`,
+    [workspaceId, unitId]
+  );
+  return rows[0] || null;
+}
+
+async function resolveUnitForBooking(workspaceId, booking) {
+  if (!booking || !workspaceId) return null;
+  if (booking.unit_id) {
+    const u = await pgFetchUnitById(workspaceId, booking.unit_id);
+    if (u) return u;
+  }
+  return await getDefaultUnit(workspaceId);
+}
+
+function validateUnitForMoveIn(unit) {
+  if (!unit) return ['unit missing'];
+  const missing = [];
+  if (!unit.unit_number) missing.push('unit number');
+  if (!unit.unit_owner_name) missing.push('owner name');
+  if (!unit.unit_phone) missing.push('owner phone');
+  if (!unit.signature_file_key) missing.push('signature');
+  return missing;
 }
 
 async function pgUpdateNotes(workspaceId, bookingId, notes) {
@@ -2125,6 +2199,156 @@ app.get('/api/session-profile', requireAnyUser, async (req, res) => {
   }
 });
 
+// ===== Units / default unit settings =====
+app.get('/api/unit/default', requireAnyUser, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    if (!req.session.workspaceId) return res.status(400).json({ error: 'workspace not set' });
+    const unit = await getDefaultUnit(req.session.workspaceId);
+    if (!unit) return res.status(404).json({ error: 'Default unit not found' });
+    if (!IS_PROD) console.log('[unit-default]', 'workspace=', req.session.workspaceId, 'unit=', unit.id);
+    return res.json(unit);
+  } catch (e) {
+    console.error('GET /api/unit/default failed', e);
+    return res.status(500).json({ error: 'failed to load unit' });
+  }
+});
+
+app.put('/api/unit/default', requireAnyUser, express.json(), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const { name, unit_number, unit_owner_name, unit_phone } = req.body || {};
+    if (!unit_number || !unit_owner_name || !unit_phone) {
+      return res.status(400).json({ error: 'unit_number, unit_owner_name, unit_phone are required' });
+    }
+    const unit = await getDefaultUnit(ws);
+    if (!unit) return res.status(404).json({ error: 'Default unit not found' });
+    if (!IS_PROD) console.log('[unit-update]', 'workspace=', ws, 'unit=', unit.id, 'fields=', { name, unit_number, unit_owner_name, unit_phone });
+    const { rows } = await pool.query(
+      `UPDATE units SET name = $1, unit_number = $2, unit_owner_name = $3, unit_phone = $4, updated_at = NOW()
+       WHERE id = $5 AND workspace_id = $6
+       RETURNING id, workspace_id, unit_number, unit_owner_name, unit_phone, name, signature_file_key`,
+      [name || null, unit_number, unit_owner_name, unit_phone, unit.id, ws]
+    );
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error('PUT /api/unit/default failed', e);
+    return res.status(500).json({ error: 'failed to update unit' });
+  }
+});
+
+app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('signature'), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const unit = await getDefaultUnit(ws);
+    if (!unit) return res.status(404).json({ error: 'Default unit not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const ext = path.extname(req.file.originalname || '.png') || '.png';
+    const finalRel = `signatures/unit-${unit.id}${ext}`;
+    const finalPath = path.join(UPLOADS_DIR, finalRel);
+
+    // move temp file into final path locally
+    try {
+      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+      fs.renameSync(req.file.path, finalPath);
+    } catch (e) {
+      console.error('Failed to move signature file', e);
+      return res.status(500).json({ error: 'failed to save signature locally' });
+    }
+
+    // store signature
+    if (IS_PROD && hasSftpCreds()) {
+      try {
+        const sftp = await getSftp();
+        const remoteDir = `${SFTP_ROOT}/signatures`;
+        try { await sftp.mkdir(remoteDir, true); } catch (_) {}
+        const remotePath = `${remoteDir}/unit-${unit.id}${ext}`;
+        await sftp.put(finalPath, remotePath);
+        await sftp.end();
+      } catch (e) {
+        console.error('Signature SFTP upload failed', e);
+        return res.status(500).json({ error: 'failed to upload signature' });
+      }
+    }
+
+    if (!IS_PROD) console.log('[unit-signature]', 'workspace=', ws, 'unit=', unit.id, 'saved=', finalRel);
+
+    await pool.query(
+      'UPDATE units SET signature_file_key = $1, updated_at = NOW() WHERE id = $2 AND workspace_id = $3',
+      [finalRel, unit.id, ws]
+    );
+
+    return res.json({ ok: true, signature_file_key: finalRel });
+  } catch (e) {
+    console.error('POST /api/unit/default/signature failed', e);
+    return res.status(500).json({ error: 'failed to save signature' });
+  }
+});
+
+app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).send('DB not configured');
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).send('workspace not set');
+    const unitId = req.params.unitId;
+    const unit = await pool.query(
+      'SELECT id, workspace_id, signature_file_key FROM units WHERE id = $1 AND workspace_id = $2 LIMIT 1',
+      [unitId, ws]
+    );
+    const row = unit.rows[0];
+    if (!row || !row.signature_file_key) return res.status(404).send('Signature not found');
+    const key = row.signature_file_key;
+
+    if (!IS_PROD || !hasSftpCreds()) {
+      const localPath = path.join(UPLOADS_DIR, key);
+      if (!fs.existsSync(localPath)) return res.status(404).send('Signature not found');
+      const ext = path.extname(localPath).toLowerCase();
+      const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+                  : ext === '.png' ? 'image/png'
+                  : ext === '.gif' ? 'image/gif'
+                  : 'application/octet-stream';
+      res.setHeader('Content-Type', type);
+      return res.sendFile(localPath);
+    }
+
+    // prod: fetch from SFTP and stream
+    try {
+      const sftp = await getSftp();
+      const remotePath = `${SFTP_ROOT}/${key}`;
+      const stream = await sftp.get(remotePath);
+      const ext = path.extname(remotePath).toLowerCase();
+      const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+                  : ext === '.png' ? 'image/png'
+                  : ext === '.gif' ? 'image/gif'
+                  : 'application/octet-stream';
+      res.setHeader('Content-Type', type);
+      stream.pipe(res);
+      stream.on('close', async () => { try { await sftp.end(); } catch(_){} });
+      stream.on('error', async (err) => {
+        console.error('signature stream err', err);
+        try { await sftp.end(); } catch(_){}
+        if (!res.headersSent) res.status(500).end('Error');
+      });
+    } catch (e) {
+      console.error('signature sftp fetch failed', e);
+      return res.status(500).send('Failed to load signature');
+    }
+  } catch (e) {
+    console.error('GET /signature/:unitId failed', e);
+    return res.status(500).send('Failed');
+  }
+});
+
+// Unit settings page
+app.get('/unit-settings', requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'unit-settings.html'));
+});
+
 
 
 // List bookings on dashboard
@@ -2725,23 +2949,41 @@ app.get('/checklist/:id', (req, res) => {
 
 app.get('/generate-movein/:id', async (req, res) => {
   const bookingId = req.params.id;
+  const isNumericId = /^\d+$/.test(String(bookingId));
+  const usePg = usePgBookings(req);
 
   // Debug: show where we are writing
   console.log('[/generate-movein] bookingId:', bookingId);
   console.log('[/generate-movein] OUTPUT_DIR:', OUTPUT_DIR);
+  console.log('[/generate-movein] backend:', usePg ? 'postgres' : 'localjson', 'idType:', isNumericId ? 'numeric' : 'timestamp');
 
   let booking;
+  let unit = null;
   try {
-    if (usePgBookings(req)) {
+    if (usePg) {
       if (!req.session.workspaceId) {
         console.error('[/generate-movein] workspaceId missing in session');
         return res.status(400).send('workspace not set');
       }
       booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+      if (!booking) return res.status(404).send('Booking not found.');
+      unit = await resolveUnitForBooking(req.session.workspaceId, booking);
+      const missing = validateUnitForMoveIn(unit);
+      if (missing.length) {
+        console.error('[movein] missing unit fields', missing);
+        return res.status(400).send('Please configure Unit Settings: ' + missing.join(', '));
+      }
+      if (!IS_PROD) console.log('[movein]', 'bookingId=', bookingId, 'workspace=', req.session.workspaceId, 'unitId=', unit && unit.id, 'signatureKey=', unit && unit.signature_file_key);
     } else {
       const data = fs.readFileSync(bookingsFile, 'utf8');
       const bookings = JSON.parse(data);
       booking = bookings.find(b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId)));
+      unit = {
+        unit_number: '___',
+        unit_owner_name: '___',
+        unit_phone: '___',
+        signature_file_key: null
+      };
     }
   } catch (err) {
     console.error('Failed to load booking for generate-movein:', err);
@@ -2756,7 +2998,18 @@ app.get('/generate-movein/:id', async (req, res) => {
   console.log('[/generate-movein] outputPath:', outputPath);
 
   try {
-    await generateMoveInPDF(booking, outputPath);
+    if (!IS_PROD) {
+      console.log('[movein]', 'generating PDF', {
+        bookingId,
+        workspaceId: req.session.workspaceId,
+        unitId: unit && unit.id,
+        unitNumber: unit && unit.unit_number,
+        signatureKey: unit && unit.signature_file_key
+      });
+    }
+    await generateMoveInPDF(booking, unit, outputPath, {
+      loadSignature: (key) => loadSignatureBuffer(key)
+    });
     // Sanity check: did the file get created?
     if (!fs.existsSync(outputPath)) {
       console.error('PDF was not created at:', outputPath);
@@ -2782,20 +3035,35 @@ app.get('/send-email/:id', requireAdmin, async (req, res) => {
 
   const bookingId = req.params.id;
   let booking = null;
+  let unit = null;
 
   try {
     if (usePgBookings(req)) {
-      console.log('Bookings backend: postgres (send-email)');
+      console.log('Bookings backend: postgres (send-email)', 'idType:', /^\d+$/.test(String(bookingId)) ? 'numeric' : 'timestamp');
       if (!req.session.workspaceId) {
         console.error('send-email: workspaceId missing in session');
         return res.status(400).json({ success: false, message: 'workspace not set' });
       }
       booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+      if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
+      unit = await resolveUnitForBooking(req.session.workspaceId, booking);
+      const missing = validateUnitForMoveIn(unit);
+      if (missing.length) {
+        console.error('[movein] missing unit fields', missing);
+        return res.status(400).json({ success: false, message: 'Please configure Unit Settings: ' + missing.join(', ') });
+      }
+      if (!IS_PROD) console.log('[movein]', 'bookingId=', bookingId, 'workspace=', req.session.workspaceId, 'unitId=', unit && unit.id, 'signatureKey=', unit && unit.signature_file_key);
     } else {
       console.log('Bookings backend: localjson (send-email)');
       const bookings = JSON.parse(fs.readFileSync(bookingsFile, 'utf8'));
       const idx = bookings.findIndex(b => String(b.timestamp) === String(bookingId) || (b.id && String(b.id) === String(bookingId)));
       if (idx !== -1) booking = bookings[idx];
+      unit = {
+        unit_number: '___',
+        unit_owner_name: '___',
+        unit_phone: '___',
+        signature_file_key: null
+      };
     }
   } catch (err) {
     console.error('send-email: failed to load booking', err);
@@ -2807,7 +3075,18 @@ app.get('/send-email/:id', requireAdmin, async (req, res) => {
   }
 
   const outputPath = path.join(OUTPUT_DIR, `movein-${bookingId}.pdf`);
-  await generateMoveInPDF(booking, outputPath);
+  if (!IS_PROD) {
+    console.log('[movein]', 'generating PDF', {
+      bookingId,
+      workspaceId: req.session.workspaceId,
+      unitId: unit && unit.id,
+      unitNumber: unit && unit.unit_number,
+      signatureKey: unit && unit.signature_file_key
+    });
+  }
+  await generateMoveInPDF(booking, unit, outputPath, {
+    loadSignature: (key)=>loadSignatureBuffer(key)
+  });
 
 // --- Gather ID attachments ---
 let uploadedFiles = [];

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Settings</title>
+  <style>
+    :root {
+      --accent: #10B981;
+      --border: rgba(16,185,129,0.35);
+      --muted: #6b7280;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #ecfdf5, #ffffff);
+      margin: 0;
+      padding: 24px;
+      color: #0f172a;
+    }
+    .card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 16px 35px rgba(16, 185, 129, 0.18);
+      padding: 20px 22px;
+    }
+    h1 { margin: 0 0 12px; }
+    .muted { color: var(--muted); margin: 0 0 18px; }
+    label { display: block; margin-bottom: 12px; font-weight: 600; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .actions { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    button {
+      border: 1px solid var(--border);
+      background: var(--accent);
+      color: #fff;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary { background: #fff; color: #0f172a; }
+    .status { margin-top: 8px; color: var(--muted); }
+    .preview { margin-top: 12px; }
+    .preview img { max-width: 220px; border: 1px solid var(--border); border-radius: 12px; }
+    .nav { margin-bottom: 12px; }
+    .nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="nav"><a href="/dashboard-new">← Back to dashboard</a></div>
+  <div class="card">
+    <h1>Unit settings</h1>
+    <p class="muted">Edit the default unit details and upload a signature.</p>
+
+    <form id="unitForm">
+      <label>Unit name (optional)
+        <input type="text" id="name" placeholder="e.g. Knightsbridge 4317" />
+      </label>
+      <div class="row">
+        <label>Unit number
+          <input type="text" id="unit_number" required />
+        </label>
+        <label>Owner name
+          <input type="text" id="unit_owner_name" required />
+        </label>
+      </div>
+      <label>Owner phone
+        <input type="text" id="unit_phone" required />
+      </label>
+      <div class="actions">
+        <button type="submit">Save</button>
+        <span id="saveStatus" class="status"></span>
+      </div>
+    </form>
+
+    <hr style="margin:16px 0; border:none; border-top:1px solid #e5e7eb;">
+
+    <div>
+      <label>Signature image
+        <input type="file" id="signatureInput" accept="image/*" />
+      </label>
+      <div class="actions">
+        <button id="uploadSignatureBtn" type="button">Upload signature</button>
+        <span id="sigStatus" class="status"></span>
+      </div>
+      <div class="preview" id="sigPreview"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentUnitId = null;
+
+    async function fetchUnit() {
+      const res = await fetch('/api/unit/default');
+      if (!res.ok) throw new Error('Failed to load unit');
+      return res.json();
+    }
+
+    function renderUnit(unit) {
+      if (!unit) return;
+      currentUnitId = unit.id;
+      document.getElementById('name').value = unit.name || '';
+      document.getElementById('unit_number').value = unit.unit_number || '';
+      document.getElementById('unit_owner_name').value = unit.unit_owner_name || '';
+      document.getElementById('unit_phone').value = unit.unit_phone || '';
+      renderSignature(unit);
+    }
+
+    function renderSignature(unit) {
+      const wrap = document.getElementById('sigPreview');
+      if (!wrap) return;
+      if (unit.signature_file_key && currentUnitId) {
+        const cacheBust = Date.now();
+        wrap.innerHTML = `<div class="muted">Current signature:</div><img src="/signature/${currentUnitId}?t=${cacheBust}" alt="Signature" />`;
+      } else {
+        wrap.innerHTML = '<div class="muted">No signature uploaded.</div>';
+      }
+    }
+
+    async function saveUnit(e) {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('name').value,
+        unit_number: document.getElementById('unit_number').value,
+        unit_owner_name: document.getElementById('unit_owner_name').value,
+        unit_phone: document.getElementById('unit_phone').value,
+      };
+      const status = document.getElementById('saveStatus');
+      status.textContent = 'Saving...';
+      const res = await fetch('/api/unit/default', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        status.textContent = 'Save failed';
+        return;
+      }
+      const data = await res.json();
+      renderUnit(data);
+      status.textContent = 'Saved!';
+      setTimeout(()=> status.textContent='', 1500);
+    }
+
+    async function uploadSignature() {
+      const input = document.getElementById('signatureInput');
+      const file = input.files && input.files[0];
+      const status = document.getElementById('sigStatus');
+      if (!file) {
+        status.textContent = 'Select a file first';
+        return;
+      }
+      status.textContent = 'Uploading...';
+      const form = new FormData();
+      form.append('signature', file);
+      const res = await fetch('/api/unit/default/signature', { method: 'POST', body: form });
+      if (!res.ok) {
+        status.textContent = 'Upload failed';
+        return;
+      }
+      status.textContent = 'Uploaded!';
+      const data = await res.json().catch(()=>({}));
+      if (currentUnitId) {
+        renderSignature({ id: currentUnitId, signature_file_key: data.signature_file_key || '1' });
+      }
+      setTimeout(()=> status.textContent='', 1500);
+    }
+
+    document.getElementById('unitForm').addEventListener('submit', saveUnit);
+    document.getElementById('uploadSignatureBtn').addEventListener('click', uploadSignature);
+
+    (async () => {
+      try {
+        const unit = await fetchUnit();
+        renderUnit(unit);
+      } catch (e) {
+        document.getElementById('saveStatus').textContent = 'Failed to load unit';
+        console.error(e);
+      }
+    })();
+  </script>
+</body>
+</html>

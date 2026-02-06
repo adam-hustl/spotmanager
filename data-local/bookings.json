@@ -236,9 +236,11 @@
     "people": "2",
     "timestamp": "2026-01-05T23:49:14.190Z",
     "checklist": {
-      "step5": true,
-      "step4": true
-    }
+      "step5": false,
+      "step4": false,
+      "step2": true
+    },
+    "emailSent": true
   },
   {
     "guestName": "test with 5",
@@ -251,8 +253,8 @@
       "step1": true,
       "step2": true,
       "step3": true,
-      "step4": false,
-      "step5": false
+      "step4": true,
+      "step5": true
     },
     "emailSent": true,
     "cleaned": true,

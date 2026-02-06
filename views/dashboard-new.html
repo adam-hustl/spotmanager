@@ -38,6 +38,7 @@
           </button>
           <div id="userMenu" class="user-menu" style="display:none;">
             <a href="/cancelled-bookings" class="user-menu-item">Cancelled bookings</a>
+            <a href="/unit-settings" class="user-menu-item">Unit settings</a>
             <a href="/logout" class="user-menu-item">Log out</a>
           </div>
         </div>
@@ -1280,7 +1281,7 @@ function setAccessPickedState(isPicked, persist=true){
 
   function attachActions(current){ 
   if(!current) return; 
-  const id= current.timestamp || current.id;
+  const id= current.id || current.timestamp;
   window.currentBookingId = id;
 
   // reset comp state and rebuild steps for new selection
