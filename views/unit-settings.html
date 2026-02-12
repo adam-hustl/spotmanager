@@ -86,12 +86,24 @@
     <hr style="margin:16px 0; border:none; border-top:1px solid #e5e7eb;">
 
     <div>
-      <label>Signature image
+      <label>Signature</label>
+      <div class="mode-buttons">
+        <button type="button" id="btnUploadMode" class="mode-btn active">Upload file</button>
+        <button type="button" id="btnDrawMode" class="mode-btn">Draw</button>
+      </div>
+      <div id="uploadMode">
         <input type="file" id="signatureInput" accept="image/*" />
-      </label>
-      <div class="actions">
-        <button id="uploadSignatureBtn" type="button">Upload signature</button>
-        <span id="sigStatus" class="status"></span>
+        <div class="actions">
+          <button id="uploadSignatureBtn" type="button">Upload signature</button>
+          <span id="sigStatus" class="status"></span>
+        </div>
+      </div>
+      <div id="drawMode" style="display:none; margin-top:10px;">
+        <canvas id="sigCanvas" style="width:100%; max-width:480px; border:1px solid #e5e7eb; border-radius:10px;"></canvas>
+        <div class="actions">
+          <button id="clearCanvas" type="button" class="secondary">Clear</button>
+          <button id="saveDrawing" type="button">Save drawing</button>
+        </div>
       </div>
       <div class="preview" id="sigPreview"></div>
     </div>
@@ -176,8 +188,104 @@
       setTimeout(()=> status.textContent='', 1500);
     }
 
+    // drawing helpers
+    function setupCanvas() {
+      const canvas = document.getElementById('sigCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const resize = () => {
+        const w = Math.min(canvas.parentElement.clientWidth || 320, 480);
+        const h = 200;
+        const data = canvas.toDataURL(); // keep current drawing
+        const dpr = window.devicePixelRatio || 1;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0,0,w,h);
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+        img.src = data;
+      };
+      resize();
+      window.addEventListener('resize', resize);
+
+      let drawing = false;
+      const start = (e) => {
+        drawing = true;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        ctx.beginPath();
+        ctx.moveTo(((e.clientX || e.touches?.[0].clientX) - rect.left) * scaleX, ((e.clientY || e.touches?.[0].clientY) - rect.top) * scaleY);
+      };
+      const move = (e) => {
+        if (!drawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = ((e.clientX || e.touches?.[0].clientX) - rect.left) * scaleX;
+        const y = ((e.clientY || e.touches?.[0].clientY) - rect.top) * scaleY;
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      };
+      const end = () => { drawing = false; ctx.beginPath(); };
+      canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); start(e); });
+      canvas.addEventListener('pointermove', move);
+      canvas.addEventListener('pointerup', end);
+      canvas.addEventListener('pointerleave', end);
+      const clearBtn = document.getElementById('clearCanvas');
+      if (clearBtn) clearBtn.addEventListener('click', ()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); });
+      const saveBtn = document.getElementById('saveDrawing');
+      if (saveBtn) saveBtn.addEventListener('click', ()=> {
+        const status = document.getElementById('sigStatus');
+        status.textContent = 'Uploading...';
+        canvas.toBlob(async (blob)=>{
+          if (!blob) { status.textContent='Upload failed'; return; }
+          const form = new FormData();
+          form.append('signature', blob, 'signature.png');
+          const res = await fetch('/api/unit/default/signature', { method:'POST', body: form });
+          if (!res.ok) { status.textContent='Upload failed'; return; }
+          const data = await res.json().catch(()=>({}));
+          status.textContent='Uploaded!';
+          if (currentUnitId) renderSignature({ id: currentUnitId, signature_file_key: data.signature_file_key || '1' });
+          setTimeout(()=> status.textContent='', 1500);
+        });
+      });
+    }
+
+    function wireSignatureModes(){
+      const btnUpload = document.getElementById('btnUploadMode');
+      const btnDraw = document.getElementById('btnDrawMode');
+      const uploadMode = document.getElementById('uploadMode');
+      const drawMode = document.getElementById('drawMode');
+      if (!btnUpload || !btnDraw || !uploadMode || !drawMode) return;
+      const setMode = (mode) => {
+        if (mode === 'upload') {
+          uploadMode.style.display = '';
+          drawMode.style.display = 'none';
+          btnUpload.classList.add('active');
+          btnDraw.classList.remove('active');
+        } else {
+          uploadMode.style.display = 'none';
+          drawMode.style.display = '';
+          btnUpload.classList.remove('active');
+          btnDraw.classList.add('active');
+        }
+      };
+      btnUpload.addEventListener('click', ()=> setMode('upload'));
+      btnDraw.addEventListener('click', ()=> setMode('draw'));
+      setupCanvas();
+    }
+
     document.getElementById('unitForm').addEventListener('submit', saveUnit);
     document.getElementById('uploadSignatureBtn').addEventListener('click', uploadSignature);
+    wireSignatureModes();
 
     (async () => {
       try {

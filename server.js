@@ -2283,9 +2283,11 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
     if (!unit) return res.status(404).json({ error: 'Default unit not found' });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const ext = path.extname(req.file.originalname || '.png') || '.png';
-  const finalRel = `signatures/unit-${unit.id}${ext}`;
-  const finalPath = path.join(UPLOADS_DIR, finalRel);
+    let ext = (path.extname(req.file.originalname || '') || '').toLowerCase();
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.gif']);
+    if (!allowedExt.has(ext)) ext = '.png';
+    const finalRel = `signatures/unit-${unit.id}${ext}`;
+    const finalPath = path.join(UPLOADS_DIR, finalRel);
 
   // move temp file into final path locally
   try {
