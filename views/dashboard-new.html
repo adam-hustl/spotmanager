@@ -344,6 +344,23 @@
     </div>
   </div>
 
+  <!-- Unit settings required modal -->
+  <div id="unitModal" class="unit-modal" style="display:none;">
+    <div class="unit-modal__card">
+      <div class="unit-modal__header">
+        <div class="unit-modal__icon"><i data-lucide="info" class="icon-20"></i></div>
+        <div>
+          <div class="unit-modal__title">Unit settings needed</div>
+          <div class="unit-modal__subtitle">Please complete the unit settings before sending endorsement e-mail.</div>
+        </div>
+      </div>
+      <div class="unit-modal__actions">
+        <button id="unitModalClose" class="ghost-btn">Close</button>
+        <button id="unitModalGo" class="primary-btn">Go to Unit settings</button>
+      </div>
+    </div>
+  </div>
+
 
   <input id="uploadIdInput" type="file" multiple accept="image/*,application/pdf" style="display:none">
   <input id="uploadReceiptInput" type="file" accept="image/*,application/pdf" style="display:none">
@@ -1028,6 +1045,14 @@ if (spanStart !== null && spanEnd !== null) {
     document.querySelectorAll('[data-menu]').forEach((el,idx)=>{ if(idx===0){ el.classList.add('menu-active'); } else { el.classList.remove('menu-active'); } });
     lucide.createIcons();
   }
+
+  function showUnitModal(redirectUrl){
+    const unitModal = document.getElementById('unitModal');
+    const unitGo = document.getElementById('unitModalGo');
+    if (!unitModal || !unitGo) return;
+    unitGo.setAttribute('data-redirect', redirectUrl || '/unit-settings');
+    unitModal.style.display = 'flex';
+  }
   function updateCheckinBadges() {
     if (!currentBookingId) return;
     const done = bookingCompleteFromData(currentBookingData);
@@ -1558,8 +1583,8 @@ function openPicker(inputEl) {
      openModal(`/generate-movein/${encodeURIComponent(id)}`);
      return;
    }
-   if (sendingEmail) return;
-   sendingEmail = true;
+    if (sendingEmail) return;
+    sendingEmail = true;
 
     const btn = circles[1];
     btn?.classList.add('sending');           // show spinner
@@ -1571,8 +1596,7 @@ function openPicker(inputEl) {
         try {
           const data = await r.json();
           if (data && data.error === 'UNIT_NOT_CONFIGURED') {
-            alert('Please complete Unit Settings before sending endorsement email.');
-            window.location.href = data.redirect || '/unit-settings';
+            showUnitModal(data.redirect || '/unit-settings');
             return;
           }
         } catch (_) {}
@@ -1589,7 +1613,7 @@ function openPicker(inputEl) {
       btn?.removeAttribute('aria-busy');
       sendingEmail = false;
     }
-      },
+     },
 
       ()=>{ 
         if (comp[2]) {
@@ -1778,6 +1802,22 @@ try {
         if (!userMenu.contains(e.target) && !userToggle.contains(e.target)) {
           userMenu.style.display = 'none';
         }
+      });
+    }
+
+    // Unit modal actions
+    const unitModal = document.getElementById('unitModal');
+    const unitGo = document.getElementById('unitModalGo');
+    const unitClose = document.getElementById('unitModalClose');
+    if (unitModal && unitGo && unitClose) {
+      unitGo.addEventListener('click', ()=> {
+        const redirect = unitGo.getAttribute('data-redirect') || '/unit-settings';
+        window.location.href = redirect;
+      });
+      const hideUnitModal = ()=> unitModal.style.display = 'none';
+      unitClose.addEventListener('click', hideUnitModal);
+      unitModal.addEventListener('click', (e)=> {
+        if (e.target === unitModal) hideUnitModal();
       });
     }
   }
