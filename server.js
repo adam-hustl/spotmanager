@@ -2268,17 +2268,18 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const ext = path.extname(req.file.originalname || '.png') || '.png';
-    const finalRel = `signatures/unit-${unit.id}${ext}`;
-    const finalPath = path.join(UPLOADS_DIR, finalRel);
+  const finalRel = `signatures/unit-${unit.id}${ext}`;
+  const finalPath = path.join(UPLOADS_DIR, finalRel);
 
-    // move temp file into final path locally
-    try {
-      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
-      fs.renameSync(req.file.path, finalPath);
-    } catch (e) {
-      console.error('Failed to move signature file', e);
-      return res.status(500).json({ error: 'failed to save signature locally' });
-    }
+  // move temp file into final path locally
+  try {
+    fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+    fs.renameSync(req.file.path, finalPath);
+    if (!IS_PROD) console.log('[signature] moved to', finalPath, 'exists=', fs.existsSync(finalPath));
+  } catch (e) {
+    console.error('Failed to move signature file', e);
+    return res.status(500).json({ error: 'failed to save signature locally' });
+  }
 
     // store signature
     if (USE_SFTP_SIGNATURES) {
@@ -2290,6 +2291,7 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
         await sftp.put(finalPath, remotePath);
         await sftp.end();
         try { fs.unlinkSync(finalPath); } catch (_) {}
+        if (!IS_PROD) console.log('[signature] uploaded to sftp', remotePath);
       } catch (e) {
         console.error('Signature SFTP upload failed', e);
         return res.status(500).json({ error: 'failed to upload signature' });
@@ -2327,6 +2329,7 @@ app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
     const key = row.signature_file_key;
 
     if (USE_SFTP_SIGNATURES) {
+      if (!IS_PROD) console.log('[signature] serve via sftp key=', key, 'useSftp=', USE_SFTP_SIGNATURES);
       try {
         const sftp = await getSftp();
         const remotePath = `${SFTP_ROOT}/${key}`;
@@ -2350,6 +2353,7 @@ app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
       }
     } else {
       const localPath = path.join(UPLOADS_DIR, key);
+      if (!IS_PROD) console.log('[signature] serve local path=', localPath, 'exists=', fs.existsSync(localPath));
       if (!fs.existsSync(localPath)) return res.status(404).send('Signature not found');
       const ext = path.extname(localPath).toLowerCase();
       const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
