@@ -1553,7 +1553,7 @@ function openPicker(inputEl) {
          openPicker(fileInput);
        }
      },
-        async ()=>{ 
+    async ()=>{ 
    if (comp[1]) {
      openModal(`/generate-movein/${encodeURIComponent(id)}`);
      return;
@@ -1567,6 +1567,16 @@ function openPicker(inputEl) {
 
     try{
       const r = await fetch(`/send-email/${encodeURIComponent(id)}`);
+      if (r.status === 409) {
+        try {
+          const data = await r.json();
+          if (data && data.error === 'UNIT_NOT_CONFIGURED') {
+            alert('Please complete Unit Settings before sending endorsement email.');
+            window.location.href = data.redirect || '/unit-settings';
+            return;
+          }
+        } catch (_) {}
+      }
       if(r.ok){
         setEmailStepState(true);             // mark as viewable move-in form
       }else{

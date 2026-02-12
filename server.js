@@ -183,6 +183,17 @@ async function getDefaultUnit(workspaceId) {
   return rows[0] || null;
 }
 
+function isUnitConfigured(unit) {
+  if (!unit) return false;
+  const required = [
+    unit.unit_number,
+    unit.unit_owner_name,
+    unit.unit_phone,
+    unit.signature_file_key
+  ];
+  return required.every((v) => v !== null && v !== undefined && String(v).trim() !== '');
+}
+
 
 
 // ---- Per-environment credentials (hardcoded) ----
@@ -2969,9 +2980,9 @@ app.get('/generate-movein/:id', async (req, res) => {
       if (!booking) return res.status(404).send('Booking not found.');
       unit = await resolveUnitForBooking(req.session.workspaceId, booking);
       const missing = validateUnitForMoveIn(unit);
-      if (missing.length) {
+      if (missing.length || !isUnitConfigured(unit)) {
         console.error('[movein] missing unit fields', missing);
-        return res.status(400).send('Please configure Unit Settings: ' + missing.join(', '));
+        return res.status(409).json({ error: 'UNIT_NOT_CONFIGURED', redirect: '/unit-settings' });
       }
       if (!IS_PROD) console.log('[movein]', 'bookingId=', bookingId, 'workspace=', req.session.workspaceId, 'unitId=', unit && unit.id, 'signatureKey=', unit && unit.signature_file_key);
     } else {
@@ -3048,9 +3059,9 @@ app.get('/send-email/:id', requireAdmin, async (req, res) => {
       if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
       unit = await resolveUnitForBooking(req.session.workspaceId, booking);
       const missing = validateUnitForMoveIn(unit);
-      if (missing.length) {
+      if (missing.length || !isUnitConfigured(unit)) {
         console.error('[movein] missing unit fields', missing);
-        return res.status(400).json({ success: false, message: 'Please configure Unit Settings: ' + missing.join(', ') });
+        return res.status(409).json({ error: 'UNIT_NOT_CONFIGURED', redirect: '/unit-settings' });
       }
       if (!IS_PROD) console.log('[movein]', 'bookingId=', bookingId, 'workspace=', req.session.workspaceId, 'unitId=', unit && unit.id, 'signatureKey=', unit && unit.signature_file_key);
     } else {
