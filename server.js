@@ -1265,6 +1265,7 @@ app.post('/login', async (req, res) => {
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
         req.session.userId = user.id || null;
         req.session.fullName = user.full_name || '';
+        req.session.email = user.email || '';
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
         return res.redirect('/dashboard-new');
@@ -1287,6 +1288,7 @@ app.post('/login', async (req, res) => {
     req.session.role = 'admin';
     req.session.userId = null;
     req.session.fullName = 'Admin';
+    req.session.email = 'adamkischi@hotmail.com';
     return res.redirect('/dashboard-new');
   }
 
@@ -1303,6 +1305,7 @@ app.post('/login', async (req, res) => {
     req.session.role = 'viewer';
     req.session.userId = null;
     req.session.fullName = 'Viewer';
+    req.session.email = 'adamkischi@hotmail.com';
     return res.redirect('/dashboard-new');
   }
 
@@ -1354,6 +1357,7 @@ app.post('/signup', async (req, res) => {
       req.session.workspaceId = workspaceId;
       req.session.userId = user.rows[0].id;
       req.session.fullName = fullName || '';
+      req.session.email = email || '';
       return res.redirect('/dashboard-new');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -1384,6 +1388,7 @@ app.post('/signup', async (req, res) => {
     req.session.workspaceId = DEFAULT_WORKSPACE_ID;
     req.session.userId = user.rows[0]?.id || null;
     req.session.fullName = fullName || '';
+    req.session.email = email || '';
     return res.redirect('/dashboard-new');
   } catch (e) {
     console.error('Signup failed:', e.message);
@@ -1839,8 +1844,8 @@ const mailOptions = {
   from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
   to: recipients.join(', '),
   cc: accountingCC,
-  bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
-  replyTo: 'adamkischi@hotmail.com',
+  bcc: req.session.email || 'adamkischi@hotmail.com', // copy to logged-in user
+  replyTo: req.session.email || 'adamkischi@hotmail.com',
   subject: `reciept of payment for access card for ${booking.guestName}`,
   text: `Hello, this is the receipt for payment of the access card of ${booking.guestName} that will stay in unit ${unit?.unit_number || '___'}.\n\nThank you\n\n- ${unit?.unit_owner_name || 'Unit Owner'}`,
   attachments: [
@@ -3259,11 +3264,11 @@ const stagingRecipients = ['adamkischi@hotmail.com'];
   // Final "to" list
   const recipients = IS_PROD ? prodRecipients : stagingRecipients;
 
-  const mailOptions = {
-    from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
+const mailOptions = {
+  from: '"Adam Kischinovsky" <adam.kischinovsky@gmail.com>',
   to: recipients.join(', '),
-  bcc: 'adamkischi@hotmail.com',   // keep a copy to yourself on both envs
-  replyTo: 'adamkischi@hotmail.com',
+  bcc: req.session.email || 'adamkischi@hotmail.com',   // copy to logged-in user
+  replyTo: req.session.email || 'adamkischi@hotmail.com',
   subject: `Move-In Form for ${guestNameLine}`,
   text: `Hello PMO,
 
