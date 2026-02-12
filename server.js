@@ -219,6 +219,7 @@ const SftpClient = require('ssh2-sftp-client');
 
 // Base dir you created on the server
 const SFTP_ROOT = process.env.SFTP_BASE_DIR || '/var/www/www.demoaleph.dk/spotmanager/staging';
+const ON_RENDER = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID;
 
 function hasSftpCreds() {
   return Boolean(
@@ -226,6 +227,11 @@ function hasSftpCreds() {
     process.env.SFTP_USER &&
     process.env.SFTP_PRIVATE_KEY
   );
+}
+
+const USE_SFTP_SIGNATURES = hasSftpCreds() && (IS_PROD || ON_RENDER);
+if (!IS_PROD) {
+  console.log('[signature] USE_SFTP_SIGNATURES=', USE_SFTP_SIGNATURES, 'ON_RENDER=', ON_RENDER);
 }
 
 
@@ -250,7 +256,8 @@ function getSftp() {
 
 async function loadSignatureBuffer(key) {
   if (!key) return null;
-  if (IS_PROD && hasSftpCreds()) {
+  if (USE_SFTP_SIGNATURES) {
+    if (!IS_PROD) console.log('[signature] fetch via SFTP', key);
     const sftp = await getSftp();
     try {
       const remotePath = `${SFTP_ROOT}/${key}`;
@@ -263,6 +270,7 @@ async function loadSignatureBuffer(key) {
     }
   } else {
     const localPath = path.join(UPLOADS_DIR, key);
+    if (!IS_PROD) console.log('[signature] fetch local', localPath);
     if (!fs.existsSync(localPath)) return null;
     return fs.readFileSync(localPath);
   }
@@ -2273,7 +2281,7 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
     }
 
     // store signature
-    if (IS_PROD && hasSftpCreds()) {
+    if (USE_SFTP_SIGNATURES) {
       try {
         const sftp = await getSftp();
         const remoteDir = `${SFTP_ROOT}/signatures`;
@@ -2281,13 +2289,16 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
         const remotePath = `${remoteDir}/unit-${unit.id}${ext}`;
         await sftp.put(finalPath, remotePath);
         await sftp.end();
+        try { fs.unlinkSync(finalPath); } catch (_) {}
       } catch (e) {
         console.error('Signature SFTP upload failed', e);
         return res.status(500).json({ error: 'failed to upload signature' });
       }
+    } else {
+      if (!IS_PROD) console.log('[signature] stored locally at', finalPath);
     }
 
-    if (!IS_PROD) console.log('[unit-signature]', 'workspace=', ws, 'unit=', unit.id, 'saved=', finalRel);
+    if (!IS_PROD) console.log('[unit-signature]', 'workspace=', ws, 'unit=', unit.id, 'saved=', finalRel, 'useSftp=', USE_SFTP_SIGNATURES);
 
     await pool.query(
       'UPDATE units SET signature_file_key = $1, updated_at = NOW() WHERE id = $2 AND workspace_id = $3',
@@ -2315,7 +2326,29 @@ app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
     if (!row || !row.signature_file_key) return res.status(404).send('Signature not found');
     const key = row.signature_file_key;
 
-    if (!IS_PROD || !hasSftpCreds()) {
+    if (USE_SFTP_SIGNATURES) {
+      try {
+        const sftp = await getSftp();
+        const remotePath = `${SFTP_ROOT}/${key}`;
+        const stream = await sftp.get(remotePath);
+        const ext = path.extname(remotePath).toLowerCase();
+        const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+                    : ext === '.png' ? 'image/png'
+                    : ext === '.gif' ? 'image/gif'
+                    : 'application/octet-stream';
+        res.setHeader('Content-Type', type);
+        stream.pipe(res);
+        stream.on('close', async () => { try { await sftp.end(); } catch(_){} });
+        stream.on('error', async (err) => {
+          console.error('signature stream err', err);
+          try { await sftp.end(); } catch(_){}
+          if (!res.headersSent) res.status(500).end('Error');
+        });
+      } catch (e) {
+        console.error('signature sftp fetch failed', e);
+        return res.status(500).send('Failed to load signature');
+      }
+    } else {
       const localPath = path.join(UPLOADS_DIR, key);
       if (!fs.existsSync(localPath)) return res.status(404).send('Signature not found');
       const ext = path.extname(localPath).toLowerCase();
@@ -2325,29 +2358,6 @@ app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
                   : 'application/octet-stream';
       res.setHeader('Content-Type', type);
       return res.sendFile(localPath);
-    }
-
-    // prod: fetch from SFTP and stream
-    try {
-      const sftp = await getSftp();
-      const remotePath = `${SFTP_ROOT}/${key}`;
-      const stream = await sftp.get(remotePath);
-      const ext = path.extname(remotePath).toLowerCase();
-      const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-                  : ext === '.png' ? 'image/png'
-                  : ext === '.gif' ? 'image/gif'
-                  : 'application/octet-stream';
-      res.setHeader('Content-Type', type);
-      stream.pipe(res);
-      stream.on('close', async () => { try { await sftp.end(); } catch(_){} });
-      stream.on('error', async (err) => {
-        console.error('signature stream err', err);
-        try { await sftp.end(); } catch(_){}
-        if (!res.headersSent) res.status(500).end('Error');
-      });
-    } catch (e) {
-      console.error('signature sftp fetch failed', e);
-      return res.status(500).send('Failed to load signature');
     }
   } catch (e) {
     console.error('GET /signature/:unitId failed', e);
