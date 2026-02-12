@@ -203,8 +203,6 @@
         canvas.width = w * dpr;
         canvas.height = h * dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0,0,w,h);
         const img = new Image();
         img.onload = () => ctx.drawImage(img, 0, 0, w, h);
         img.src = data;
@@ -240,7 +238,7 @@
       canvas.addEventListener('pointerup', end);
       canvas.addEventListener('pointerleave', end);
       const clearBtn = document.getElementById('clearCanvas');
-      if (clearBtn) clearBtn.addEventListener('click', ()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); });
+      if (clearBtn) clearBtn.addEventListener('click', ()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); });
       const saveBtn = document.getElementById('saveDrawing');
       if (saveBtn) saveBtn.addEventListener('click', ()=> {
         const status = document.getElementById('sigStatus');
