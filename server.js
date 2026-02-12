@@ -2333,22 +2333,30 @@ app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
       try {
         const sftp = await getSftp();
         const remotePath = `${SFTP_ROOT}/${key}`;
-        const stream = await sftp.get(remotePath);
+        const result = await sftp.get(remotePath); // buffer or stream depending on lib
+        if (!IS_PROD) console.log('[signature] sftp get typeof', typeof result, 'isBuffer', Buffer.isBuffer(result), 'remotePath', remotePath);
         const ext = path.extname(remotePath).toLowerCase();
         const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
                     : ext === '.png' ? 'image/png'
                     : ext === '.gif' ? 'image/gif'
                     : 'application/octet-stream';
         res.setHeader('Content-Type', type);
-        stream.pipe(res);
-        stream.on('close', async () => { try { await sftp.end(); } catch(_){} });
-        stream.on('error', async (err) => {
-          console.error('signature stream err', err);
-          try { await sftp.end(); } catch(_){}
-          if (!res.headersSent) res.status(500).end('Error');
-        });
+        if (Buffer.isBuffer(result)) {
+          res.end(result);
+        } else if (result && typeof result.pipe === 'function') {
+          result.pipe(res);
+          result.on('error', (err)=> {
+            console.error('signature stream err', err);
+            if (!res.headersSent) res.status(500).end('Error');
+          });
+        } else {
+          console.error('signature sftp get returned unsupported type');
+          return res.status(500).send('Failed to load signature');
+        }
+        try { await sftp.end(); } catch(_) {}
       } catch (e) {
         console.error('signature sftp fetch failed', e);
+        try { await sftp.end(); } catch(_) {}
         return res.status(500).send('Failed to load signature');
       }
     } else {
