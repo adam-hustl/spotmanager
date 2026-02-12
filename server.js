@@ -183,6 +183,21 @@ async function getDefaultUnit(workspaceId) {
   return rows[0] || null;
 }
 
+async function ensureDefaultUnit(workspaceId, client = null) {
+  if (!pool || !workspaceId) return null;
+  const runner = client || pool;
+  const { rows: existing } = await runner.query(
+    'SELECT id, workspace_id, unit_number, unit_owner_name, unit_phone, name, signature_file_key FROM units WHERE workspace_id = $1 AND is_default = true LIMIT 1',
+    [workspaceId]
+  );
+  if (existing && existing[0]) return existing[0];
+  const insert = await runner.query(
+    'INSERT INTO units (workspace_id, name, is_default, unit_number, unit_owner_name, unit_phone, signature_file_key) VALUES ($1,$2,true,NULL,NULL,NULL,NULL) RETURNING id, workspace_id, unit_number, unit_owner_name, unit_phone, name, signature_file_key',
+    [workspaceId, 'Default Unit']
+  );
+  return insert.rows[0] || null;
+}
+
 function isUnitConfigured(unit) {
   if (!unit) return false;
   const required = [
@@ -1331,6 +1346,7 @@ app.post('/signup', async (req, res) => {
         'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id',
         [fullName || '', phone || '', email || '', hash, 'admin', workspaceId]
       );
+      await ensureDefaultUnit(workspaceId, client);
       await client.query('COMMIT');
 
       req.session.loggedIn = true;
@@ -2223,7 +2239,7 @@ app.get('/api/unit/default', requireAnyUser, async (req, res) => {
   try {
     if (!pool) return res.status(500).json({ error: 'DB not configured' });
     if (!req.session.workspaceId) return res.status(400).json({ error: 'workspace not set' });
-    const unit = await getDefaultUnit(req.session.workspaceId);
+    const unit = await ensureDefaultUnit(req.session.workspaceId);
     if (!unit) return res.status(404).json({ error: 'Default unit not found' });
     if (!IS_PROD) console.log('[unit-default]', 'workspace=', req.session.workspaceId, 'unit=', unit.id);
     return res.json(unit);
