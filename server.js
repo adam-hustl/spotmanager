@@ -1791,11 +1791,13 @@ app.post('/upload-stamp/:id', requireAdmin, uploadStamp.single('stamp'), async (
   try {
     let booking = null;
     let bookingsLocal = null;
+    let unit = null;
     if (usePgBookings(req)) {
       if (!req.session.workspaceId) {
         return res.status(400).json({ ok: false, message: 'workspace not set' });
       }
       booking = await pgFetchBookingById(req.session.workspaceId, bookingId);
+      unit = await resolveUnitForBooking(req.session.workspaceId, booking);
     } else {
       bookingsLocal = readBookingsLocal();
       booking = bookingsLocal.find(
@@ -1803,6 +1805,10 @@ app.post('/upload-stamp/:id', requireAdmin, uploadStamp.single('stamp'), async (
           String(b.timestamp) === String(bookingId) ||
           (b.id && String(b.id) === String(bookingId))
       );
+      unit = {
+        unit_number: '___',
+        unit_owner_name: 'Unit Owner'
+      };
     }
     if (!booking) return res.status(404).send('Booking not found.');
     if (!req.file) return res.status(400).send('No image uploaded.');
@@ -1836,7 +1842,7 @@ const mailOptions = {
   bcc: 'adamkischi@hotmail.com', // keep a copy for yourself on prod; stripped on staging by safeSendMail
   replyTo: 'adamkischi@hotmail.com',
   subject: `reciept of payment for access card for ${booking.guestName}`,
-  text: `Hello, this is the receipt for payment of the access card of ${booking.guestName} that will stay in unit 4317.\n\nThank you\n\n- Adam Kischinovsky`,
+  text: `Hello, this is the receipt for payment of the access card of ${booking.guestName} that will stay in unit ${unit?.unit_number || '___'}.\n\nThank you\n\n- ${unit?.unit_owner_name || 'Unit Owner'}`,
   attachments: [
     { filename: req.file.filename, path: path.join(UPLOADS_DIR, req.file.filename) }
   ]
@@ -3261,7 +3267,7 @@ const stagingRecipients = ['adamkischi@hotmail.com'];
   subject: `Move-In Form for ${guestNameLine}`,
   text: `Hello PMO,
 
-I hereby endorse ${guestNameLine} to move in to the unit 4317 on ${checkInFormatted} and move-out ${checkOutFormatted}.
+I hereby endorse ${guestNameLine} to move in to the unit ${unit?.unit_number || '___'} on ${checkInFormatted} and move-out ${checkOutFormatted}.
 
 I am attaching the filled out move-in form, and ID’s.
 
@@ -3269,7 +3275,7 @@ Thank you
 
 Best regards, 
 
-Adam Kischinovsky`,
+${unit?.unit_owner_name || 'Unit Owner'}`,
   attachments: [
     { filename: `MoveInForm-${bookingId}.pdf`, path: outputPath },
     ...uploadedFiles
