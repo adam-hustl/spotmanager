@@ -155,12 +155,12 @@ const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID || null;
 
 const bcrypt = require('bcrypt');
 
-// Fetch user from DB by phone
-async function getUserByPhone(phone) {
+// Fetch user from DB by email
+async function getUserByEmail(email) {
   if (!pool) return null;
   const { rows } = await pool.query(
-    'SELECT id, phone, password_hash, role, workspace_id, full_name, email FROM users WHERE phone = $1 LIMIT 1',
-    [phone]
+    'SELECT id, phone, password_hash, role, workspace_id, full_name, email FROM users WHERE email = $1 LIMIT 1',
+    [email]
   );
   return rows[0] || null;
 }
@@ -1245,18 +1245,18 @@ function formatDateForMessage(date) {
 
 
 
-// Handle login
+// Handle login (email only)
 app.post('/login', async (req, res) => {
 
-  const { phone, username, password } = req.body;
-  const loginPhone = phone || username; // keep backward compat with old field name
+  const { email, password } = req.body;
+  if (!email || !password) return res.redirect('/?error=1');
 
 
 
 
   // 1) DB login first
   try {
-    const user = await getUserByPhone(loginPhone);
+    const user = await getUserByEmail(email);
     if (user) {
       const ok = await bcrypt.compare(password, user.password_hash);
       if (ok) {
@@ -1283,29 +1283,30 @@ app.post('/login', async (req, res) => {
 
 
   // Admin (env-specific)
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
+  if (email === ADMIN_USER && password === ADMIN_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'admin';
     req.session.userId = null;
     req.session.fullName = 'Admin';
-    req.session.email = 'adamkischi@hotmail.com';
+    req.session.email = email;
     return res.redirect('/dashboard-new');
   }
 
   // Cleaner (env-specific if you changed CLEANER_* above)
-  if (username === CLEANER_USER && password === CLEANER_PASS) {
+  if (email === CLEANER_USER && password === CLEANER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'cleaner';
+    req.session.email = email;
     return res.redirect('/cleaner-dashboard');
   }
 
   // Viewer (read-only; same for both envs)
-  if (username === VIEWER_USER && password === VIEWER_PASS) {
+  if (email === VIEWER_USER && password === VIEWER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
     req.session.userId = null;
     req.session.fullName = 'Viewer';
-    req.session.email = 'adamkischi@hotmail.com';
+    req.session.email = email;
     return res.redirect('/dashboard-new');
   }
 
