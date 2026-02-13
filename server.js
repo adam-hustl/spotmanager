@@ -151,9 +151,12 @@ app.post('/api/comment/:id', requireAdmin, (req, res) => {
 const IS_PROD = process.env.APP_ENV === 'production';
 const BOOKINGS_BACKEND = process.env.BOOKINGS_BACKEND || 'localjson';
 const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID || null;
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
+const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 60);
 
 
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 // Fetch user from DB by email
 async function getUserByEmail(email) {
@@ -207,6 +210,22 @@ function isUnitConfigured(unit) {
     unit.signature_file_key
   ];
   return required.every((v) => v !== null && v !== undefined && String(v).trim() !== '');
+}
+
+// --- Password reset helpers ---
+const resetRateEmail = new Map();
+const resetRateIp = new Map();
+function rateLimit(map, key, windowMs = 60_000, max = 5) {
+  const now = Date.now();
+  const arr = map.get(key) || [];
+  const recent = arr.filter(t => now - t < windowMs);
+  if (recent.length >= max) return false;
+  recent.push(now);
+  map.set(key, recent);
+  return true;
+}
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 
@@ -1117,6 +1136,14 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'index.html'));
 });
 
+app.get('/forgot-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'forgot-password.html'));
+});
+
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'reset-password.html'));
+});
+
 app.get('/add-booking', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'add-booking.html'));
 });
@@ -1312,6 +1339,76 @@ app.post('/login', async (req, res) => {
 
   // No match
   return res.redirect('/?error=1');
+});
+
+// Forgot password: request reset link
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: true }); // keep generic
+    const { email } = req.body || {};
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, email || 'none', 60_000, 5)) {
+      return res.status(200).json({ ok: true });
+    }
+    if (!email) return res.status(200).json({ ok: true });
+
+    const user = await getUserByEmail(email);
+    if (user) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashToken(token);
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000);
+      await pool.query(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at, created_at) VALUES ($1,$2,$3,NOW())`,
+        [user.id, tokenHash, expiresAt]
+      );
+      const link = `${APP_BASE_URL.replace(/\/$/, '')}/reset-password?token=${token}`;
+      const mailOptions = {
+        from: '"SpotManager" <adam.kischinovsky@gmail.com>',
+        to: email,
+        subject: 'Password reset',
+        text: `Use the link below to reset your password. This link expires in ${RESET_TOKEN_TTL_MINUTES} minutes.\n\n${link}\n\nIf you didn't request this, you can ignore this email.`,
+      };
+      if (!IS_PROD) console.log('[reset-request]', 'email=', email);
+      await safeSendMail(mailOptions);
+    }
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('forgot-password failed', e);
+    return res.status(200).json({ ok: true });
+  }
+});
+
+// Reset password using token
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'unavailable' });
+    const { token, newPassword } = req.body || {};
+    if (!token || !newPassword) return res.status(400).json({ error: 'Invalid request' });
+
+    const tokenHash = hashToken(token);
+    const { rows } = await pool.query(
+      `SELECT pr.id, pr.user_id, pr.expires_at, pr.used_at, u.id as uid
+       FROM password_resets pr
+       JOIN users u ON u.id = pr.user_id
+       WHERE pr.token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = rows[0];
+    const now = new Date();
+    if (!row || row.used_at || new Date(row.expires_at) < now) {
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, row.user_id]);
+    await pool.query('UPDATE password_resets SET used_at = NOW() WHERE id = $1', [row.id]);
+    if (!IS_PROD) console.log('[reset-complete]', 'user=', row.user_id);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('reset-password failed', e);
+    return res.status(400).json({ error: 'Invalid or expired token' });
+  }
 });
 
 
