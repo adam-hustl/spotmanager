@@ -2268,6 +2268,11 @@ app.get('/dashboard-new', requireAdminOrViewer, (req, res) => {
 res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
 });
 
+// Account info page
+app.get('/account-info', requireAnyUser, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'account-info.html'));
+});
+
 
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, async (req, res) => {
@@ -2442,6 +2447,58 @@ app.get('/api/session-profile', requireAnyUser, async (req, res) => {
   } catch (e) {
     console.error('session-profile failed:', e);
     res.status(500).json({ error: 'failed to load profile' });
+  }
+});
+
+// Account info (self)
+app.get('/api/account', requireAnyUser, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const user = await getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({
+      fullName: user.full_name || '',
+      phone: user.phone || '',
+      email: user.email || ''
+    });
+  } catch (e) {
+    console.error('GET /api/account failed', e);
+    res.status(500).json({ error: 'Failed to load account' });
+  }
+});
+
+app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const { fullName, phone, email } = req.body || {};
+    if (!email || !fullName) {
+      return res.status(400).json({ error: 'Full name and email are required' });
+    }
+    const updated = await pool.query(
+      `UPDATE users
+         SET full_name = $1,
+             phone = $2,
+             email = $3,
+             updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, full_name, phone, email, role, workspace_id`,
+      [fullName, phone || '', email, req.session.userId]
+    );
+    if (!updated.rows[0]) return res.status(404).json({ error: 'User not found' });
+
+    // refresh session cache
+    req.session.fullName = updated.rows[0].full_name;
+    req.session.email = updated.rows[0].email;
+    req.session.phone = updated.rows[0].phone;
+
+    return res.json({
+      fullName: updated.rows[0].full_name,
+      phone: updated.rows[0].phone,
+      email: updated.rows[0].email
+    });
+  } catch (e) {
+    console.error('PUT /api/account failed', e);
+    res.status(500).json({ error: 'Failed to update account' });
   }
 });
 
