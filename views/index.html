@@ -137,6 +137,7 @@
         <button type="submit" class="btn">Login</button>
         <div class="links">
           <a href="/forgot-password">Forgot password?</a>
+          <a href="#" id="resendLink">Resend verification</a>
         </div>
         <div class="links">
           <a href="/signup">Create account</a>
@@ -164,10 +165,44 @@
       .catch((error) => console.error('Service Worker Registration Failed:', error));
   }
   const params = new URLSearchParams(window.location.search);
-  if (params.get('error') === '1') {
-    const err = document.getElementById('loginError');
-    if (err) err.style.display = 'block';
+  const err = document.getElementById('loginError');
+  if (params.get('error') === '1' && err) {
+    err.textContent = 'Login failed. Please try again.';
+    err.style.display = 'block';
   }
+  if (params.get('verify') === '1' && err) {
+    err.textContent = 'Please check your email to verify your account.';
+    err.style.display = 'block';
+  }
+  if (params.get('verified') === '1' && err) {
+    err.textContent = 'Email verified! You can log in now.';
+    err.style.display = 'block';
+  }
+  if (params.get('unverified') === '1' && err) {
+    err.textContent = 'Please verify your email before logging in.';
+    err.style.display = 'block';
+  }
+
+  // Resend verification
+  const resend = document.getElementById('resendLink');
+  resend?.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const emailInput = document.getElementById('email');
+    const email = emailInput?.value || '';
+    if (!email) {
+      alert('Enter your email first, then click resend.');
+      return;
+    }
+    await fetch('/api/auth/resend-verification', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email })
+    });
+    if (err) {
+      err.textContent = 'If your account is unverified, we sent a new link.';
+      err.style.display = 'block';
+    }
+  });
 
   (function () {
     // Basic platform checks

@@ -153,6 +153,7 @@ const BOOKINGS_BACKEND = process.env.BOOKINGS_BACKEND || 'localjson';
 const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID || null;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 60);
+const VERIFY_TOKEN_TTL_MINUTES = Number(process.env.VERIFY_TOKEN_TTL_MINUTES || 60);
 
 
 const bcrypt = require('bcrypt');
@@ -162,7 +163,9 @@ const crypto = require('crypto');
 async function getUserByEmail(email) {
   if (!pool) return null;
   const { rows } = await pool.query(
-    'SELECT id, phone, password_hash, role, workspace_id, full_name, email FROM users WHERE email = $1 LIMIT 1',
+    `SELECT id, phone, password_hash, role, workspace_id, full_name, email,
+            email_verified, email_verification_token_hash, email_verification_expires_at
+     FROM users WHERE email = $1 LIMIT 1`,
     [email]
   );
   return rows[0] || null;
@@ -171,7 +174,7 @@ async function getUserByEmail(email) {
 async function getUserById(userId) {
   if (!pool || !userId) return null;
   const { rows } = await pool.query(
-    'SELECT id, phone, role, workspace_id, full_name, email FROM users WHERE id = $1 LIMIT 1',
+    'SELECT id, phone, role, workspace_id, full_name, email, email_verified FROM users WHERE id = $1 LIMIT 1',
     [userId]
   );
   return rows[0] || null;
@@ -226,6 +229,26 @@ function rateLimit(map, key, windowMs = 60_000, max = 5) {
 }
 function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function issueEmailVerification(userId, email, client = null) {
+  const runner = client || pool;
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
+  const expires = new Date(Date.now() + VERIFY_TOKEN_TTL_MINUTES * 60 * 1000);
+  await runner.query(
+    'UPDATE users SET email_verification_token_hash = $1, email_verification_expires_at = $2, email_verified = false WHERE id = $3',
+    [tokenHash, expires, userId]
+  );
+  const link = `${APP_BASE_URL.replace(/\\/$/, '')}/verify-email?token=${token}`;
+  const mailOptions = {
+    from: '"SpotManager" <adam.kischinovsky@gmail.com>',
+    to: email,
+    subject: 'Verify your email',
+    text: `Please verify your email by clicking the link below (expires in ${VERIFY_TOKEN_TTL_MINUTES} minutes):\n\n${link}\n\nIf you did not request this, you can ignore this email.`,
+  };
+  if (!IS_PROD) console.log('[verify-email] sent to', email);
+  await safeSendMail(mailOptions);
 }
 
 
@@ -1287,6 +1310,9 @@ app.post('/login', async (req, res) => {
     if (user) {
       const ok = await bcrypt.compare(password, user.password_hash);
       if (ok) {
+        if (!user.email_verified) {
+          return res.redirect('/?unverified=1');
+        }
         req.session.loggedIn = true;
         req.session.role = user.role;
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
@@ -1411,6 +1437,59 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
+// Resend verification email
+app.post('/api/auth/resend-verification', async (req, res) => {
+  try {
+    if (!pool) return res.status(200).json({ ok: true });
+    const { email } = req.body || {};
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, email || 'none', 60_000, 5)) {
+      return res.status(200).json({ ok: true });
+    }
+    if (email) {
+      const user = await getUserByEmail(email);
+      if (user && !user.email_verified) {
+        await issueEmailVerification(user.id, user.email);
+      }
+    }
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error('resend-verification failed', e);
+    return res.status(200).json({ ok: true });
+  }
+});
+
+// Verify email
+app.get('/verify-email', async (req, res) => {
+  try {
+    if (!pool) return res.redirect('/?error=1');
+    const token = req.query.token;
+    if (!token) return res.redirect('/?error=1');
+    const tokenHash = hashToken(token);
+    const now = new Date();
+    const { rows } = await pool.query(
+      `SELECT id, email_verification_expires_at, email_verified FROM users WHERE email_verification_token_hash = $1 LIMIT 1`,
+      [tokenHash]
+    );
+    const user = rows[0];
+    if (!user || user.email_verified || new Date(user.email_verification_expires_at) < now) {
+      return res.redirect('/?error=1');
+    }
+    await pool.query(
+      `UPDATE users
+       SET email_verified = true, email_verified_at = NOW(),
+           email_verification_token_hash = NULL, email_verification_expires_at = NULL
+       WHERE id = $1`,
+      [user.id]
+    );
+    if (!IS_PROD) console.log('[verify-email] completed for user', user.id);
+    return res.redirect('/?verified=1');
+  } catch (e) {
+    console.error('verify-email failed', e);
+    return res.redirect('/?error=1');
+  }
+});
+
 
 // end session on log out
 app.get('/logout', (req, res) => {
@@ -1444,19 +1523,13 @@ app.post('/signup', async (req, res) => {
       const workspaceId = ws.rows[0]?.id;
       const hash = await bcrypt.hash(password || '', 10);
       const user = await client.query(
-        'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id',
+        'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id, email',
         [fullName || '', phone || '', email || '', hash, 'admin', workspaceId]
       );
       await ensureDefaultUnit(workspaceId, client);
+      await issueEmailVerification(user.rows[0].id, email || '', client);
       await client.query('COMMIT');
-
-      req.session.loggedIn = true;
-      req.session.role = user.rows[0].role || 'admin';
-      req.session.workspaceId = workspaceId;
-      req.session.userId = user.rows[0].id;
-      req.session.fullName = fullName || '';
-      req.session.email = email || '';
-      return res.redirect('/dashboard-new');
+      return res.redirect('/?verify=1');
     } catch (e) {
       await client.query('ROLLBACK');
       console.error('Signup failed (pg):', e.message);
@@ -1481,13 +1554,8 @@ app.post('/signup', async (req, res) => {
       'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
       [fullName || '', phone || '', email || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
     );
-    req.session.loggedIn = true;
-    req.session.role = 'admin';
-    req.session.workspaceId = DEFAULT_WORKSPACE_ID;
-    req.session.userId = user.rows[0]?.id || null;
-    req.session.fullName = fullName || '';
-    req.session.email = email || '';
-    return res.redirect('/dashboard-new');
+    await issueEmailVerification(user.rows[0]?.id, email || '');
+    return res.redirect('/?verify=1');
   } catch (e) {
     console.error('Signup failed:', e.message);
     return res.redirect('/signup?error=1');
