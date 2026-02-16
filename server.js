@@ -339,16 +339,50 @@ async function loadSignatureBuffer(key) {
 
 
 async function safeSendMail(options) {
-  if (!IS_PROD) {
-    // On staging/local: always send only to you, and clearly mark subject
-    const clone = { ...options };
-    clone.to = process.env.STAGING_MAIL_TO || 'adamkischi@hotmail.com';
+  const allowRealStaging = process.env.ALLOW_REAL_EMAILS_IN_STAGING === 'true';
+  const stagingInbox = process.env.STAGING_MAIL_TO || 'adamkischi@hotmail.com';
+
+  // Production: send as-is
+  if (IS_PROD) {
+    return transporter.sendMail(options);
+  }
+
+  // Non‑prod: always mark as staging
+  const clone = { ...options };
+  clone.subject = `[STAGING] ${options.subject}`;
+
+  // Add a visible staging banner
+  const bannerText = '[STAGING] This email was sent from the staging environment.';
+  if (clone.html) {
+    const bannerHtml = `<div style="padding:10px 12px;margin-bottom:12px;border:1px solid #ffeeba;border-radius:6px;background:#fff8e1;color:#8a6d3b;font-size:14px;">${bannerText}</div>`;
+    clone.html = `${bannerHtml}${clone.html}`;
+  }
+  if (clone.text) {
+    clone.text = `${bannerText}\n\n${clone.text}`;
+  }
+
+  if (allowRealStaging) {
+    // Send to real recipient, optionally BCC staging for visibility
+    if (stagingInbox) {
+      clone.bcc = stagingInbox;
+    }
+  } else {
+    // Redirect to staging inbox for safety
+    clone.to = stagingInbox;
     clone.cc = undefined;
     clone.bcc = undefined;
-    clone.subject = `[STAGING] ${options.subject}`;
-    return transporter.sendMail(clone);
   }
-  return transporter.sendMail(options);
+
+  if (!IS_PROD) {
+    console.log('[mail] staging send', {
+      allowRealStaging,
+      to: clone.to,
+      bcc: clone.bcc,
+      subject: clone.subject
+    });
+  }
+
+  return transporter.sendMail(clone);
 }
 
 
