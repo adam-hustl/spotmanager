@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Account information</title>
   <link rel="stylesheet" href="/dashboard-new.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.min.css">
   <style>
     body {
       display: flex;
@@ -110,7 +111,7 @@
       </div>
       <div class="field">
         <label for="phone">Phone number</label>
-        <input id="phone" name="phone" type="text" placeholder="+45 12 34 56 78">
+        <input id="phone" name="phone" type="tel" placeholder="+45 12 34 56 78">
       </div>
       <div class="field">
         <label for="email">Email</label>
@@ -124,6 +125,7 @@
     </form>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
   <script>
     const form = document.getElementById('accountForm');
     const statusEl = document.getElementById('status');
@@ -137,6 +139,8 @@
       statusEl.classList.toggle('error', !!isError);
     }
 
+    let iti = null;
+
     async function loadAccount() {
       try {
         setStatus('Loading account...');
@@ -144,7 +148,11 @@
         if (!res.ok) throw new Error('Failed to load account');
         const data = await res.json();
         fullNameEl.value = data.fullName || '';
-        phoneEl.value = data.phone || '';
+        if (iti && data.phone) {
+          iti.setNumber(data.phone);
+        } else {
+          phoneEl.value = data.phone || '';
+        }
         emailEl.value = data.email || '';
         setStatus('');
       } catch (e) {
@@ -157,9 +165,15 @@
       e.preventDefault();
       setStatus('Saving...');
       try {
+        // normalize phone to E.164
+        let phoneVal = phoneEl.value.trim();
+        if (iti) {
+          const num = iti.getNumber();
+          if (num) phoneVal = num;
+        }
         const body = {
           fullName: fullNameEl.value.trim(),
-          phone: phoneEl.value.trim(),
+          phone: phoneVal,
           email: emailEl.value.trim()
         };
         const res = await fetch('/api/account', {
@@ -189,6 +203,25 @@
       window.location.href = '/dashboard-new';
     });
 
+    // init intl-tel-input
+    function initPhone() {
+      if (!window.intlTelInput || !phoneEl) return;
+      iti = window.intlTelInput(phoneEl, {
+        separateDialCode: true,
+        nationalMode: false,
+        formatOnDisplay: true,
+        initialCountry: "auto",
+        geoIpLookup: function(callback) {
+          fetch('https://ipapi.co/json/')
+            .then((res) => res.json())
+            .then((data) => callback(data && data.country_code ? data.country_code.toLowerCase() : 'ph'))
+            .catch(() => callback('ph'));
+        },
+        utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js"
+      });
+    }
+
+    initPhone();
     loadAccount();
   </script>
 </body>

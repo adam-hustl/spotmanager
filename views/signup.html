@@ -7,6 +7,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#007bff" />
   <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/css/intlTelInput.min.css" />
   <style>
     :root {
       --accent: #10b981;
@@ -70,7 +71,12 @@
     .brand h1 { margin: 0; font-size: 20px; }
     .muted { color: var(--muted); font-size: 14px; }
     .login-form { margin-top: 18px; display: grid; gap: 12px; }
-    .login-form label { font-weight: 600; font-size: 14px; }
+    .login-form label {
+      font-weight: 600;
+      font-size: 14px;
+      display: block;
+      margin-bottom: 6px;
+    }
     .login-form input {
       width: 100%;
       padding: 12px 14px;
@@ -130,7 +136,7 @@
           </div>
           <div>
             <label for="phone">Phone number</label>
-            <input type="text" id="phone" name="phone" placeholder="+63 555 555 5555" required />
+            <input type="tel" id="phone" name="phone" placeholder="912 345 6789" required />
           </div>
           <div>
             <label for="email">Email address</label>
@@ -150,6 +156,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/intlTelInput.min.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js')
@@ -168,6 +175,36 @@
     if (params.get('phone_exists') === '1') {
       const err = document.getElementById('signupPhoneExists');
       if (err) err.style.display = 'block';
+    }
+
+    // Intl Tel Input
+    const phoneInput = document.querySelector('#phone');
+    let iti;
+    if (phoneInput && window.intlTelInput) {
+      iti = window.intlTelInput(phoneInput, {
+        separateDialCode: true,
+        nationalMode: false,
+        formatOnDisplay: true,
+        initialCountry: "auto",
+        geoIpLookup: function(callback) {
+          fetch('https://ipapi.co/json/')
+            .then((res) => res.json())
+            .then((data) => callback(data && data.country_code ? data.country_code.toLowerCase() : 'ph'))
+            .catch(() => callback('ph'));
+        },
+        utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@18.2.1/build/js/utils.js"
+      });
+    }
+
+    // Normalize phone before submit
+    const form = document.querySelector('form');
+    if (form) {
+      form.addEventListener('submit', () => {
+        if (iti) {
+          const full = iti.getNumber();
+          if (full) phoneInput.value = full;
+        }
+      });
     }
   </script>
 </body>
