@@ -240,7 +240,7 @@ async function issueEmailVerification(userId, email, client = null) {
     'UPDATE users SET email_verification_token_hash = $1, email_verification_expires_at = $2, email_verified = false WHERE id = $3',
     [tokenHash, expires, userId]
   );
-  const link = `${APP_BASE_URL.replace(/\\/$/, '')}/verify-email?token=${token}`;
+  const link = `${APP_BASE_URL.replace(/\/$/, '')}/verify-email?token=${token}`;
   const mailOptions = {
     from: '"SpotManager" <adam.kischinovsky@gmail.com>',
     to: email,
