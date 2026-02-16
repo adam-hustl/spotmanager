@@ -137,7 +137,7 @@
         <button type="submit" class="btn">Login</button>
         <div class="links">
           <a href="/forgot-password">Forgot password?</a>
-          <a href="#" id="resendLink">Resend verification</a>
+          <a href="#" id="resendLink" style="display:none;">Resend verification</a>
         </div>
         <div class="links">
           <a href="/signup">Create account</a>
@@ -166,6 +166,18 @@
   }
   const params = new URLSearchParams(window.location.search);
   const err = document.getElementById('loginError');
+  const resend = document.getElementById('resendLink');
+  let lastUnverifiedEmail = localStorage.getItem('last_unverified_email') || '';
+
+  // Capture email on form submit
+  const loginForm = document.querySelector('form.login-form');
+  loginForm?.addEventListener('submit', () => {
+    const emailInput = document.getElementById('email');
+    if (emailInput && emailInput.value) {
+      localStorage.setItem('last_unverified_email', emailInput.value.trim().toLowerCase());
+    }
+  });
+
   if (params.get('error') === '1' && err) {
     err.textContent = 'Login failed. Please try again.';
     err.style.display = 'block';
@@ -179,20 +191,40 @@
     err.style.display = 'block';
   }
   if (params.get('unverified') === '1' && err) {
-    err.textContent = 'Please verify your email before logging in.';
+    err.textContent = 'You have not verified your email yet. Please resend the activation link and verify.';
     err.style.display = 'block';
+    if (resend) resend.style.display = 'inline';
+    const emailInput = document.getElementById('email');
+    const triedEmail = params.get('email') || emailInput?.value || lastUnverifiedEmail || '';
+    if (emailInput && !emailInput.value && triedEmail) {
+      emailInput.value = triedEmail;
+    }
+    if (triedEmail) {
+      lastUnverifiedEmail = triedEmail;
+      localStorage.setItem('last_unverified_email', triedEmail);
+    }
+  } else {
+    if (resend) resend.style.display = 'none';
   }
 
   // Resend verification
-  const resend = document.getElementById('resendLink');
+  let resendCooldown = null;
   resend?.addEventListener('click', async (e)=>{
     e.preventDefault();
+    if (resendCooldown) return;
     const emailInput = document.getElementById('email');
-    const email = emailInput?.value || '';
+    const email = (emailInput?.value || lastUnverifiedEmail || '').trim();
     if (!email) {
-      alert('Enter your email first, then click resend.');
+      if (err) {
+        err.textContent = 'Please enter your email above to resend the activation link.';
+        err.style.display = 'block';
+      }
+      emailInput?.focus();
       return;
     }
+    localStorage.setItem('last_unverified_email', email);
+    resend.textContent = 'Sending...';
+    resend.style.pointerEvents = 'none';
     await fetch('/api/auth/resend-verification', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -202,6 +234,12 @@
       err.textContent = 'If your account is unverified, we sent a new link.';
       err.style.display = 'block';
     }
+    resend.textContent = 'Sent';
+    resendCooldown = setTimeout(() => {
+      resend.textContent = 'Resend verification';
+      resend.style.pointerEvents = 'auto';
+      resendCooldown = null;
+    }, 30_000);
   });
 
   (function () {
