@@ -123,6 +123,7 @@
         <form action="/signup" method="POST" class="login-form">
           <div id="signupError" class="muted" style="color:#b91c1c; display:none;">Signup failed. Please try again.</div>
           <div id="signupEmailExists" class="muted" style="color:#b45309; display:none;">That email is already registered. Please log in or use a different email.</div>
+          <div id="signupPhoneExists" class="muted" style="color:#b45309; display:none;">That phone number is already registered. Please log in or use a different number.</div>
           <div>
             <label for="fullName">Full name</label>
             <input type="text" id="fullName" name="fullName" placeholder="Your name" required />
@@ -162,6 +163,10 @@
     }
     if (params.get('email_exists') === '1') {
       const err = document.getElementById('signupEmailExists');
+      if (err) err.style.display = 'block';
+    }
+    if (params.get('phone_exists') === '1') {
+      const err = document.getElementById('signupPhoneExists');
       if (err) err.style.display = 'block';
     }
   </script>

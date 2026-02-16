@@ -172,6 +172,9 @@
           if (err.error === 'email_exists') {
             throw new Error('That email is already registered. Please use another email.');
           }
+          if (err.error === 'phone_exists') {
+            throw new Error('That phone number is already registered. Please use another number.');
+          }
           throw new Error(err.error || 'Save failed');
         }
         await loadAccount();

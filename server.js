@@ -1552,7 +1552,9 @@ app.get('/signup', (req, res) => {
 app.post('/signup', async (req, res) => {
   const { fullName, phone, email, password } = req.body || {};
   const normEmail = normalizeEmail(email);
+  const normPhone = (phone || '').trim();
   const friendlyEmailError = () => res.redirect('/signup?email_exists=1');
+  const friendlyPhoneError = () => res.redirect('/signup?phone_exists=1');
   // Postgres multi-tenant signup (dev/staging only)
   const usePg = !IS_PROD && BOOKINGS_BACKEND === 'postgres' && pool;
   if (usePg) {
@@ -1568,6 +1570,14 @@ app.post('/signup', async (req, res) => {
         await client.query('ROLLBACK');
         return friendlyEmailError();
       }
+      const { rows: phoneDup } = await client.query(
+        'SELECT id FROM users WHERE phone = $1 LIMIT 1',
+        [normPhone]
+      );
+      if (phoneDup[0]) {
+        await client.query('ROLLBACK');
+        return friendlyPhoneError();
+      }
       const wsName = fullName ? `${fullName}'s workspace` : 'New workspace';
       const ws = await client.query(
         'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
@@ -1577,7 +1587,7 @@ app.post('/signup', async (req, res) => {
       const hash = await bcrypt.hash(password || '', 10);
       const user = await client.query(
         'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id, email',
-        [fullName || '', phone || '', normEmail || '', hash, 'admin', workspaceId]
+        [fullName || '', normPhone || '', normEmail || '', hash, 'admin', workspaceId]
       );
       await ensureDefaultUnit(workspaceId, client);
       await issueEmailVerification(user.rows[0].id, normEmail || '', client);
@@ -1586,7 +1596,11 @@ app.post('/signup', async (req, res) => {
     } catch (e) {
       await client.query('ROLLBACK');
       console.error('Signup failed (pg):', e.message);
-      if (e && e.code === '23505') return friendlyEmailError();
+      if (e && e.code === '23505') {
+        const detail = (e.detail || '').toLowerCase();
+        if (detail.includes('phone')) return friendlyPhoneError();
+        return friendlyEmailError();
+      }
       return res.redirect('/signup?error=1');
     } finally {
       client.release();
@@ -1609,15 +1623,24 @@ app.post('/signup', async (req, res) => {
       [normEmail]
     );
     if (existing[0]) return friendlyEmailError();
+    const { rows: phoneDup } = await pool.query(
+      'SELECT id FROM users WHERE phone = $1 LIMIT 1',
+      [normPhone]
+    );
+    if (phoneDup[0]) return friendlyPhoneError();
     const user = await pool.query(
       'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [fullName || '', phone || '', normEmail || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
+      [fullName || '', normPhone || '', normEmail || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
     );
     await issueEmailVerification(user.rows[0]?.id, normEmail || '');
     return res.redirect('/?verify=1');
   } catch (e) {
     console.error('Signup failed:', e.message);
-    if (e && e.code === '23505') return friendlyEmailError();
+    if (e && e.code === '23505') {
+      const detail = (e.detail || '').toLowerCase();
+      if (detail.includes('phone')) return friendlyPhoneError();
+      return friendlyEmailError();
+    }
     return res.redirect('/signup?error=1');
   }
 });
@@ -2498,6 +2521,7 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
     if (!pool) return res.status(500).json({ error: 'DB not configured' });
     const { fullName, phone, email } = req.body || {};
     const normEmail = normalizeEmail(email);
+    const normPhone = (phone || '').trim();
     if (!email || !fullName) {
       return res.status(400).json({ error: 'Full name and email are required' });
     }
@@ -2510,6 +2534,13 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
     if (dup[0]) {
       return res.status(409).json({ error: 'email_exists' });
     }
+    const { rows: phoneDup } = await pool.query(
+      'SELECT id FROM users WHERE phone = $1 AND id <> $2 LIMIT 1',
+      [normPhone, req.session.userId]
+    );
+    if (phoneDup[0]) {
+      return res.status(409).json({ error: 'phone_exists' });
+    }
 
     const updated = await pool.query(
       `UPDATE users
@@ -2519,7 +2550,7 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
              updated_at = NOW()
        WHERE id = $4
        RETURNING id, full_name, phone, email, role, workspace_id`,
-      [fullName, phone || '', normEmail, req.session.userId]
+      [fullName, normPhone, normEmail, req.session.userId]
     );
     if (!updated.rows[0]) return res.status(404).json({ error: 'User not found' });
 
@@ -2535,6 +2566,8 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
       });
   } catch (e) {
     if (e && e.code === '23505') {
+      const detail = (e.detail || '').toLowerCase();
+      if (detail.includes('phone')) return res.status(409).json({ error: 'phone_exists' });
       return res.status(409).json({ error: 'email_exists' });
     }
     console.error('PUT /api/account failed', e);
