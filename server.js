@@ -155,6 +155,9 @@ const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 60);
 const VERIFY_TOKEN_TTL_MINUTES = Number(process.env.VERIFY_TOKEN_TTL_MINUTES || 60);
 
+function normalizeEmail(email) {
+  return (email || '').trim().toLowerCase();
+}
 
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -162,11 +165,12 @@ const crypto = require('crypto');
 // Fetch user from DB by email
 async function getUserByEmail(email) {
   if (!pool) return null;
+  const norm = normalizeEmail(email);
   const { rows } = await pool.query(
     `SELECT id, phone, password_hash, role, workspace_id, full_name, email,
             email_verified, email_verification_token_hash, email_verification_expires_at
-     FROM users WHERE email = $1 LIMIT 1`,
-    [email]
+     FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    [norm]
   );
   return rows[0] || null;
 }
@@ -233,6 +237,7 @@ function hashToken(token) {
 
 async function issueEmailVerification(userId, email, client = null) {
   const runner = client || pool;
+  const normEmail = normalizeEmail(email);
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(token);
   const expires = new Date(Date.now() + VERIFY_TOKEN_TTL_MINUTES * 60 * 1000);
@@ -243,11 +248,11 @@ async function issueEmailVerification(userId, email, client = null) {
   const link = `${APP_BASE_URL.replace(/\/$/, '')}/verify-email?token=${token}`;
   const mailOptions = {
     from: '"SpotManager" <adam.kischinovsky@gmail.com>',
-    to: email,
+    to: normEmail,
     subject: 'Verify your email',
     text: `Please verify your email by clicking the link below (expires in ${VERIFY_TOKEN_TTL_MINUTES} minutes):\n\n${link}\n\nIf you did not request this, you can ignore this email.`,
   };
-  if (!IS_PROD) console.log('[verify-email] sent to', email);
+  if (!IS_PROD) console.log('[verify-email] sent to', normEmail);
   await safeSendMail(mailOptions);
 }
 
@@ -1334,13 +1339,14 @@ app.post('/login', async (req, res) => {
 
   const { email, password } = req.body;
   if (!email || !password) return res.redirect('/?error=1');
+  const normEmail = normalizeEmail(email);
 
 
 
 
   // 1) DB login first
   try {
-    const user = await getUserByEmail(email);
+    const user = await getUserByEmail(normEmail);
     if (user) {
       const ok = await bcrypt.compare(password, user.password_hash);
       if (ok) {
@@ -1352,7 +1358,7 @@ app.post('/login', async (req, res) => {
         req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
         req.session.userId = user.id || null;
         req.session.fullName = user.full_name || '';
-        req.session.email = user.email || '';
+        req.session.email = user.email ? normalizeEmail(user.email) : normEmail;
         // Redirect based on role
         if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
         return res.redirect('/dashboard-new');
@@ -1370,30 +1376,30 @@ app.post('/login', async (req, res) => {
 
 
   // Admin (env-specific)
-  if (email === ADMIN_USER && password === ADMIN_PASS) {
+  if (normEmail === ADMIN_USER && password === ADMIN_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'admin';
     req.session.userId = null;
     req.session.fullName = 'Admin';
-    req.session.email = email;
+    req.session.email = normEmail;
     return res.redirect('/dashboard-new');
   }
 
   // Cleaner (env-specific if you changed CLEANER_* above)
-  if (email === CLEANER_USER && password === CLEANER_PASS) {
+  if (normEmail === CLEANER_USER && password === CLEANER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'cleaner';
-    req.session.email = email;
+    req.session.email = normEmail;
     return res.redirect('/cleaner-dashboard');
   }
 
   // Viewer (read-only; same for both envs)
-  if (email === VIEWER_USER && password === VIEWER_PASS) {
+  if (normEmail === VIEWER_USER && password === VIEWER_PASS) {
     req.session.loggedIn = true;
     req.session.role = 'viewer';
     req.session.userId = null;
     req.session.fullName = 'Viewer';
-    req.session.email = email;
+    req.session.email = normEmail;
     return res.redirect('/dashboard-new');
   }
 
@@ -1406,13 +1412,14 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     if (!pool) return res.status(500).json({ ok: true }); // keep generic
     const { email } = req.body || {};
+    const normEmail = normalizeEmail(email);
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
-    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, email || 'none', 60_000, 5)) {
+    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, normEmail || 'none', 60_000, 5)) {
       return res.status(200).json({ ok: true });
     }
-    if (!email) return res.status(200).json({ ok: true });
+    if (!normEmail) return res.status(200).json({ ok: true });
 
-    const user = await getUserByEmail(email);
+    const user = await getUserByEmail(normEmail);
     if (user) {
       const token = crypto.randomBytes(32).toString('hex');
       const tokenHash = hashToken(token);
@@ -1424,11 +1431,11 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       const link = `${APP_BASE_URL.replace(/\/$/, '')}/reset-password?token=${token}`;
       const mailOptions = {
         from: '"SpotManager" <adam.kischinovsky@gmail.com>',
-        to: email,
+        to: normEmail,
         subject: 'Password reset',
         text: `Use the link below to reset your password. This link expires in ${RESET_TOKEN_TTL_MINUTES} minutes.\n\n${link}\n\nIf you didn't request this, you can ignore this email.`,
       };
-      if (!IS_PROD) console.log('[reset-request]', 'email=', email);
+      if (!IS_PROD) console.log('[reset-request]', 'email=', normEmail);
       await safeSendMail(mailOptions);
     }
     return res.status(200).json({ ok: true });
@@ -1476,12 +1483,13 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   try {
     if (!pool) return res.status(200).json({ ok: true });
     const { email } = req.body || {};
+    const normEmail = normalizeEmail(email);
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
-    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, email || 'none', 60_000, 5)) {
+    if (!rateLimit(resetRateIp, ip, 60_000, 10) || !rateLimit(resetRateEmail, normEmail || 'none', 60_000, 5)) {
       return res.status(200).json({ ok: true });
     }
-    if (email) {
-      const user = await getUserByEmail(email);
+    if (normEmail) {
+      const user = await getUserByEmail(normEmail);
       if (user && !user.email_verified) {
         await issueEmailVerification(user.id, user.email);
       }
@@ -1543,12 +1551,23 @@ app.get('/signup', (req, res) => {
 
 app.post('/signup', async (req, res) => {
   const { fullName, phone, email, password } = req.body || {};
+  const normEmail = normalizeEmail(email);
+  const friendlyEmailError = () => res.redirect('/signup?email_exists=1');
   // Postgres multi-tenant signup (dev/staging only)
   const usePg = !IS_PROD && BOOKINGS_BACKEND === 'postgres' && pool;
   if (usePg) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // email uniqueness check
+      const { rows: existing } = await client.query(
+        'SELECT id FROM users WHERE lower(email) = lower($1) LIMIT 1',
+        [normEmail]
+      );
+      if (existing[0]) {
+        await client.query('ROLLBACK');
+        return friendlyEmailError();
+      }
       const wsName = fullName ? `${fullName}'s workspace` : 'New workspace';
       const ws = await client.query(
         'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
@@ -1558,15 +1577,16 @@ app.post('/signup', async (req, res) => {
       const hash = await bcrypt.hash(password || '', 10);
       const user = await client.query(
         'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, role, workspace_id, email',
-        [fullName || '', phone || '', email || '', hash, 'admin', workspaceId]
+        [fullName || '', phone || '', normEmail || '', hash, 'admin', workspaceId]
       );
       await ensureDefaultUnit(workspaceId, client);
-      await issueEmailVerification(user.rows[0].id, email || '', client);
+      await issueEmailVerification(user.rows[0].id, normEmail || '', client);
       await client.query('COMMIT');
       return res.redirect('/?verify=1');
     } catch (e) {
       await client.query('ROLLBACK');
       console.error('Signup failed (pg):', e.message);
+      if (e && e.code === '23505') return friendlyEmailError();
       return res.redirect('/signup?error=1');
     } finally {
       client.release();
@@ -1584,14 +1604,20 @@ app.post('/signup', async (req, res) => {
   }
   try {
     const hash = await bcrypt.hash(password || '', 10);
+    const { rows: existing } = await pool.query(
+      'SELECT id FROM users WHERE lower(email) = lower($1) LIMIT 1',
+      [normEmail]
+    );
+    if (existing[0]) return friendlyEmailError();
     const user = await pool.query(
       'INSERT INTO users (full_name, phone, email, password_hash, role, workspace_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [fullName || '', phone || '', email || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
+      [fullName || '', phone || '', normEmail || '', hash, 'admin', DEFAULT_WORKSPACE_ID]
     );
-    await issueEmailVerification(user.rows[0]?.id, email || '');
+    await issueEmailVerification(user.rows[0]?.id, normEmail || '');
     return res.redirect('/?verify=1');
   } catch (e) {
     console.error('Signup failed:', e.message);
+    if (e && e.code === '23505') return friendlyEmailError();
     return res.redirect('/signup?error=1');
   }
 });
@@ -2471,9 +2497,20 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
   try {
     if (!pool) return res.status(500).json({ error: 'DB not configured' });
     const { fullName, phone, email } = req.body || {};
+    const normEmail = normalizeEmail(email);
     if (!email || !fullName) {
       return res.status(400).json({ error: 'Full name and email are required' });
     }
+
+    // Prevent duplicate emails (other users)
+    const { rows: dup } = await pool.query(
+      'SELECT id FROM users WHERE lower(email) = lower($1) AND id <> $2 LIMIT 1',
+      [normEmail, req.session.userId]
+    );
+    if (dup[0]) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+
     const updated = await pool.query(
       `UPDATE users
          SET full_name = $1,
@@ -2482,21 +2519,24 @@ app.put('/api/account', requireAnyUser, express.json(), async (req, res) => {
              updated_at = NOW()
        WHERE id = $4
        RETURNING id, full_name, phone, email, role, workspace_id`,
-      [fullName, phone || '', email, req.session.userId]
+      [fullName, phone || '', normEmail, req.session.userId]
     );
     if (!updated.rows[0]) return res.status(404).json({ error: 'User not found' });
 
     // refresh session cache
-    req.session.fullName = updated.rows[0].full_name;
-    req.session.email = updated.rows[0].email;
-    req.session.phone = updated.rows[0].phone;
+      req.session.fullName = updated.rows[0].full_name;
+      req.session.email = updated.rows[0].email;
+      req.session.phone = updated.rows[0].phone;
 
-    return res.json({
-      fullName: updated.rows[0].full_name,
-      phone: updated.rows[0].phone,
-      email: updated.rows[0].email
-    });
+      return res.json({
+        fullName: updated.rows[0].full_name,
+        phone: updated.rows[0].phone,
+        email: updated.rows[0].email
+      });
   } catch (e) {
+    if (e && e.code === '23505') {
+      return res.status(409).json({ error: 'email_exists' });
+    }
     console.error('PUT /api/account failed', e);
     res.status(500).json({ error: 'Failed to update account' });
   }
