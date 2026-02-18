@@ -345,6 +345,17 @@
     </div>
   </div>
 
+  <!-- Date validation modal -->
+  <div id="dateErrorOverlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-card">
+      <div class="confirm-title">Check-in and check-out can’t be the same day.</div>
+      <div class="confirm-sub">Please choose different dates for check-in and check-out.</div>
+      <div class="confirm-actions">
+        <button id="dateErrorOk" class="ghost-btn ghost-btn--primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Unit settings required modal -->
   <div id="unitModal" class="unit-modal" style="display:none;">
     <div class="unit-modal__card">
@@ -1559,6 +1570,13 @@ async function uploadReceiptDirect(bookingId, file){
         const activeId = window.currentBookingId || id;
         console.log('Saving booking', activeId);
         const fd = new FormData(editForm);
+        const ci = fd.get('checkIn');
+        const co = fd.get('checkOut');
+        if (ci && co && String(ci) === String(co)) {
+          const overlay = document.getElementById('dateErrorOverlay');
+          if (overlay) overlay.style.display = 'flex';
+          return;
+        }
         const data = new URLSearchParams(fd);
         try {
           const res = await fetch(`/edit-booking/${encodeURIComponent(activeId)}`, {
@@ -1712,11 +1730,29 @@ circles.forEach((c,i)=>{
       });
     }
 
+    const dateErrorOverlay = document.getElementById('dateErrorOverlay');
+    const dateErrorOk = document.getElementById('dateErrorOk');
+    const showDateError = () => {
+      if (dateErrorOverlay) dateErrorOverlay.style.display = 'flex';
+    };
+    if (dateErrorOk && dateErrorOverlay) {
+      dateErrorOk.onclick = (e) => {
+        e.preventDefault();
+        dateErrorOverlay.style.display = 'none';
+      };
+    }
+
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
+
         const fd = new FormData(form);
+        const ci = fd.get('checkIn');
+        const co = fd.get('checkOut');
+        if (ci && co && String(ci) === String(co)) {
+          showDateError();
+          return;
+        }
         const data = new URLSearchParams(fd);  // convert to x-www-form-urlencoded
 
 try {
