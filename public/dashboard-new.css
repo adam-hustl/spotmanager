@@ -444,7 +444,8 @@ body.page {
   height: 12px;
 }
 .action-danger {
-  color: #b91c1c;
+  color: #111827;  /* neutral text */
+  font-weight: 800; /* more bold than other actions */
 }
 .action-danger:hover { text-decoration: underline; }
 
