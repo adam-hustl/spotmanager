@@ -929,6 +929,19 @@ if (spanStart !== null && spanEnd !== null) {
           toggleEditBooking(false);
         }
       });
+    } else {
+      // No bookings on this date: open "Add guest" with preset check-in
+      cell.addEventListener('click', () => {
+        toggleEditBooking(false);
+        toggleNewGuestRow(true);
+        const form = document.getElementById('newGuestForm');
+        if (form && form.elements) {
+          if (form.elements.checkIn) form.elements.checkIn.value = key;
+          // optional: clear checkout for clarity
+          if (form.elements.checkOut) form.elements.checkOut.value = '';
+          if (form.elements.guestName) form.elements.guestName.focus();
+        }
+      });
     }
 
 

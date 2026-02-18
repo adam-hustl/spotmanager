@@ -822,3 +822,6 @@ body.booking-sidebar-open .page-grid {
 .day-booked {
   cursor: pointer;
 }
+.calendar-grid .day {
+  cursor: pointer;
+}
