@@ -1265,6 +1265,15 @@ function setAccessPickedState(isPicked, persist=true){
       }
     });
   }
+  function showNoBookings(){
+    setStatus('No upcoming bookings');
+    const ids = ['viewGuestName','viewPlatform','viewCheckIn','viewCheckOut','viewPeople'];
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = 'No upcoming bookings';
+    });
+  }
   async function loadAndRenderBookings(){
     const bookings = await loadBookings();
     calendarBookings = bookings || [];
@@ -1272,11 +1281,20 @@ function setAccessPickedState(isPicked, persist=true){
     computeCleanReady(latestBookings);
     renderMiniCalendar();
 
+    if (!bookings || bookings.length === 0) {
+      showNoBookings();
+      return;
+    }
+
     const current = pickCurrent(bookings);
     defaultBookingData = current;
-    fillGuestHeader(current);
-    attachActions(current);
-    setStatus('Uploaded documentation for current selected guest');
+    if (current) {
+      fillGuestHeader(current);
+      attachActions(current);
+      setStatus('Uploaded documentation for current selected guest');
+    } else {
+      showNoBookings();
+    }
   }
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
   function fillGuestHeader(b){
