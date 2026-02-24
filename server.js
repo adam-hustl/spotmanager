@@ -1712,11 +1712,11 @@ app.get('/auth/facebook', async (req, res) => {
 
 app.get('/auth/facebook/callback', async (req, res) => {
   try {
-    if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) return res.redirect('/?error=1&fb=missing_env');
+    if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) return res.redirect('/?error=1');
     const { code, state } = req.query;
     if (!code || !state || state !== req.session.fb_oauth_state) {
       if (!IS_PROD) console.log('[fb] state mismatch or missing code');
-      return res.redirect('/?error=1&fb=state');
+      return res.redirect('/?error=1');
     }
     req.session.fb_oauth_state = null;
     const redirectUri = `${APP_BASE_URL.replace(/\/$/, '')}/auth/facebook/callback`;
@@ -1731,7 +1731,7 @@ app.get('/auth/facebook/callback', async (req, res) => {
     const tokenJson = await tokenRes.json();
     if (!tokenJson.access_token) {
       if (!IS_PROD) console.log('[fb] token exchange failed', tokenJson);
-      return res.redirect('/?error=1&fb=token');
+      return res.redirect('/?error=1');
     }
 
     // Fetch profile
@@ -1742,7 +1742,7 @@ app.get('/auth/facebook/callback', async (req, res) => {
     const profile = await profileRes.json();
     if (!profile || !profile.email) {
       if (!IS_PROD) console.log('[fb] missing email', profile);
-      return res.redirect('/?error=1&fb=no_email');
+      return res.redirect('/?error=1');
     }
 
     const fbId = profile.id;
@@ -1780,7 +1780,7 @@ app.get('/auth/facebook/callback', async (req, res) => {
     return res.redirect('/dashboard-new');
   } catch (e) {
     console.error('Facebook auth failed', e);
-    return res.redirect('/?error=1&fb=exception');
+    return res.redirect('/?error=1');
   }
 });
 
