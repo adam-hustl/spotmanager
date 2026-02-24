@@ -154,6 +154,8 @@ const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID || null;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.RESET_TOKEN_TTL_MINUTES || 60);
 const VERIFY_TOKEN_TTL_MINUTES = Number(process.env.VERIFY_TOKEN_TTL_MINUTES || 60);
+const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '';
+const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || '';
 
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
@@ -168,9 +170,30 @@ async function getUserByEmail(email) {
   const norm = normalizeEmail(email);
   const { rows } = await pool.query(
     `SELECT id, phone, password_hash, role, workspace_id, full_name, email,
-            email_verified, email_verification_token_hash, email_verification_expires_at
+            email_verified, email_verification_token_hash, email_verification_expires_at,
+            facebook_id, auth_provider
      FROM users WHERE lower(email) = lower($1) LIMIT 1`,
     [norm]
+  );
+  return rows[0] || null;
+}
+
+async function getUserByFacebookId(facebookId) {
+  if (!pool || !facebookId) return null;
+  const { rows } = await pool.query(
+    `SELECT id, phone, password_hash, role, workspace_id, full_name, email,
+            email_verified, facebook_id, auth_provider
+     FROM users WHERE facebook_id = $1 LIMIT 1`,
+    [facebookId]
+  );
+  return rows[0] || null;
+}
+
+async function linkFacebookToUser(userId, facebookId) {
+  if (!pool || !userId || !facebookId) return null;
+  const { rows } = await pool.query(
+    `UPDATE users SET facebook_id = $1, auth_provider = 'facebook' WHERE id = $2 RETURNING *`,
+    [facebookId, userId]
   );
   return rows[0] || null;
 }
@@ -206,6 +229,34 @@ async function ensureDefaultUnit(workspaceId, client = null) {
     [workspaceId, 'Default Unit']
   );
   return insert.rows[0] || null;
+}
+
+async function createUserAndWorkspaceFromFacebook(profile) {
+  if (!pool || !profile || !profile.email) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const wsName = profile.name ? `${profile.name}'s workspace` : 'New workspace';
+    const ws = await client.query(
+      'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
+      [wsName]
+    );
+    const workspaceId = ws.rows[0].id;
+    const user = await client.query(
+      `INSERT INTO users (full_name, email, role, workspace_id, auth_provider, facebook_id, password_hash, email_verified, email_verified_at)
+       VALUES ($1,$2,'admin',$3,'facebook',$4,NULL,true,NOW())
+       RETURNING id, role, workspace_id, full_name, email`,
+      [profile.name || '', profile.email, workspaceId, profile.id]
+    );
+    await ensureDefaultUnit(workspaceId, client);
+    await client.query('COMMIT');
+    return user.rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 function isUnitConfigured(unit) {
@@ -1642,6 +1693,94 @@ app.post('/signup', async (req, res) => {
       return friendlyEmailError();
     }
     return res.redirect('/signup?error=1');
+  }
+});
+
+// ====== Facebook OAuth (minimal flow) ======
+app.get('/auth/facebook', async (req, res) => {
+  if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) return res.redirect('/?error=1');
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.fb_oauth_state = state;
+  const redirectUri = `${APP_BASE_URL.replace(/\/$/, '')}/auth/facebook/callback`;
+  const authUrl = new URL('https://www.facebook.com/v17.0/dialog/oauth');
+  authUrl.searchParams.set('client_id', FACEBOOK_APP_ID);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('state', state);
+  authUrl.searchParams.set('scope', 'email,public_profile');
+  return res.redirect(authUrl.toString());
+});
+
+app.get('/auth/facebook/callback', async (req, res) => {
+  try {
+    if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) return res.redirect('/?error=1');
+    const { code, state } = req.query;
+    if (!code || !state || state !== req.session.fb_oauth_state) {
+      if (!IS_PROD) console.log('[fb] state mismatch or missing code');
+      return res.redirect('/?error=1');
+    }
+    req.session.fb_oauth_state = null;
+    const redirectUri = `${APP_BASE_URL.replace(/\/$/, '')}/auth/facebook/callback`;
+
+    // Exchange code for token
+    const tokenUrl = new URL('https://graph.facebook.com/v17.0/oauth/access_token');
+    tokenUrl.searchParams.set('client_id', FACEBOOK_APP_ID);
+    tokenUrl.searchParams.set('redirect_uri', redirectUri);
+    tokenUrl.searchParams.set('client_secret', FACEBOOK_APP_SECRET);
+    tokenUrl.searchParams.set('code', code);
+    const tokenRes = await fetch(tokenUrl.toString());
+    const tokenJson = await tokenRes.json();
+    if (!tokenJson.access_token) {
+      if (!IS_PROD) console.log('[fb] token exchange failed', tokenJson);
+      return res.redirect('/?error=1');
+    }
+
+    // Fetch profile
+    const profileUrl = new URL('https://graph.facebook.com/me');
+    profileUrl.searchParams.set('fields', 'id,name,email');
+    profileUrl.searchParams.set('access_token', tokenJson.access_token);
+    const profileRes = await fetch(profileUrl.toString());
+    const profile = await profileRes.json();
+    if (!profile || !profile.email) {
+      if (!IS_PROD) console.log('[fb] missing email', profile);
+      return res.redirect('/?error=1');
+    }
+
+    const fbId = profile.id;
+    const fbEmail = normalizeEmail(profile.email);
+    let user = await getUserByFacebookId(fbId);
+    if (!user) {
+      user = await getUserByEmail(fbEmail);
+      if (user && !user.facebook_id) {
+        await linkFacebookToUser(user.id, fbId);
+        user.facebook_id = fbId;
+        user.auth_provider = 'facebook';
+      }
+    }
+    if (!user) {
+      user = await createUserAndWorkspaceFromFacebook({
+        id: fbId,
+        email: fbEmail,
+        name: profile.name || fbEmail
+      });
+    }
+
+    if (!user) return res.redirect('/?error=1');
+
+    // Set session
+    req.session.loggedIn = true;
+    req.session.role = user.role;
+    req.session.workspaceId = user.workspace_id || DEFAULT_WORKSPACE_ID || null;
+    req.session.userId = user.id || null;
+    req.session.fullName = user.full_name || user.fullName || profile.name || '';
+    req.session.email = user.email || fbEmail;
+
+    if (!IS_PROD) console.log('[fb] login success user=', user.id);
+
+    if (user.role === 'cleaner') return res.redirect('/cleaner-dashboard');
+    return res.redirect('/dashboard-new');
+  } catch (e) {
+    console.error('Facebook auth failed', e);
+    return res.redirect('/?error=1');
   }
 });
 

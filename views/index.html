@@ -102,6 +102,24 @@
     .btn:hover { background: var(--accent-dark); }
     .links { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 14px; }
     .links a { color: var(--accent-dark); text-decoration: none; font-weight: 600; }
+    .fb-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 8px;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #1877f2;
+      color: #fff !important;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 8px 18px rgba(24, 119, 242, 0.25);
+    }
+    .fb-btn:hover { background: #145dbf; }
+    .fb-btn svg { width: 18px; height: 18px; }
+    .fb-btn { color: #fff; }
     .links a:hover { text-decoration: underline; }
     .helper { margin-top: 10px; font-size: 13px; color: var(--muted); }
     @media (max-width: 900px) {
@@ -122,6 +140,13 @@
             <h1>Welcome back</h1>
             <div class="muted">Sign in to SpotManager</div>
           </div>
+        </div>
+
+        <div class="links" style="margin-top:8px; display:block;">
+          <a href="/auth/facebook" class="fb-btn" aria-label="Continue with Facebook">
+            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M22.675 0H1.325C.593 0 0 .6 0 1.341v21.318C0 23.4.593 24 1.325 24h11.49v-9.294H9.691v-3.622h3.124V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.794.143v3.24l-1.918.001c-1.504 0-1.796.716-1.796 1.767v2.319h3.587l-.467 3.622h-3.12V24h6.116C23.407 24 24 23.4 24 22.659V1.341C24 .6 23.407 0 22.675 0z"/></svg>
+            Continue with Facebook
+          </a>
         </div>
 
       <form action="/login" method="POST" class="login-form">
