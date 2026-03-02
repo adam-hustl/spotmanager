@@ -164,6 +164,40 @@ function normalizeEmail(email) {
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
+function requireLoggedIn(req, res, next) {
+  if (!req.session || !req.session.loggedIn) {
+    return res.status(401).json({ ok: false });
+  }
+  next();
+}
+
+async function requireSupportAgent(req, res, next) {
+  const wantsHtml = req.accepts && req.accepts(['html', 'json']) === 'html';
+  if (!req.session || !req.session.loggedIn) {
+    if (wantsHtml) return res.redirect('/');
+    return res.status(401).json({ ok: false });
+  }
+  if (!pool || !req.session.userId) {
+    if (wantsHtml) return res.redirect('/');
+    return res.status(403).json({ ok: false });
+  }
+  try {
+    const { rows } = await pool.query(
+      'SELECT is_support_agent FROM users WHERE id = $1 LIMIT 1',
+      [req.session.userId]
+    );
+    if (!rows[0] || rows[0].is_support_agent !== true) {
+      if (wantsHtml) return res.redirect('/');
+      return res.status(403).json({ ok: false });
+    }
+    next();
+  } catch (e) {
+    console.error('requireSupportAgent failed', e);
+    if (wantsHtml) return res.redirect('/');
+    return res.status(500).json({ ok: false });
+  }
+}
+
 // Fetch user from DB by email
 async function getUserByEmail(email) {
   if (!pool) return null;
@@ -2636,6 +2670,311 @@ app.get('/api/session-profile', requireAnyUser, async (req, res) => {
     console.error('session-profile failed:', e);
     res.status(500).json({ error: 'failed to load profile' });
   }
+});
+
+// ===== Support chat (user) =====
+app.get('/api/support/conversation', requireLoggedIn, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const ws = req.session.workspaceId;
+    const uid = req.session.userId;
+    if (!ws || !uid) return res.status(400).json({ ok: false });
+    let convo = await pool.query(
+      `SELECT id, status FROM support_conversations
+       WHERE workspace_id = $1 AND user_id = $2 AND status = 'open'
+       ORDER BY id DESC LIMIT 1`,
+      [ws, uid]
+    );
+    if (!convo.rows[0]) {
+      const ins = await pool.query(
+        `INSERT INTO support_conversations (workspace_id, user_id, status, last_message_at)
+         VALUES ($1,$2,'open', NOW()) RETURNING id, status`,
+        [ws, uid]
+      );
+      convo = ins;
+    }
+    return res.json({ conversationId: convo.rows[0].id, status: convo.rows[0].status });
+  } catch (e) {
+    console.error('GET /api/support/conversation failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.get('/api/support/conversation/:id/messages', requireLoggedIn, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const ws = req.session.workspaceId;
+    const uid = req.session.userId;
+    const cid = Number(req.params.id);
+    const { rows: conv } = await pool.query(
+      'SELECT id FROM support_conversations WHERE id = $1 AND workspace_id = $2 AND user_id = $3 LIMIT 1',
+      [cid, ws, uid]
+    );
+    if (!conv[0]) return res.status(404).json({ ok: false });
+    const { rows } = await pool.query(
+      `SELECT id, sender_type AS "senderType", body, created_at AS "createdAt"
+       FROM support_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC`,
+      [cid]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/support/conversation/:id/messages failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/support/conversation/:id/messages', requireLoggedIn, express.json(), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string' || message.trim().length === 0 || message.length > 2000) {
+      return res.status(400).json({ ok: false, error: 'invalid' });
+    }
+    const ws = req.session.workspaceId;
+    const uid = req.session.userId;
+    const cid = Number(req.params.id);
+    const { rows: conv } = await pool.query(
+      'SELECT id FROM support_conversations WHERE id = $1 AND workspace_id = $2 AND user_id = $3 LIMIT 1',
+      [cid, ws, uid]
+    );
+    if (!conv[0]) return res.status(404).json({ ok: false });
+    await pool.query(
+      `INSERT INTO support_messages (conversation_id, sender_type, sender_user_id, body)
+       VALUES ($1,'user',$2,$3)`,
+      [cid, uid, message.trim()]
+    );
+    await pool.query(
+      `UPDATE support_conversations SET last_message_at = NOW() WHERE id = $1`,
+      [cid]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/support/conversation/:id/messages failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+// ===== Support chat (agent) =====
+app.get('/api/support/admin/conversations', requireSupportAgent, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const status = req.query.status || 'open';
+    const { rows } = await pool.query(
+      `SELECT sc.id, sc.workspace_id, sc.user_id, sc.status, sc.last_message_at,
+              u.full_name AS user_name
+       FROM support_conversations sc
+       LEFT JOIN users u ON u.id = sc.user_id
+       WHERE sc.status = $1
+       ORDER BY sc.last_message_at DESC NULLS LAST`,
+      [status]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/support/admin/conversations failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.get('/api/support/admin/conversation/:id/messages', requireSupportAgent, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const cid = Number(req.params.id);
+    const { rows } = await pool.query(
+      `SELECT id, sender_type AS "senderType", body, created_at AS "createdAt"
+       FROM support_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC`,
+      [cid]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error('GET /api/support/admin/conversation/:id/messages failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/support/admin/conversation/:id/messages', requireSupportAgent, express.json(), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string' || message.trim().length === 0 || message.length > 2000) {
+      return res.status(400).json({ ok: false, error: 'invalid' });
+    }
+    const cid = Number(req.params.id);
+    await pool.query(
+      `INSERT INTO support_messages (conversation_id, sender_type, sender_user_id, body)
+       VALUES ($1,'support',$2,$3)`,
+      [cid, req.session.userId, message.trim()]
+    );
+    await pool.query(
+      `UPDATE support_conversations SET last_message_at = NOW() WHERE id = $1`,
+      [cid]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/support/admin/conversation/:id/messages failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+// Support admin UI (minimal)
+app.get('/support-admin', requireSupportAgent, (req, res) => {
+  const html = `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Support Admin</title>
+    <style>
+      body { margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; background:#f8fafc; color:#0f172a; }
+      .layout { display:flex; height:100vh; }
+      .sidebar { width:280px; border-right:1px solid #e5e7eb; background:#fff; overflow-y:auto; }
+      .main { flex:1; display:flex; flex-direction:column; }
+      .head { padding:12px 14px; border-bottom:1px solid #e5e7eb; font-weight:700; }
+      .list { list-style:none; margin:0; padding:0; }
+      .item { padding:10px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; }
+      .item.active { background:#ecfeff; }
+      .item .meta { font-size:12px; color:#64748b; }
+      .messages { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f1f5f9; }
+      .msg { max-width:75%; padding:10px 12px; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+      .msg.support { background:#dcfce7; align-self:flex-start; }
+      .msg.user { background:#fff; align-self:flex-end; }
+      .msg .meta { font-size:11px; color:#64748b; margin-top:4px; }
+      .composer { display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff; }
+      .composer input { flex:1; padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; }
+      .composer button { padding:10px 14px; border:none; background:#0f9a6a; color:#fff; font-weight:700; border-radius:10px; cursor:pointer; }
+      .status { padding:8px 12px; font-size:12px; color:#475569; }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="head">Conversations</div>
+        <ul id="convList" class="list"></ul>
+      </aside>
+      <main class="main">
+        <div class="head" id="convTitle">Select a conversation</div>
+        <div id="messages" class="messages"></div>
+        <div class="composer">
+          <input id="replyInput" type="text" placeholder="Type a reply..." maxlength="2000" />
+          <button id="replySend">Send</button>
+        </div>
+        <div id="status" class="status"></div>
+      </main>
+    </div>
+    <script>
+      let currentConv = null;
+      let pollMsgs = null;
+      let pollList = null;
+
+      async function loadConversations() {
+        try {
+          const res = await fetch('/api/support/admin/conversations?status=open');
+          if (!res.ok) throw new Error('load conv');
+          const list = await res.json();
+          renderConversations(list);
+        } catch (e) {
+          setStatus('Failed to load conversations');
+        }
+      }
+      function renderConversations(list) {
+        const ul = document.getElementById('convList');
+        ul.innerHTML = '';
+        const fmt = (ts) => {
+          if (!ts) return '';
+          const d = new Date(ts);
+          if (isNaN(d)) return ts;
+          return d.toLocaleString();
+        };
+        list.forEach(c => {
+          const li = document.createElement('li');
+          li.className = 'item' + (currentConv === c.id ? ' active' : '');
+          const uname = c.user_name || ('User '+c.user_id);
+          li.innerHTML = '<div><strong>'+uname+'</strong></div><div class="meta">'+fmt(c.last_message_at)+'</div>';
+          li.onclick = () => selectConv(c.id);
+          ul.appendChild(li);
+        });
+        if (!currentConv && list[0]) {
+          selectConv(list[0].id);
+        }
+      }
+
+      async function selectConv(id) {
+        currentConv = id;
+        document.getElementById('convTitle').textContent = 'Conversation #' + id;
+        await loadMessages();
+        if (pollMsgs) clearInterval(pollMsgs);
+        pollMsgs = setInterval(loadMessages, 5000);
+      }
+
+      async function loadMessages() {
+        if (!currentConv) return;
+        const fmt = (ts) => {
+          if (!ts) return '';
+          const d = new Date(ts);
+          if (isNaN(d)) return ts;
+          return d.toLocaleString();
+        };
+        try {
+          const res = await fetch('/api/support/admin/conversation/' + currentConv + '/messages');
+          if (!res.ok) throw new Error('msgs');
+          const msgs = await res.json();
+          const wrap = document.getElementById('messages');
+          wrap.innerHTML = '';
+          msgs.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'msg ' + (m.senderType === 'support' ? 'support' : 'user');
+            const body = document.createElement('div');
+            body.textContent = m.body || '';
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            const who = m.senderType === 'support' ? 'Support' : 'Guest';
+            meta.textContent = who + ' · ' + fmt(m.createdAt);
+            div.appendChild(body);
+            div.appendChild(meta);
+            wrap.appendChild(div);
+          });
+          wrap.scrollTop = wrap.scrollHeight;
+        } catch (e) {
+          setStatus('Failed to load messages');
+        }
+      }
+
+      async function sendReply() {
+        if (!currentConv) return;
+        const input = document.getElementById('replyInput');
+        const msg = (input.value || '').trim();
+        if (!msg) return;
+        try {
+          const res = await fetch('/api/support/admin/conversation/' + currentConv + '/messages', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ message: msg })
+          });
+          if (!res.ok) throw new Error('send');
+          input.value = '';
+          await loadMessages();
+        } catch (e) {
+          setStatus('Failed to send');
+        }
+      }
+
+      function setStatus(text){
+        const el = document.getElementById('status');
+        el.textContent = text || '';
+      }
+
+      document.getElementById('replySend').onclick = sendReply;
+      document.getElementById('replyInput').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendReply(); }});
+
+      loadConversations();
+      pollList = setInterval(loadConversations, 15000);
+    </script>
+  </body>
+  </html>`;
+  res.send(html);
 });
 
 // Account info (self)

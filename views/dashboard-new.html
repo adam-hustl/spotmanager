@@ -373,6 +373,19 @@
     </div>
   </div>
 
+  <!-- Support chat -->
+  <div id="supportChat" class="support-chat" style="display:none;">
+    <div class="support-chat__header">
+      <div class="support-chat__title">Support</div>
+      <button id="supportChatClose" class="support-chat__close" aria-label="Close">✕</button>
+    </div>
+    <div id="supportChatMessages" class="support-chat__messages"></div>
+    <div class="support-chat__input">
+      <input id="supportChatInput" type="text" placeholder="Type a message..." maxlength="2000" />
+      <button id="supportChatSend" class="support-chat__send">Send</button>
+    </div>
+  </div>
+
 
   <input id="uploadIdInput" type="file" multiple accept="image/*,application/pdf" style="display:none">
   <input id="uploadReceiptInput" type="file" accept="image/*,application/pdf" style="display:none">
@@ -770,6 +783,9 @@ function updateCheckinCell(b){
   let miniCalOffset = 0;
   let calendarBookings = []; 
 let bookingsByDay = {};   // dateKey ("YYYY-MM-DD") -> array of bookings for that day
+let supportChatOpen = false;
+let supportChatConversationId = null;
+let supportChatPoll = null;
 
 
   
@@ -1320,6 +1336,89 @@ function setAccessPickedState(isPicked, persist=true){
       showNoBookings();
     }
   }
+
+  // ---------- SUPPORT CHAT ----------
+  function renderSupportMessages(list){
+    const wrap = document.getElementById('supportChatMessages');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    (list||[]).forEach(m=>{
+      const div = document.createElement('div');
+      div.className = `support-chat__msg ${m.senderType === 'support' ? 'support' : 'user'}`;
+      div.textContent = m.body || '';
+      wrap.appendChild(div);
+    });
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  async function fetchConversation() {
+    const res = await fetch('/api/support/conversation');
+    if (res.status === 401) { window.location.href = '/'; return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    supportChatConversationId = data.conversationId;
+    return data.conversationId;
+  }
+
+  async function fetchMessages() {
+    if (!supportChatConversationId) return;
+    const res = await fetch(`/api/support/conversation/${supportChatConversationId}/messages`);
+    if (res.status === 401) { window.location.href = '/'; return; }
+    if (!res.ok) return;
+    const msgs = await res.json();
+    renderSupportMessages(msgs);
+  }
+
+  async function sendSupportMessage() {
+    if (!supportChatConversationId) return;
+    const input = document.getElementById('supportChatInput');
+    if (!input) return;
+    const body = input.value.trim();
+    if (!body) return;
+    const res = await fetch(`/api/support/conversation/${supportChatConversationId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: body })
+    });
+    if (res.status === 401) { window.location.href = '/'; return; }
+    if (res.ok) {
+      input.value = '';
+      await fetchMessages();
+    }
+  }
+
+  async function toggleSupportChat(forceState){
+    const panel = document.getElementById('supportChat');
+    if (!panel) return;
+    const next = typeof forceState === 'boolean' ? forceState : !supportChatOpen;
+    supportChatOpen = next;
+    panel.style.display = next ? 'flex' : 'none';
+    if (next) {
+      const convId = supportChatConversationId || await fetchConversation();
+      if (convId) await fetchMessages();
+      if (supportChatPoll) clearInterval(supportChatPoll);
+      supportChatPoll = setInterval(fetchMessages, 5000);
+    } else {
+      if (supportChatPoll) clearInterval(supportChatPoll);
+      supportChatPoll = null;
+    }
+  }
+
+  function wireSupportChat(){
+    const closeBtn = document.getElementById('supportChatClose');
+    const sendBtn = document.getElementById('supportChatSend');
+    const input = document.getElementById('supportChatInput');
+    if (closeBtn) closeBtn.addEventListener('click', (e)=>{ e.preventDefault(); toggleSupportChat(false); });
+    if (sendBtn) sendBtn.addEventListener('click', (e)=>{ e.preventDefault(); sendSupportMessage(); });
+    if (input) {
+      input.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendSupportMessage();
+        }
+      });
+    }
+  }
   function pickCurrent(bookings){ if(!Array.isArray(bookings)||!bookings.length) return null; const today=new Date().setHours(0,0,0,0); const valid=bookings.filter(b=>!b.cancelled); const upcoming=valid.map(b=>({...b,ci:new Date(b.checkIn).setHours(0,0,0,0)})).filter(b=>b.ci>=today).sort((a,b)=>a.ci-b.ci); const byCi=[...valid].sort((a,b)=>new Date(b.checkIn)-new Date(a.checkIn)); return upcoming[0]||byCi[0]; }
   function fillGuestHeader(b){
     if(!b) return;
@@ -1719,7 +1818,7 @@ circles.forEach((c,i)=>{
       }
     };
 
-    if (fab) fab.addEventListener('click', openForm);
+    if (fab) fab.addEventListener('click', (e)=>{ e.preventDefault(); toggleSupportChat(); });
     if (sideBtn) sideBtn.addEventListener('click', openForm);
 
     if (cancelBtn) {
@@ -1846,6 +1945,7 @@ try {
     document.addEventListener('click', handleSidebarOutsideClick);
     wireAddGuest();
     wireCommentButtons();
+    wireSupportChat();
     renderProgress();
     apply();
     showLoadingShell();
