@@ -322,6 +322,7 @@
   <div class="ctaB-wrap">
     <button id="ctaB" class="ctaB" aria-label="Add guest">
       <i data-lucide="plus" class="icon-20"></i>
+      <span id="supportUnreadDot" class="support-unread-dot" style="display:none;"></span>
     </button>
   </div>
 
@@ -1403,6 +1404,22 @@ function setAccessPickedState(isPicked, persist=true){
       supportChatPoll = null;
     }
   }
+  async function refreshSupportUnread(){
+    const dot = document.getElementById('supportUnreadDot');
+    if (!dot) return;
+    if (supportChatOpen) { dot.style.display = 'none'; return; }
+    try {
+      const res = await fetch('/api/support/unread-count');
+      if (res.status === 401) { window.location.href = '/'; return; }
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.unread > 0) {
+        dot.style.display = 'block';
+      } else {
+        dot.style.display = 'none';
+      }
+    } catch(e){}
+  }
 
   function wireSupportChat(){
     const closeBtn = document.getElementById('supportChatClose');
@@ -1946,6 +1963,8 @@ try {
     wireAddGuest();
     wireCommentButtons();
     wireSupportChat();
+    refreshSupportUnread();
+    setInterval(refreshSupportUnread, 10000);
     renderProgress();
     apply();
     showLoadingShell();

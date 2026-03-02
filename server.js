@@ -2711,6 +2711,10 @@ app.get('/api/support/conversation/:id/messages', requireLoggedIn, async (req, r
       [cid, ws, uid]
     );
     if (!conv[0]) return res.status(404).json({ ok: false });
+    await pool.query(
+      'UPDATE support_conversations SET user_last_read_at = NOW() WHERE id = $1',
+      [cid]
+    );
     const { rows } = await pool.query(
       `SELECT id, sender_type AS "senderType", body, created_at AS "createdAt"
        FROM support_messages
@@ -2763,7 +2767,13 @@ app.get('/api/support/admin/conversations', requireSupportAgent, async (req, res
     const status = req.query.status || 'open';
     const { rows } = await pool.query(
       `SELECT sc.id, sc.workspace_id, sc.user_id, sc.status, sc.last_message_at,
-              u.full_name AS user_name
+              u.full_name AS user_name,
+              (
+                SELECT COUNT(*) FROM support_messages sm
+                WHERE sm.conversation_id = sc.id
+                  AND sm.sender_type = 'user'
+                  AND sm.created_at > COALESCE(sc.support_last_read_at, 'epoch')
+              ) AS unread_count_for_support
        FROM support_conversations sc
        LEFT JOIN users u ON u.id = sc.user_id
        WHERE sc.status = $1
@@ -2781,6 +2791,10 @@ app.get('/api/support/admin/conversation/:id/messages', requireSupportAgent, asy
   try {
     if (!pool) return res.status(500).json({ ok: false });
     const cid = Number(req.params.id);
+    await pool.query(
+      'UPDATE support_conversations SET support_last_read_at = NOW() WHERE id = $1',
+      [cid]
+    );
     const { rows } = await pool.query(
       `SELECT id, sender_type AS "senderType", body, created_at AS "createdAt"
        FROM support_messages
@@ -2792,6 +2806,37 @@ app.get('/api/support/admin/conversation/:id/messages', requireSupportAgent, asy
   } catch (e) {
     console.error('GET /api/support/admin/conversation/:id/messages failed', e);
     return res.status(500).json({ ok: false });
+  }
+});
+
+// User unread count
+app.get('/api/support/unread-count', requireLoggedIn, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ unread: 0 });
+    const ws = req.session.workspaceId;
+    const uid = req.session.userId;
+    if (!ws || !uid) return res.json({ unread: 0 });
+    const { rows: conv } = await pool.query(
+      `SELECT id, user_last_read_at FROM support_conversations
+       WHERE workspace_id = $1 AND user_id = $2 AND status = 'open'
+       ORDER BY id DESC LIMIT 1`,
+      [ws, uid]
+    );
+    if (!conv[0]) return res.json({ unread: 0 });
+    const cid = conv[0].id;
+    const { rows } = await pool.query(
+      `SELECT COUNT(*) AS cnt
+       FROM support_messages
+       WHERE conversation_id = $1
+         AND sender_type = 'support'
+         AND created_at > COALESCE($2::timestamptz, 'epoch')`,
+      [cid, conv[0].user_last_read_at]
+    );
+    const unread = Number(rows[0]?.cnt || 0);
+    return res.json({ unread });
+  } catch (e) {
+    console.error('GET /api/support/unread-count failed', e);
+    return res.status(500).json({ unread: 0 });
   }
 });
 
@@ -2839,9 +2884,9 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
       .item .meta { font-size:12px; color:#64748b; }
       .messages { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f1f5f9; }
       .msg { max-width:75%; padding:10px 12px; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
-      .msg.support { background:#dcfce7; align-self:flex-start; }
-      .msg.user { background:#fff; align-self:flex-end; }
-      .msg .meta { font-size:11px; color:#64748b; margin-top:4px; }
+    .msg.support { background:#dcfce7; align-self:flex-start; }
+    .msg.user { background:#fff; align-self:flex-end; }
+    .msg .meta { font-size:11px; color:#64748b; margin-top:4px; }
       .composer { display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff; }
       .composer input { flex:1; padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; }
       .composer button { padding:10px 14px; border:none; background:#0f9a6a; color:#fff; font-weight:700; border-radius:10px; cursor:pointer; }
@@ -2892,7 +2937,9 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
           const li = document.createElement('li');
           li.className = 'item' + (currentConv === c.id ? ' active' : '');
           const uname = c.user_name || ('User '+c.user_id);
-          li.innerHTML = '<div><strong>'+uname+'</strong></div><div class="meta">'+fmt(c.last_message_at)+'</div>';
+          const unread = Number(c.unread_count_for_support || 0);
+          const badge = unread > 0 ? ' <span class="unread">● '+unread+'</span>' : '';
+          li.innerHTML = '<div><strong>'+uname+'</strong>'+badge+'</div><div class="meta">'+fmt(c.last_message_at)+'</div>';
           li.onclick = () => selectConv(c.id);
           ul.appendChild(li);
         });
@@ -2905,6 +2952,7 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
         currentConv = id;
         document.getElementById('convTitle').textContent = 'Conversation #' + id;
         await loadMessages();
+        await loadConversations(); // refresh badges/read state
         if (pollMsgs) clearInterval(pollMsgs);
         pollMsgs = setInterval(loadMessages, 5000);
       }

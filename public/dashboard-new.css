@@ -298,6 +298,18 @@ body.page {
   box-shadow: 0 6px 14px rgba(16,185,129,0.25);
 }
 .support-chat__send:hover { background: #0f9a6a; }
+
+/* Support unread dot on FAB */
+.support-unread-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(255,255,255,0.7);
+}
 .unit-modal__actions {
   display: flex;
   justify-content: flex-end;
