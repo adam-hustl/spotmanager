@@ -2686,12 +2686,28 @@ app.get('/api/support/conversation', requireLoggedIn, async (req, res) => {
       [ws, uid]
     );
     if (!convo.rows[0]) {
-      const ins = await pool.query(
-        `INSERT INTO support_conversations (workspace_id, user_id, status, last_message_at)
-         VALUES ($1,$2,'open', NOW()) RETURNING id, status`,
-        [ws, uid]
-      );
-      convo = ins;
+      try {
+        const ins = await pool.query(
+          `INSERT INTO support_conversations (workspace_id, user_id, status, last_message_at)
+           VALUES ($1,$2,'open', NOW()) RETURNING id, status`,
+          [ws, uid]
+        );
+        convo = ins;
+      } catch (err) {
+        if (err && err.code === '23505') {
+          // Unique constraint hit, re-select the existing open convo
+          const retry = await pool.query(
+            `SELECT id, status FROM support_conversations
+             WHERE workspace_id = $1 AND user_id = $2 AND status = 'open'
+             ORDER BY id DESC LIMIT 1`,
+            [ws, uid]
+          );
+          if (retry.rows[0]) {
+            return res.json({ conversationId: retry.rows[0].id, status: retry.rows[0].status });
+          }
+        }
+        throw err;
+      }
     }
     return res.json({ conversationId: convo.rows[0].id, status: convo.rows[0].status });
   } catch (e) {
@@ -2764,23 +2780,64 @@ app.post('/api/support/conversation/:id/messages', requireLoggedIn, express.json
 app.get('/api/support/admin/conversations', requireSupportAgent, async (req, res) => {
   try {
     if (!pool) return res.status(500).json({ ok: false });
-    const status = req.query.status || 'open';
-    const { rows } = await pool.query(
-      `SELECT sc.id, sc.workspace_id, sc.user_id, sc.status, sc.last_message_at,
-              u.full_name AS user_name,
-              (
-                SELECT COUNT(*) FROM support_messages sm
-                WHERE sm.conversation_id = sc.id
-                  AND sm.sender_type = 'user'
-                  AND sm.created_at > COALESCE(sc.support_last_read_at, 'epoch')
-              ) AS unread_count_for_support
-       FROM support_conversations sc
-       LEFT JOIN users u ON u.id = sc.user_id
-       WHERE sc.status = $1
-       ORDER BY sc.last_message_at DESC NULLS LAST`,
-      [status]
-    );
-    return res.json(rows);
+    const status = (req.query.status || 'open').toLowerCase();
+    const onlyUnread = req.query.onlyUnread === '1';
+    const q = (req.query.q || '').trim();
+    let limit = parseInt(req.query.limit || '30', 10);
+    let offset = parseInt(req.query.offset || '0', 10);
+    if (isNaN(limit) || limit < 1) limit = 30;
+    if (limit > 100) limit = 100;
+    if (isNaN(offset) || offset < 0) offset = 0;
+
+    const params = [];
+    let where = [];
+
+    if (status !== 'all') {
+      params.push(status);
+      where.push(`sc.status = $${params.length}`);
+    }
+
+    if (q) {
+      const isNum = /^\d+$/.test(q);
+      if (isNum) {
+        params.push(Number(q));
+        params.push(Number(q));
+        where.push(`(sc.id = $${params.length-1} OR sc.workspace_id = $${params.length})`);
+      } else {
+        params.push(`%${q}%`);
+        params.push(`%${q}%`);
+        where.push(`(u.email ILIKE $${params.length-1} OR u.full_name ILIKE $${params.length})`);
+      }
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    // build query
+    const baseSql = `
+      SELECT sc.id, sc.workspace_id, sc.user_id, sc.status, sc.last_message_at,
+             u.full_name AS user_name, u.email AS user_email,
+             (
+               SELECT COUNT(*) FROM support_messages sm
+               WHERE sm.conversation_id = sc.id
+                 AND sm.sender_type = 'user'
+                 AND sm.created_at > COALESCE(sc.support_last_read_at, 'epoch')
+             ) AS unread_count_for_support
+      FROM support_conversations sc
+      LEFT JOIN users u ON u.id = sc.user_id
+      ${whereSql}
+      ORDER BY ( (
+               SELECT COUNT(*) FROM support_messages sm
+               WHERE sm.conversation_id = sc.id
+                 AND sm.sender_type = 'user'
+                 AND sm.created_at > COALESCE(sc.support_last_read_at, 'epoch')
+             ) > 0 ) DESC, sc.last_message_at DESC NULLS LAST
+      LIMIT $${params.length+1}
+      OFFSET $${params.length+2}
+    `;
+    params.push(limit, offset);
+    const { rows } = await pool.query(baseSql, params);
+    const filtered = onlyUnread ? rows.filter(r=>Number(r.unread_count_for_support||0)>0) : rows;
+    return res.json(filtered);
   } catch (e) {
     console.error('GET /api/support/admin/conversations failed', e);
     return res.status(500).json({ ok: false });
@@ -2864,6 +2921,44 @@ app.post('/api/support/admin/conversation/:id/messages', requireSupportAgent, ex
   }
 });
 
+app.post('/api/support/admin/conversation/:id/close', requireSupportAgent, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const cid = Number(req.params.id);
+    const { rows } = await pool.query(`UPDATE support_conversations SET status='closed', closed_at = NOW() WHERE id = $1 RETURNING status`, [cid]);
+    return res.json({ ok: true, status: rows[0]?.status || 'closed' });
+  } catch (e) {
+    console.error('POST /api/support/admin/conversation/:id/close failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+app.post('/api/support/admin/conversation/:id/reopen', requireSupportAgent, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ ok: false });
+    const cid = Number(req.params.id);
+    const { rows: conv } = await pool.query(
+      `SELECT workspace_id, user_id FROM support_conversations WHERE id = $1 LIMIT 1`,
+      [cid]
+    );
+    const ws = conv[0]?.workspace_id;
+    const uid = conv[0]?.user_id;
+    if (ws && uid) {
+      await pool.query(
+        `UPDATE support_conversations
+         SET status='closed', closed_at = NOW()
+         WHERE workspace_id = $1 AND user_id = $2 AND status='open' AND id <> $3`,
+        [ws, uid, cid]
+      );
+    }
+    const { rows } = await pool.query(`UPDATE support_conversations SET status='open', closed_at = NULL WHERE id = $1 RETURNING status`, [cid]);
+    return res.json({ ok: true, status: rows[0]?.status || 'open' });
+  } catch (e) {
+    console.error('POST /api/support/admin/conversation/:id/reopen failed', e);
+    return res.status(500).json({ ok: false });
+  }
+});
+
 // Support admin UI (minimal)
 app.get('/support-admin', requireSupportAgent, (req, res) => {
   const html = `<!DOCTYPE html>
@@ -2875,32 +2970,58 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
     <style>
       body { margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; background:#f8fafc; color:#0f172a; }
       .layout { display:flex; height:100vh; }
-      .sidebar { width:280px; border-right:1px solid #e5e7eb; background:#fff; overflow-y:auto; }
+      .sidebar { width:320px; border-right:1px solid #e5e7eb; background:#fff; overflow-y:auto; display:flex; flex-direction:column; }
       .main { flex:1; display:flex; flex-direction:column; }
-      .head { padding:12px 14px; border-bottom:1px solid #e5e7eb; font-weight:700; }
+      .head { padding:12px 14px; border-bottom:1px solid #e5e7eb; font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
+      .tabs { display:flex; gap:6px; }
+      .tab { padding:6px 10px; border-radius:10px; border:1px solid #e5e7eb; cursor:pointer; font-weight:600; background:#fff; }
+      .tab.active { background:#ecfeff; border-color:#a5f3fc; }
+      .search-box { flex:1; min-width:120px; max-width:140px; }
+      .search-box input { width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:10px; }
       .list { list-style:none; margin:0; padding:0; }
-      .item { padding:10px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; }
+      .item { padding:10px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; flex-direction:column; gap:3px; }
       .item.active { background:#ecfeff; }
-      .item .meta { font-size:12px; color:#64748b; }
+      .item .meta { font-size:12px; color:#64748b; display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+      .chip { padding:2px 6px; border-radius:8px; font-size:11px; border:1px solid #cbd5e1; }
+      .chip.open { background:#ecfeff; color:#0ea5e9; border-color:#7dd3fc; }
+      .chip.closed { background:#f1f5f9; color:#475569; }
+      .unread { color:#ef4444; font-weight:800; }
+      .load-more { padding:10px; text-align:center; cursor:pointer; border-top:1px solid #e5e7eb; background:#fff; }
       .messages { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f1f5f9; }
       .msg { max-width:75%; padding:10px 12px; border-radius:12px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
-    .msg.support { background:#dcfce7; align-self:flex-start; }
-    .msg.user { background:#fff; align-self:flex-end; }
-    .msg .meta { font-size:11px; color:#64748b; margin-top:4px; }
+      .msg.support { background:#dcfce7; align-self:flex-start; }
+      .msg.user { background:#fff; align-self:flex-end; }
+      .msg .meta { font-size:11px; color:#64748b; margin-top:4px; }
       .composer { display:flex; gap:8px; padding:12px; border-top:1px solid #e5e7eb; background:#fff; }
       .composer input { flex:1; padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; }
       .composer button { padding:10px 14px; border:none; background:#0f9a6a; color:#fff; font-weight:700; border-radius:10px; cursor:pointer; }
       .status { padding:8px 12px; font-size:12px; color:#475569; }
+      .main-header { padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+      .btn-ghost { padding:6px 10px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; cursor:pointer; font-weight:600; }
+      .btn-ghost:hover { background:#f1f5f9; }
     </style>
   </head>
   <body>
     <div class="layout">
       <aside class="sidebar">
-        <div class="head">Conversations</div>
+        <div class="head">
+          <div class="tabs">
+            <button class="tab active" data-tab="open">Open</button>
+            <button class="tab" data-tab="unread">Unread</button>
+            <button class="tab" data-tab="closed">Closed</button>
+          </div>
+          <div class="search-box"><input id="searchInput" type="text" placeholder="Search user/email/id"></div>
+        </div>
         <ul id="convList" class="list"></ul>
+        <div id="loadMore" class="load-more" style="display:none;">Load more</div>
       </aside>
       <main class="main">
-        <div class="head" id="convTitle">Select a conversation</div>
+        <div class="main-header">
+          <div id="convTitle">Select a conversation</div>
+          <div>
+            <button id="toggleStatusBtn" class="btn-ghost" style="display:none;">Close</button>
+          </div>
+        </div>
         <div id="messages" class="messages"></div>
         <div class="composer">
           <input id="replyInput" type="text" placeholder="Type a reply..." maxlength="2000" />
@@ -2913,58 +3034,79 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
       let currentConv = null;
       let pollMsgs = null;
       let pollList = null;
+      let currentTab = 'open';
+      let offset = 0;
+      const limit = 30;
+      let currentSearch = '';
+      let convCache = [];
 
-      async function loadConversations() {
+      function fmt(ts){
+        if (!ts) return '';
+        const d = new Date(ts);
+        if (isNaN(d)) return ts;
+        return d.toLocaleString();
+      }
+
+      async function loadConversations(reset=false) {
+        if (reset) { offset = 0; convCache = []; }
         try {
-          const res = await fetch('/api/support/admin/conversations?status=open');
+          const params = new URLSearchParams();
+          params.set('status', currentTab === 'closed' ? 'closed' : (currentTab === 'open' ? 'open' : 'all'));
+          if (currentTab === 'unread') params.set('onlyUnread','1');
+          params.set('limit', limit);
+          params.set('offset', offset);
+          if (currentSearch) params.set('q', currentSearch);
+          const res = await fetch('/api/support/admin/conversations?' + params.toString());
           if (!res.ok) throw new Error('load conv');
           const list = await res.json();
-          renderConversations(list);
+          renderConversations(list, reset);
+          document.getElementById('loadMore').style.display = list.length === limit ? 'block' : 'none';
+          offset += list.length;
         } catch (e) {
           setStatus('Failed to load conversations');
         }
       }
-      function renderConversations(list) {
+
+      function renderConversations(list, reset=false) {
+        if (reset) convCache = [];
+        convCache = convCache.concat(list);
         const ul = document.getElementById('convList');
         ul.innerHTML = '';
-        const fmt = (ts) => {
-          if (!ts) return '';
-          const d = new Date(ts);
-          if (isNaN(d)) return ts;
-          return d.toLocaleString();
-        };
-        list.forEach(c => {
+        convCache.forEach(c => {
           const li = document.createElement('li');
           li.className = 'item' + (currentConv === c.id ? ' active' : '');
           const uname = c.user_name || ('User '+c.user_id);
           const unread = Number(c.unread_count_for_support || 0);
           const badge = unread > 0 ? ' <span class="unread">● '+unread+'</span>' : '';
-          li.innerHTML = '<div><strong>'+uname+'</strong>'+badge+'</div><div class="meta">'+fmt(c.last_message_at)+'</div>';
-          li.onclick = () => selectConv(c.id);
+          const email = c.user_email || '';
+          const statusChip = '<span class="chip '+(c.status==='closed'?'closed':'open')+'">'+c.status+'</span>';
+          li.innerHTML = '<div><strong>'+uname+'</strong>'+badge+'</div><div class="meta">'+statusChip+'<span>'+email+'</span><span>'+fmt(c.last_message_at)+'</span></div>';
+          li.onclick = () => selectConv(c.id, c.status);
           ul.appendChild(li);
         });
-        if (!currentConv && list[0]) {
-          selectConv(list[0].id);
+        if (!currentConv && convCache[0]) {
+          selectConv(convCache[0].id, convCache[0].status);
         }
       }
 
-      async function selectConv(id) {
+      async function selectConv(id, status) {
         currentConv = id;
         document.getElementById('convTitle').textContent = 'Conversation #' + id;
+        const toggleBtn = document.getElementById('toggleStatusBtn');
+        if (toggleBtn) {
+          toggleBtn.style.display = 'inline-flex';
+          toggleBtn.textContent = (status === 'closed') ? 'Reopen' : 'Close';
+          toggleBtn.dataset.status = status || 'open';
+          toggleBtn.dataset.convStatus = status || 'open';
+        }
         await loadMessages();
-        await loadConversations(); // refresh badges/read state
+        await loadConversations(true); // refresh badges/read state
         if (pollMsgs) clearInterval(pollMsgs);
         pollMsgs = setInterval(loadMessages, 5000);
       }
 
       async function loadMessages() {
         if (!currentConv) return;
-        const fmt = (ts) => {
-          if (!ts) return '';
-          const d = new Date(ts);
-          if (isNaN(d)) return ts;
-          return d.toLocaleString();
-        };
         try {
           const res = await fetch('/api/support/admin/conversation/' + currentConv + '/messages');
           if (!res.ok) throw new Error('msgs');
@@ -3017,8 +3159,40 @@ app.get('/support-admin', requireSupportAgent, (req, res) => {
       document.getElementById('replySend').onclick = sendReply;
       document.getElementById('replyInput').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendReply(); }});
 
-      loadConversations();
-      pollList = setInterval(loadConversations, 15000);
+      document.querySelectorAll('.tab').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTab = btn.dataset.tab;
+          loadConversations(true);
+        });
+      });
+
+      let searchTimer = null;
+      document.getElementById('searchInput').addEventListener('input',(e)=>{
+        currentSearch = e.target.value.trim();
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(()=>loadConversations(true), 300);
+      });
+
+      document.getElementById('loadMore').onclick = ()=>loadConversations(false);
+
+      document.getElementById('toggleStatusBtn').onclick = async ()=>{
+        if (!currentConv) return;
+        const btn = document.getElementById('toggleStatusBtn');
+        const isClosed = (btn.dataset.convStatus === 'closed');
+        const url = '/api/support/admin/conversation/' + currentConv + (isClosed ? '/reopen' : '/close');
+        const res = await fetch(url, { method:'POST' });
+        if (res.ok) {
+          // force full reload of list
+          offset = 0;
+          convCache = [];
+          await loadConversations(true);
+        }
+      };
+
+      loadConversations(true);
+      pollList = setInterval(()=>loadConversations(true), 15000);
     </script>
   </body>
   </html>`;
