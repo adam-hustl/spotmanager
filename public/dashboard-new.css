@@ -310,6 +310,10 @@ body.page {
   background: #ef4444;
   box-shadow: 0 0 0 4px rgba(255,255,255,0.7);
 }
+
+#themeDots {
+  display: none !important;
+}
 .unit-modal__actions {
   display: flex;
   justify-content: flex-end;

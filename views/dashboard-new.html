@@ -25,10 +25,9 @@
         <span class="hello-note md-inline">Let’s prepare your next guest.</span>
       </div>
       <div class="topbar-right">
-        <div id="themeDots" class="theme-dots md-inline"></div>
+        <div id="themeDots" class="theme-dots md-inline"></div> 
         <button class="icon-btn">
           <i data-lucide="bell" class="icon-20"></i>
-          <span class="notify-dot"></span>
         </button>
         <div class="user-menu-wrap">
           <button id="userMenuToggle" class="user-btn" type="button">
@@ -581,7 +580,19 @@ function updateCheckinCell(b){
 
   function donut(el,pct,color){el.style.backgroundImage=`conic-gradient(${color} ${pct*3.6}deg, #E5E7EB 0)`;el.innerHTML='<span>'+Math.round(pct)+'%</span>'}
   function minibars(el,data,max,idx,accent){el.innerHTML='';data.forEach((v,i)=>{const d=document.createElement('div');d.className='bar';d.style.height=Math.max(8,(v/max)*100)+'%';d.style.backgroundColor=i===idx?accent:'#E5E7EB';el.appendChild(d);});}
-  function themeDots(){const wrap=document.getElementById('themeDots');wrap.innerHTML='';Object.entries(THEMES).forEach(([k,t])=>{const b=document.createElement('button');b.className='theme-dot';b.style.backgroundColor=t.accent;b.title=k;b.onclick=()=>{theme=k;apply();};wrap.appendChild(b);});const g=document.createElement('button');g.className='theme-toggle';g.textContent=grad?'Gradient':'Solid';g.onclick=()=>{grad=!grad;g.textContent=grad?'Gradient':'Solid';apply();};wrap.appendChild(g);}
+  function themeDots(){
+    const wrap=document.getElementById('themeDots');
+    wrap.innerHTML='';
+    grad = false; // lock to solid background
+    Object.entries(THEMES).forEach(([k,t])=>{
+      const b=document.createElement('button');
+      b.className='theme-dot';
+      b.style.backgroundColor=t.accent;
+      b.title=k;
+      b.onclick=()=>{theme=k;apply();};
+      wrap.appendChild(b);
+    });
+  }
   function menu(){const items=[["home","Home"],["calendar-days","Bookings"],["bar-chart-3","Analytics"],["message-square","Cleaners Dashboard"],["settings","Profile"]];const wrap=document.getElementById('menu');wrap.innerHTML='';items.forEach((it,i)=>{const b=document.createElement('button');b.className='menu-btn';b.dataset.menu=i===0; b.innerHTML=`<i data-lucide="${it[0]}" class="icon-16"></i><span class="semibold">${it[1]}</span>`;wrap.appendChild(b);});}
   function stepsRow(){
     const wrap=document.getElementById('steps');
