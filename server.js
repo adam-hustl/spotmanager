@@ -1867,7 +1867,7 @@ function usePgBookings(req) {
 
 async function pgFetchBookings(workspaceId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, created_at, updated_at
+    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, total_price, created_at, updated_at
      FROM bookings
      WHERE workspace_id = $1
      ORDER BY check_in ASC`,
@@ -1882,6 +1882,7 @@ async function pgFetchBookings(workspaceId) {
     platform: r.platform,
     people: r.people,
     notes: r.notes,
+    total_price: r.total_price,
     unit_id: r.unit_id,
     checklist: {
       step1: r.step1,
@@ -2513,7 +2514,8 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
       }
       const { rows } = await pool.query(
         `SELECT id, guest_name, check_in, check_out, platform, people, notes,
-                step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+                step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, total_price,
+                created_at, updated_at
          FROM bookings
          WHERE workspace_id = $1
          ORDER BY check_in ASC`,
@@ -2528,6 +2530,9 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         platform: r.platform,
         people: r.people,
         notes: r.notes,
+        unit_id: r.unit_id,
+        total_price: r.total_price,
+        totalPrice: r.total_price,
         checklist: {
           step1: r.step1,
           step2: r.step2,
@@ -2628,6 +2633,239 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
   } catch (e) {
     console.error('GET /api/bookings failed:', e);
     res.status(500).json({ error: 'Failed to read bookings' });
+  }
+});
+
+// Revenue analytics (workspace-scoped)
+app.get('/api/analytics/revenue', requireAnyUser, async (req, res) => {
+  try {
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const monthParam = req.query.month;
+    const now = new Date();
+    const startMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam)
+      ? new Date(monthParam + '-01T00:00:00Z')
+      : new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+    const endMonth = new Date(startMonth);
+    endMonth.setUTCMonth(endMonth.getUTCMonth() + 1);
+    const unitId = req.query.unitId ? Number(req.query.unitId) : null;
+
+    if (pool) {
+      const paramsTotal = [ws, startMonth, endMonth];
+      const paramsGroup = [ws, startMonth, endMonth];
+      let unitClause = '';
+      if (!Number.isNaN(unitId) && unitId !== null) {
+        unitClause = ' AND unit_id = $4';
+        paramsTotal.push(unitId);
+        paramsGroup.push(unitId);
+      }
+      const totalSql = `
+        SELECT COALESCE(SUM(total_price),0) AS total
+        FROM bookings
+        WHERE workspace_id = $1
+          AND total_price IS NOT NULL
+          AND check_in >= $2 AND check_in < $3
+          ${unitClause}
+      `;
+      const groupSql = `
+        SELECT platform, COALESCE(SUM(total_price),0) AS total
+        FROM bookings
+        WHERE workspace_id = $1
+          AND total_price IS NOT NULL
+          AND check_in >= $2 AND check_in < $3
+          ${unitClause}
+        GROUP BY platform
+      `;
+      const [totRes, grpRes] = await Promise.all([
+        pool.query(totalSql, paramsTotal),
+        pool.query(groupSql, paramsGroup),
+      ]);
+      if (!IS_PROD) console.log('[revenue] ws', ws, 'month', startMonth.toISOString().slice(0,7), 'total', totRes.rows[0]?.total || 0);
+      return res.json({
+        month: startMonth.toISOString().slice(0,7),
+        total: Number(totRes.rows[0]?.total || 0),
+        byPlatform: grpRes.rows.map(r => ({ platform: r.platform || '', total: Number(r.total || 0) }))
+      });
+    }
+
+    // Local JSON fallback
+    const bookings = readBookingsLocal();
+    const totalPriceOf = (b) => {
+      const raw = b.totalPrice ?? b.total_price;
+      const v = (raw === '' || raw == null) ? null : Number(raw);
+      return Number.isNaN(v) ? null : v;
+    };
+    const startMs = startMonth.getTime();
+    const endMs = endMonth.getTime();
+    const filtered = bookings.filter(b=>{
+      if (!b.checkIn) return false;
+      const t = new Date(b.checkIn).getTime();
+      if (Number.isNaN(t)) return false;
+      if (t < startMs || t >= endMs) return false;
+      if (unitId != null && !Number.isNaN(unitId) && b.unit_id && Number(b.unit_id)!==unitId) return false;
+      return true;
+    });
+    let total = 0;
+    const byPlat = {};
+    filtered.forEach(b=>{
+      const val = totalPriceOf(b);
+      if (val == null) return;
+      total += val;
+      const key = b.platform || '';
+      byPlat[key] = (byPlat[key]||0) + val;
+    });
+    const byPlatform = Object.entries(byPlat).map(([platform,total])=>({ platform, total }));
+    if (!IS_PROD) console.log('[revenue-json] month', startMonth.toISOString().slice(0,7), 'total', total);
+    return res.json({ month: startMonth.toISOString().slice(0,7), total, byPlatform });
+  } catch (e) {
+    console.error('GET /api/analytics/revenue failed:', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
+// Revenue dashboard (filters + KPIs)
+app.get('/api/analytics/revenue-dashboard', requireAnyUser, async (req, res) => {
+  try {
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    if (!pool) return res.json({ fixed:{}, filtered:{}, byPlatform:[], byUnit:[] }); // fallback minimal
+
+    const unitId = req.query.unitId ? Number(req.query.unitId) : null;
+    const platform = req.query.platform;
+    const fromRaw = req.query.from;
+    const toRaw = req.query.to;
+
+    const today = new Date();
+    const startOfMonth = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1));
+    const startOfNextMonth = new Date(Date.UTC(today.getFullYear(), today.getMonth()+1, 1));
+    const startOfLastMonth = new Date(Date.UTC(today.getFullYear(), today.getMonth()-1, 1));
+    const startOfYear = new Date(Date.UTC(today.getFullYear(), 0, 1));
+    const startOfNextYear = new Date(Date.UTC(today.getFullYear()+1, 0, 1));
+
+    // fixed KPIs
+    const kpiSql = `
+      SELECT
+        SUM(CASE WHEN check_in::date = CURRENT_DATE THEN total_price ELSE 0 END) AS today,
+        SUM(CASE WHEN check_in >= $1 AND check_in < $2 THEN total_price ELSE 0 END) AS this_month,
+        SUM(CASE WHEN check_in >= $3 AND check_in < $1 THEN total_price ELSE 0 END) AS last_month,
+        SUM(CASE WHEN check_in >= $4 AND check_in < $5 THEN total_price ELSE 0 END) AS ytd
+      FROM bookings
+      WHERE workspace_id = $6 AND total_price IS NOT NULL
+    `;
+    const kpiParams = [startOfMonth, startOfNextMonth, startOfLastMonth, startOfYear, startOfNextYear, ws];
+
+    // filtered ranges
+    const filters = [];
+    const params = [ws];
+    let idx = params.length;
+    if (fromRaw) {
+      params.push(fromRaw);
+      idx = params.length;
+      filters.push(`check_in::date >= $${idx}`);
+    }
+    if (toRaw) {
+      const toPlus = new Date(fromRaw ? fromRaw : Date.now()); // placeholder
+      // Use < to+1
+      params.push(toRaw);
+      idx = params.length;
+      filters.push(`check_in::date <= $${idx}`);
+    }
+    if (unitId && !Number.isNaN(unitId)) {
+      params.push(unitId);
+      filters.push(`unit_id = $${params.length}`);
+    }
+    if (platform && platform !== 'All') {
+      params.push(platform);
+      filters.push(`platform = $${params.length}`);
+    }
+    const where = filters.length ? `AND ${filters.join(' AND ')}` : '';
+
+    const filteredSql = `
+      SELECT
+        COALESCE(SUM(total_price),0) AS total,
+        COUNT(*) AS bookings,
+        COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))),0) AS nights
+      FROM bookings
+      WHERE workspace_id = $1
+        AND total_price IS NOT NULL
+        ${where}
+    `;
+
+    const byPlatformSql = `
+      SELECT platform, COUNT(*) AS bookings,
+             COALESCE(SUM(total_price),0) AS revenue,
+             COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))),0) AS nights
+      FROM bookings
+      WHERE workspace_id = $1
+        AND total_price IS NOT NULL
+        ${where}
+      GROUP BY platform
+      ORDER BY revenue DESC
+    `;
+
+    const byUnitSql = `
+      SELECT unit_id, COUNT(*) AS bookings,
+             COALESCE(SUM(total_price),0) AS revenue,
+             COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))),0) AS nights
+      FROM bookings
+      WHERE workspace_id = $1
+        AND total_price IS NOT NULL
+        ${where}
+      GROUP BY unit_id
+      ORDER BY revenue DESC
+    `;
+
+    const [kpiRes, filtRes, platRes, unitRes] = await Promise.all([
+      pool.query(kpiSql, kpiParams),
+      pool.query(filteredSql, params),
+      pool.query(byPlatformSql, params),
+      pool.query(byUnitSql, params)
+    ]);
+
+    const k = kpiRes.rows[0] || {};
+    const f = filtRes.rows[0] || {};
+    const total = Number(f.total || 0);
+    const bookings = Number(f.bookings || 0);
+    const nights = Number(f.nights || 0);
+    const avgBookingValue = bookings ? total / bookings : 0;
+    const adr = nights ? total / nights : 0;
+
+    if (!IS_PROD) console.log('[revenue-dashboard]', { ws, total, bookings });
+
+    return res.json({
+      fixed: {
+        today: Number(k.today || 0),
+        thisMonth: Number(k.this_month || 0),
+        lastMonth: Number(k.last_month || 0),
+        ytd: Number(k.ytd || 0),
+      },
+      filtered: {
+        from: fromRaw || null,
+        to: toRaw || null,
+        unitId: unitId || null,
+        platform: platform || 'All',
+        totalRevenue: total,
+        bookingsCount: bookings,
+        bookedNights: nights,
+        avgBookingValue: avgBookingValue,
+        adr: adr
+      },
+      byPlatform: platRes.rows.map(r=>({
+        platform: r.platform || 'Unknown',
+        bookings: Number(r.bookings || 0),
+        revenue: Number(r.revenue || 0),
+        bookedNights: Number(r.nights || 0)
+      })),
+      byUnit: unitRes.rows.map(r=>({
+        unitId: r.unit_id,
+        bookings: Number(r.bookings || 0),
+        revenue: Number(r.revenue || 0),
+        bookedNights: Number(r.nights || 0)
+      }))
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('GET /api/analytics/revenue-dashboard failed:', e);
+    return res.status(500).json({ error: 'failed' });
   }
 });
 

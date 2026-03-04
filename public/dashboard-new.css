@@ -314,6 +314,86 @@ body.page {
 #themeDots {
   display: none !important;
 }
+
+/* Analytics compact cards */
+#analytics .grid-4,
+#analytics .grid-5,
+#analytics .grid-3,
+#analytics .grid-2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+#analytics .card-white {
+  padding: 0.85rem 0.95rem;
+  max-width: 240px;
+  flex: 1 1 180px;
+}
+#analytics .value-2xl {
+  font-size: 1.35rem;
+}
+#analytics .muted.small {
+  font-size: 0.8rem;
+}
+#analytics select.ng-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: #0f172a;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #0f172a 50%),
+    linear-gradient(135deg, #0f172a 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% + 2px),
+    calc(100% - 12px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+#analytics select.ng-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+  border-color: rgba(16,185,129,0.6);
+  background-color: #fff;
+}
+#analytics select.ng-input option {
+  background: #fff;
+  color: #0f172a;
+  font-weight: 500;
+}
+#analytics input[type="date"].ng-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+#analytics input[type="date"].ng-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+  border-color: rgba(16,185,129,0.6);
+  background-color: #fff;
+}
+.analytics-filters {
+  background: transparent;
+}
+.analytics-filters .row.wrap {
+  align-items: flex-end;
+}
+.analytics-filters .ghost-btn,
+.analytics-filters .ghost-btn--primary {
+  height: 42px;
+}
+
+/* Hide floating label text */
+#ctaT { display: none; }
 .unit-modal__actions {
   display: flex;
   justify-content: flex-end;

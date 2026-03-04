@@ -275,6 +275,118 @@
           </div>
         </div>
       </section>
+
+      <!-- Analytics (Revenue Overview) -->
+      <section id="analytics" class="card">
+        <div class="row space-between">
+          <div>
+            <h3 class="h3">Analytics</h3>
+            <div class="muted">Revenue Overview</div>
+          </div>
+        </div>
+
+        <!-- KPI cards fixed periods -->
+        <div class="grid-4 mt-12">
+          <div class="card card-white">
+            <div class="muted small">Today</div>
+            <div id="kpiToday" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">This month</div>
+            <div id="kpiThisMonth" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Last month</div>
+            <div id="kpiLastMonth" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Year-to-date</div>
+            <div id="kpiYTD" class="value-2xl">—</div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="analytics-filters" style="margin-top:16px;">
+          <div class="row wrap gap-12">
+            <div>
+              <label class="small muted">Date preset</label><br>
+              <select id="analyticsPreset" class="ng-input" style="min-width:140px;">
+                <option value="thisMonth">This month</option>
+                <option value="lastMonth">Last month</option>
+                <option value="ytd">Year-to-date</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div id="analyticsCustomDates" class="row gap-8" style="display:none;">
+              <div>
+                <label class="small muted">From</label><br>
+                <input type="date" id="analyticsFrom" class="ng-input" />
+              </div>
+              <div>
+                <label class="small muted">To</label><br>
+                <input type="date" id="analyticsTo" class="ng-input" />
+              </div>
+            </div>
+            <div>
+              <label class="small muted">Unit</label><br>
+              <select id="analyticsUnit" class="ng-input" style="min-width:140px;">
+                <option value="">All units</option>
+              </select>
+            </div>
+            <div>
+              <label class="small muted">Platform</label><br>
+              <select id="analyticsPlatform" class="ng-input" style="min-width:140px;">
+                <option value="All">All</option>
+                <option value="Airbnb">Airbnb</option>
+                <option value="Booking.com">Booking.com</option>
+                <option value="Agoda">Agoda</option>
+                <option value="Direct">Direct</option>
+              </select>
+            </div>
+            <div class="row gap-8 align-end" style="align-self:flex-end;">
+              <button id="analyticsApply" class="ghost-btn ghost-btn--primary" style="min-width:140px; height:42px; background:rgba(16,185,129,0.16); border-color:rgba(16,185,129,0.55);">Apply</button>
+              <button id="analyticsReset" class="ghost-btn" style="min-width:140px; height:42px;">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtered metrics -->
+        <div class="grid-5 mt-12">
+          <div class="card card-white">
+            <div class="muted small">Filtered total revenue</div>
+            <div id="filteredTotalRevenue" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Bookings</div>
+            <div id="filteredBookingsCount" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Booked nights</div>
+            <div id="filteredBookedNights" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Avg booking value</div>
+            <div id="filteredAvgBookingValue" class="value-2xl">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Average daily rate</div>
+            <div id="filteredADR" class="value-2xl">—</div>
+          </div>
+        </div>
+        <div class="muted small" id="filteredSummary" style="margin-top:6px;">Filtered by: —</div>
+
+        <!-- Breakdown tables -->
+        <div class="grid-2 mt-12">
+          <div class="card card-white">
+            <div class="muted small">Revenue by platform</div>
+            <div id="revenueByPlatformTable" class="small" style="margin-top:8px;">—</div>
+          </div>
+          <div class="card card-white">
+            <div class="muted small">Revenue by unit</div>
+            <div id="revenueByUnitTable" class="small" style="margin-top:8px;">—</div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -1073,16 +1185,19 @@ if (spanStart !== null && spanEnd !== null) {
     if (prev) prev.addEventListener('click', () => {
       miniCalOffset--;
       renderMiniCalendar();
+      loadRevenueDashboard();
     });
 
     if (next) next.addEventListener('click', () => {
       miniCalOffset++;
       renderMiniCalendar();
+      loadRevenueDashboard();
     });
 
     if (todayBtn) todayBtn.addEventListener('click', () => {
       miniCalOffset = 0;
       renderMiniCalendar();
+      loadRevenueDashboard();
     });
   }
 
@@ -1441,6 +1556,104 @@ function setAccessPickedState(isPicked, persist=true){
     } catch(e){}
   }
 
+  function applyPresetToDates(preset){
+    const from = document.getElementById('analyticsFrom');
+    const to = document.getElementById('analyticsTo');
+    if (!from || !to) return;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const pad = (v)=>String(v).padStart(2,'0');
+    if (preset === 'thisMonth') {
+      const start = new Date(Date.UTC(y,m,1));
+      const end = new Date(Date.UTC(y,m+1,0));
+      from.value = start.toISOString().slice(0,10);
+      to.value = end.toISOString().slice(0,10);
+      document.getElementById('analyticsCustomDates').style.display = 'none';
+    } else if (preset === 'lastMonth') {
+      const start = new Date(Date.UTC(y,m-1,1));
+      const end = new Date(Date.UTC(y,m,0));
+      from.value = start.toISOString().slice(0,10);
+      to.value = end.toISOString().slice(0,10);
+      document.getElementById('analyticsCustomDates').style.display = 'none';
+    } else if (preset === 'ytd') {
+      const start = new Date(Date.UTC(y,0,1));
+      const end = new Date(Date.UTC(y,11,31));
+      from.value = start.toISOString().slice(0,10);
+      to.value = end.toISOString().slice(0,10);
+      document.getElementById('analyticsCustomDates').style.display = 'none';
+    } else {
+      document.getElementById('analyticsCustomDates').style.display = 'flex';
+    }
+  }
+
+  function getFilterStateFromUI(){
+    const preset = document.getElementById('analyticsPreset')?.value || 'thisMonth';
+    const from = document.getElementById('analyticsFrom')?.value || '';
+    const to = document.getElementById('analyticsTo')?.value || '';
+    const unitId = document.getElementById('analyticsUnit')?.value || '';
+    const platform = document.getElementById('analyticsPlatform')?.value || 'All';
+    return { preset, from, to, unitId, platform };
+  }
+
+  function renderRevenueTables(byPlatform, byUnit){
+    const platEl = document.getElementById('revenueByPlatformTable');
+    const unitEl = document.getElementById('revenueByUnitTable');
+    if (platEl) {
+      if (Array.isArray(byPlatform) && byPlatform.length) {
+        const rows = byPlatform.map(p=>`<div>${p.platform || 'Unknown'} — ${Number(p.revenue||0).toLocaleString()} (${p.bookings} bookings)</div>`).join('');
+        platEl.innerHTML = rows;
+      } else platEl.textContent = '—';
+    }
+    if (unitEl) {
+      if (Array.isArray(byUnit) && byUnit.length) {
+        const rows = byUnit.map(u=>`<div>Unit ${u.unitId ?? 'N/A'} — ${Number(u.revenue||0).toLocaleString()} (${u.bookings} bookings)</div>`).join('');
+        unitEl.innerHTML = rows;
+      } else unitEl.textContent = '—';
+    }
+  }
+
+  async function loadRevenueDashboard(){
+    try{
+      const { preset, from, to, unitId, platform } = getFilterStateFromUI();
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      if (unitId) params.set('unitId', unitId);
+      if (platform && platform !== 'All') params.set('platform', platform);
+      const res = await fetch('/api/analytics/revenue-dashboard?' + params.toString());
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      // KPIs
+      const setText = (id,val)=>{ const el=document.getElementById(id); if (el) el.textContent = Number(val||0).toLocaleString();};
+      setText('kpiToday', data.fixed?.today);
+      setText('kpiThisMonth', data.fixed?.thisMonth);
+      setText('kpiLastMonth', data.fixed?.lastMonth);
+      setText('kpiYTD', data.fixed?.ytd);
+
+      setText('filteredTotalRevenue', data.filtered?.totalRevenue);
+      setText('filteredBookingsCount', data.filtered?.bookingsCount);
+      setText('filteredBookedNights', data.filtered?.bookedNights);
+      setText('filteredAvgBookingValue', data.filtered?.avgBookingValue);
+      setText('filteredADR', data.filtered?.adr);
+
+      const summary = document.getElementById('filteredSummary');
+      if (summary) {
+        summary.textContent = `Filtered by: ${data.filtered?.from || '—'} → ${data.filtered?.to || '—'} • ${data.filtered?.unitId ? 'Unit '+data.filtered.unitId : 'All units'} • ${data.filtered?.platform || 'All platforms'}`;
+      }
+
+      renderRevenueTables(data.byPlatform || [], data.byUnit || []);
+    }catch(e){
+      console.warn('Failed to load revenue dashboard', e);
+      ['kpiToday','kpiThisMonth','kpiLastMonth','kpiYTD','filteredTotalRevenue','filteredBookingsCount','filteredBookedNights','filteredAvgBookingValue','filteredADR'].forEach(id=>{
+        const el=document.getElementById(id); if(el) el.textContent='—';
+      });
+      const summary = document.getElementById('filteredSummary');
+      if (summary) summary.textContent = 'Filtered by: —';
+      renderRevenueTables([], []);
+    }
+  }
+
   function wireSupportChat(){
     const closeBtn = document.getElementById('supportChatClose');
     const sendBtn = document.getElementById('supportChatSend');
@@ -1685,6 +1898,9 @@ async function uploadReceiptDirect(bookingId, file){
         editForm.elements.checkIn.value = toInputDate(b.checkIn);
         editForm.elements.checkOut.value = toInputDate(b.checkOut);
         editForm.elements.people.value = b.people || '';
+        if (editForm.elements.totalPrice) {
+          editForm.elements.totalPrice.value = (b.totalPrice ?? b.total_price ?? '');
+        }
       };
 
       editBtn.onclick = (e) => {
@@ -1983,6 +2199,7 @@ try {
     wireAddGuest();
     wireCommentButtons();
     wireSupportChat();
+    loadRevenueDashboard();
     refreshSupportUnread();
     setInterval(refreshSupportUnread, 10000);
     renderProgress();
@@ -2011,6 +2228,27 @@ try {
         }
       });
     }
+
+    const presetSel = document.getElementById('analyticsPreset');
+    if (presetSel) {
+      presetSel.addEventListener('change', ()=>{
+        applyPresetToDates(presetSel.value);
+      });
+      applyPresetToDates(presetSel.value);
+    }
+    const applyBtn = document.getElementById('analyticsApply');
+    const resetBtn = document.getElementById('analyticsReset');
+    if (applyBtn) applyBtn.addEventListener('click', (e)=>{ e.preventDefault(); loadRevenueDashboard(); });
+    if (resetBtn) resetBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if (presetSel) presetSel.value = 'thisMonth';
+      applyPresetToDates('thisMonth');
+      const unitSel = document.getElementById('analyticsUnit');
+      const platSel = document.getElementById('analyticsPlatform');
+      if (unitSel) unitSel.value = '';
+      if (platSel) platSel.value = 'All';
+      loadRevenueDashboard();
+    });
 
     // Unit modal actions
     const unitModal = document.getElementById('unitModal');
