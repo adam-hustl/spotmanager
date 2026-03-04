@@ -1330,9 +1330,9 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
     try {
       const { rows } = await pool.query(
         `INSERT INTO bookings (
-            workspace_id, guest_name, check_in, check_out, platform, people, notes,
-            step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,false,false,false,false,false,false,false,NOW(),NOW())
+           workspace_id, guest_name, check_in, check_out, platform, people, notes,
+            total_price, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,false,false,false,false,false,false,NOW(),NOW())
          RETURNING id`,
         [
           req.session.workspaceId,
@@ -1341,7 +1341,12 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
           newBooking.checkOut || null,
           newBooking.platform || '',
           newBooking.people || null,
-          newBooking.notes || ''
+          newBooking.notes || '',
+          (()=>{
+            const totalPriceRaw = req.body.totalPrice ?? req.body.total_price;
+            const val = (totalPriceRaw === '' || totalPriceRaw == null) ? null : Number(totalPriceRaw);
+            return Number.isNaN(val) ? null : val;
+          })()
         ]
       );
       const newId = rows[0]?.id;
@@ -4426,7 +4431,7 @@ app.get('/edit-booking/:id', (req, res) => {
 
   if (usePgBookings(req)) {
     pool.query(
-      `SELECT id, guest_name, check_in, check_out, platform, people, notes FROM bookings WHERE id = $1 AND workspace_id = $2 LIMIT 1`,
+      `SELECT id, guest_name, check_in, check_out, platform, people, notes, total_price FROM bookings WHERE id = $1 AND workspace_id = $2 LIMIT 1`,
       [bookingId, req.session.workspaceId]
     ).then(({ rows })=>{
       const b = rows[0];
@@ -4439,7 +4444,8 @@ app.get('/edit-booking/:id', (req, res) => {
         checkOut: b.check_out,
         platform: b.platform,
         people: b.people,
-        notes: b.notes
+        notes: b.notes,
+        totalPrice: b.total_price
       });
     }).catch((e)=>{
       console.error('Edit booking fetch pg failed', e);
@@ -4472,13 +4478,16 @@ app.post('/edit-booking/:id', requireAdmin, (req, res) => {
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
     const { guestName, platform, checkIn, checkOut, people, notes } = req.body || {};
+    const totalPriceRaw = req.body?.totalPrice ?? req.body?.total_price;
+    const totalPrice = (totalPriceRaw === '' || totalPriceRaw == null) ? null : Number(totalPriceRaw);
+    const totalPriceSafe = Number.isNaN(totalPrice) ? null : totalPrice;
     const bid = req.params.id;
     if (!bid) return res.status(400).send('Missing booking id');
     pool.query(
-      `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, updated_at=NOW()
-       WHERE id=$7 AND workspace_id=$8
+      `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, total_price=$7, updated_at=NOW()
+       WHERE id=$8 AND workspace_id=$9
        RETURNING id`,
-      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, bid, req.session.workspaceId]
+      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, totalPriceSafe, bid, req.session.workspaceId]
     ).then(({ rowCount })=>{
       if (rowCount !== 1) return res.status(404).send('Booking not found');
       return res.sendStatus(200);
