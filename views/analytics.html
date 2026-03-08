@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpotManager – Analytics</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/dashboard-new.css" />
+    <style>
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+      .tab-btn {
+        cursor: pointer;
+        border: 1px solid rgba(16,185,129,0.20);
+        background: rgba(255,255,255,0.85);
+        transition: background .15s ease, border-color .15s ease, transform .1s ease;
+      }
+      .tab-btn:hover {
+        border-color: rgba(16,185,129,0.45);
+        background: rgba(16,185,129,0.08);
+        transform: translateY(-1px);
+      }
+      .tab-btn.tab-active {
+        background: rgba(16,185,129,0.16);
+        border-color: rgba(16,185,129,0.55);
+      }
+    </style>
+  </head>
+<body class="page">
+  <div id="b1" class="bubble bubble-1"></div>
+  <div id="b2" class="bubble bubble-2"></div>
+
+  <header class="topbar glass">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <span class="hello">Hello, <span class="hello-user">Adam</span></span>
+        <span class="hello-note md-inline">Performance overview</span>
+      </div>
+      <div class="topbar-right">
+        <div id="themeDots" class="theme-dots md-inline"></div>
+        <button class="icon-btn" type="button">
+          <i data-lucide="bell" class="icon-20"></i>
+        </button>
+        <div class="user-menu-wrap">
+          <button id="userMenuToggle" class="user-btn" type="button">
+            <i data-lucide="user-circle" class="icon-24"></i>
+            <span class="user-name sm-inline">Adam</span>
+            <i data-lucide="chevron-down" class="icon-16"></i>
+          </button>
+          <div id="userMenu" class="user-menu" style="display:none;">
+            <a href="/account-info" class="user-menu-item">Account information</a>
+            <a href="/unit-settings" class="user-menu-item">Unit settings</a>
+            <a href="/logout" class="user-menu-item">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-grid">
+    <aside class="sidebar">
+      <nav class="sidecard glass">
+        <div class="menu-title">Menu</div>
+        <a href="/dashboard-new" class="menu-btn">
+          <i data-lucide="home" class="icon-16"></i>
+          <span class="semibold">Dashboard</span>
+        </a>
+        <a href="/dashboard-new" class="menu-btn">
+          <i data-lucide="calendar-days" class="icon-16"></i>
+          <span class="semibold">Bookings</span>
+        </a>
+        <a href="/analytics" class="menu-btn menu-active">
+          <i data-lucide="bar-chart-3" class="icon-16"></i>
+          <span class="semibold">Analytics</span>
+        </a>
+        <a href="/account-info" class="menu-btn">
+          <i data-lucide="settings" class="icon-16"></i>
+          <span class="semibold">Settings</span>
+        </a>
+        <div class="menu-footer">
+          <button class="ghost-btn ghost-btn--primary" type="button" onclick="window.location.href='/dashboard-new'">
+            <i data-lucide="plus" class="icon-16"></i>
+            <span class="btn-text">New guest</span>
+          </button>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <section id="analytics" class="card">
+        <div class="row space-between align-center">
+          <div>
+            <h2 class="h2" style="margin-bottom:6px;">Analytics</h2>
+            <div class="muted">Performance overview for your properties</div>
+          </div>
+        </div>
+
+        <div class="analytics-filters" style="margin-top:16px;">
+          <div class="row wrap gap-12">
+            <div>
+              <label class="small muted">Date range</label><br>
+              <div class="row gap-8">
+                <input type="date" class="ng-input" />
+                <input type="date" class="ng-input" />
+              </div>
+            </div>
+            <div>
+              <label class="small muted">Unit</label><br>
+              <select class="ng-input" style="min-width:160px;">
+                <option>All units</option>
+              </select>
+            </div>
+            <div>
+              <label class="small muted">Platform</label><br>
+              <select class="ng-input" style="min-width:160px;">
+                <option>All</option>
+                <option>Airbnb</option>
+                <option>Booking.com</option>
+                <option>Agoda</option>
+                <option>Direct</option>
+              </select>
+            </div>
+            <div class="row gap-8 align-end" style="align-self:flex-end;">
+              <button class="primary-btn" type="button" style="min-width:120px; height: 35px; padding:0 14px;">Apply</button>
+              <button class="ghost-btn" type="button" style="min-width:120px; height: 35px;">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row wrap gap-8" style="margin-top:18px;">
+          <button class="ghost-btn tab-btn tab-active" data-tab="revenue" type="button" style="width:auto; padding:8px 14px;">Revenue</button>
+          <button class="ghost-btn tab-btn" data-tab="occupancy" type="button" style="width:auto; padding:8px 14px;">Occupancy</button>
+          <button class="ghost-btn tab-btn" data-tab="pricing" type="button" style="width:auto; padding:8px 14px;">Pricing</button>
+          <button class="ghost-btn tab-btn" data-tab="profit" type="button" style="width:auto; padding:8px 14px;">Profit</button>
+          <button class="ghost-btn tab-btn" data-tab="expenses" type="button" style="width:auto; padding:8px 14px;">Expenses</button>
+          <button class="ghost-btn tab-btn" data-tab="platforms" type="button" style="width:auto; padding:8px 14px;">Platforms</button>
+          <button class="ghost-btn tab-btn" data-tab="bookings" type="button" style="width:auto; padding:8px 14px;">Bookings</button>
+          <button class="ghost-btn tab-btn" data-tab="units" type="button" style="width:auto; padding:8px 14px;">Units</button>
+          <button class="ghost-btn tab-btn" data-tab="forecast" type="button" style="width:auto; padding:8px 14px;">Forecast</button>
+        </div>
+
+        <div class="tab-panel active" data-tab-panel="revenue" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Revenue Overview</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="occupancy" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Occupancy Analytics</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="pricing" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Pricing and Rate Metrics</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="profit" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Profit Analytics</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="expenses" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Expenses Overview</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="platforms" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Platform Performance</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="bookings" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Booking Analytics</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="units" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Unit Performance</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+        <div class="tab-panel" data-tab-panel="forecast" style="margin-top:18px;">
+          <div class="card card-white">
+            <div class="h3" style="margin-bottom:6px;">Cashflow and Forecast</div>
+            <div class="muted small">This section will be added in the next step.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const THEME = { accent: '#10B981', accent50: '#ECFDF5', bgFrom: '#D1FAE5', bgMid: '#ECFDF5', tint: 'rgba(16,185,129,0.12)' };
+    function applyTheme() {
+      const b1 = document.getElementById('b1');
+      const b2 = document.getElementById('b2');
+      if (b1) b1.style.background = THEME.tint;
+      if (b2) b2.style.background = THEME.tint;
+      document.body.style.background = `radial-gradient(120% 80% at 0% 0%, ${THEME.bgFrom}, transparent 55%), radial-gradient(120% 80% at 90% 10%, ${THEME.bgMid}, transparent 55%)`;
+    }
+    function wireUserMenu() {
+      const toggle = document.getElementById('userMenuToggle');
+      const menu = document.getElementById('userMenu');
+      if (!toggle || !menu) return;
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const show = menu.style.display === 'none' || menu.style.display === '';
+        menu.style.display = show ? 'block' : 'none';
+      });
+      document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+          menu.style.display = 'none';
+        }
+      });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      applyTheme();
+      wireUserMenu();
+      if (window.lucide && lucide.createIcons) {
+        lucide.createIcons();
+      }
+      const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+      const panels = Array.from(document.querySelectorAll('.tab-panel'));
+      const setTab = (id) => {
+        tabButtons.forEach((btn) => {
+          const active = btn.dataset.tab === id;
+          btn.classList.toggle('tab-active', active);
+          if (active && !btn.classList.contains('ghost-btn--primary')) {
+            // keep base ghost look while highlighting active state via tab-active
+          }
+        });
+        panels.forEach((panel) => {
+          panel.classList.toggle('active', panel.dataset.tabPanel === id);
+        });
+      };
+      tabButtons.forEach((btn) => {
+        btn.addEventListener('click', () => setTab(btn.dataset.tab));
+      });
+      setTab('revenue');
+    });
+  </script>
+</body>
+</html>

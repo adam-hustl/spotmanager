@@ -2496,6 +2496,11 @@ app.get('/dashboard-new', requireAdminOrViewer, (req, res) => {
 res.sendFile(path.join(__dirname, 'views', 'dashboard-new.html'));
 });
 
+// Dedicated analytics page shell
+app.get('/analytics', requireAdminOrViewer, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'analytics.html'));
+});
+
 // Account info page
 app.get('/account-info', requireAnyUser, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'account-info.html'));
