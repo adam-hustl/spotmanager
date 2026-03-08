@@ -2501,6 +2501,145 @@ app.get('/analytics', requireAdminOrViewer, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'analytics.html'));
 });
 
+// Analytics API - Revenue tab
+app.get('/api/analytics/revenue-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) {
+    return res.status(400).json({ error: 'workspaceId missing' });
+  }
+  if (!pool) {
+    return res.status(500).json({ error: 'database unavailable' });
+  }
+
+  const { from, to, unitId, platform } = req.query || {};
+  const conditions = ['workspace_id = $1', 'total_price IS NOT NULL'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+
+  if (from) {
+    conditions.push(`check_in::date >= $${idx++}`);
+    params.push(from);
+  }
+  if (to) {
+    conditions.push(`check_in::date <= $${idx++}`);
+    params.push(to);
+  }
+  if (unitId) {
+    conditions.push(`unit_id = $${idx++}`);
+    params.push(unitId);
+  }
+  if (platform && platform !== 'All') {
+    conditions.push(`platform = $${idx++}`);
+    params.push(platform);
+  }
+
+  const whereClause = conditions.join(' AND ');
+  const whereClauseB = conditions.map((c) =>
+    c
+      .replace(/\bworkspace_id\b/g, 'b.workspace_id')
+      .replace(/\btotal_price\b/g, 'b.total_price')
+      .replace(/\bcheck_in\b/g, 'b.check_in')
+      .replace(/\bcheck_out\b/g, 'b.check_out')
+      .replace(/\bunit_id\b/g, 'b.unit_id')
+      .replace(/\bplatform\b/g, 'b.platform')
+  ).join(' AND ');
+
+  try {
+    if (!IS_PROD) {
+      console.log('[analytics] revenue-tab filters', { workspaceId, from, to, unitId, platform });
+    }
+
+    const summaryQuery = `
+      SELECT
+        COALESCE(SUM(total_price), 0) AS total_revenue,
+        COUNT(*) AS bookings_count,
+        COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))), 0) AS booked_nights
+      FROM bookings
+      WHERE ${whereClause}
+    `;
+
+    const trendQuery = `
+      SELECT to_char(check_in::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(total_price), 0) AS revenue
+      FROM bookings
+      WHERE ${whereClause}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byPlatformQuery = `
+      SELECT platform,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(total_price), 0) AS revenue,
+             COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))), 0) AS booked_nights
+      FROM bookings
+      WHERE ${whereClause}
+      GROUP BY platform
+      ORDER BY revenue DESC
+    `;
+
+    const byUnitQuery = `
+      SELECT b.unit_id,
+             u.name AS unit_name,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(b.total_price), 0) AS revenue,
+             COALESCE(SUM(GREATEST(0, (b.check_out::date - b.check_in::date))), 0) AS booked_nights
+      FROM bookings b
+      LEFT JOIN units u
+        ON u.id = b.unit_id AND u.workspace_id = b.workspace_id
+      WHERE ${whereClauseB}
+      GROUP BY b.unit_id, u.name
+      ORDER BY revenue DESC
+    `;
+
+    const [summaryRes, trendRes, byPlatformRes, byUnitRes] = await Promise.all([
+      pool.query(summaryQuery, params),
+      pool.query(trendQuery, params),
+      pool.query(byPlatformQuery, params),
+      pool.query(byUnitQuery, params),
+    ]);
+
+    const summaryRow = summaryRes.rows[0] || {};
+    const totalRevenue = Number(summaryRow.total_revenue || 0);
+    const bookingsCount = Number(summaryRow.bookings_count || 0);
+    const bookedNights = Number(summaryRow.booked_nights || 0);
+
+    const averageBookingValue = bookingsCount > 0 ? totalRevenue / bookingsCount : 0;
+    const adr = bookedNights > 0 ? totalRevenue / bookedNights : 0;
+
+    const trendRows = trendRes.rows.map(r => ({ month: r.month, revenue: Number(r.revenue || 0) }));
+    const trendMaxRevenue = trendRows.reduce((m, r) => Math.max(m, r.revenue || 0), 0);
+
+    return res.json({
+      summary: {
+        totalRevenue,
+        bookingsCount,
+        bookedNights,
+        averageBookingValue,
+        adr,
+      },
+      trend: trendRows,
+      trendMaxRevenue,
+      byPlatform: byPlatformRes.rows.map(r => ({
+        platform: r.platform,
+        bookings: Number(r.bookings || 0),
+        revenue: Number(r.revenue || 0),
+        bookedNights: Number(r.booked_nights || 0),
+      })),
+      byUnit: byUnitRes.rows.map(r => ({
+        unitId: r.unit_id,
+        unitName: r.unit_name,
+        bookings: Number(r.bookings || 0),
+        revenue: Number(r.revenue || 0),
+        bookedNights: Number(r.booked_nights || 0),
+      })),
+    });
+  } catch (e) {
+    console.error('analytics revenue-tab failed', e);
+    return res.status(500).json({ error: 'failed to load analytics' });
+  }
+});
+
 // Account info page
 app.get('/account-info', requireAnyUser, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'account-info.html'));

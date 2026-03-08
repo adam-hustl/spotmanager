@@ -100,20 +100,20 @@
             <div>
               <label class="small muted">Date range</label><br>
               <div class="row gap-8">
-                <input type="date" class="ng-input" />
-                <input type="date" class="ng-input" />
+                <input id="analyticsFrom" type="date" class="ng-input" />
+                <input id="analyticsTo" type="date" class="ng-input" />
               </div>
             </div>
             <div>
               <label class="small muted">Unit</label><br>
-              <select class="ng-input" style="min-width:160px;">
-                <option>All units</option>
+              <select id="analyticsUnit" class="ng-input" style="min-width:160px;">
+                <option value="">All units</option>
               </select>
             </div>
             <div>
               <label class="small muted">Platform</label><br>
-              <select class="ng-input" style="min-width:160px;">
-                <option>All</option>
+              <select id="analyticsPlatform" class="ng-input" style="min-width:160px;">
+                <option value="All">All</option>
                 <option>Airbnb</option>
                 <option>Booking.com</option>
                 <option>Agoda</option>
@@ -121,8 +121,8 @@
               </select>
             </div>
             <div class="row gap-8 align-end" style="align-self:flex-end;">
-              <button class="primary-btn" type="button" style="min-width:120px; height: 35px; padding:0 14px;">Apply</button>
-              <button class="ghost-btn" type="button" style="min-width:120px; height: 35px;">Reset</button>
+              <button id="analyticsApply" class="primary-btn" type="button" style="min-width:120px; height: 40px; padding:0 14px;">Apply</button>
+              <button id="analyticsReset" class="ghost-btn" type="button" style="min-width:120px; height: 40px;">Reset</button>
             </div>
           </div>
         </div>
@@ -138,11 +138,57 @@
           <button class="ghost-btn tab-btn" data-tab="units" type="button" style="width:auto; padding:8px 14px;">Units</button>
           <button class="ghost-btn tab-btn" data-tab="forecast" type="button" style="width:auto; padding:8px 14px;">Forecast</button>
         </div>
+        <div id="analyticsFilterSummary" class="muted small" style="margin-top:8px;">Showing: —</div>
 
         <div class="tab-panel active" data-tab-panel="revenue" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Revenue Overview</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-5" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Total Revenue</div>
+              <div id="revenueTotal" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Total bookings</div>
+              <div id="revenueBookings" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Total booked nights</div>
+              <div id="revenueBookedNights" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Avg Booking Value</div>
+              <div id="revenueAvgBookingValue" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Average Daily Rate</div>
+              <div id="revenueADR" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-chart-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Revenue trend</div>
+                <div class="muted small">(Monthly)</div>
+              </div>
+              <div id="revenueTrendChart" class="analytics-chart-wrap"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Revenue by Month</div>
+              </div>
+              <div id="revenueByMonthTable" class="analytics-month-table"></div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top:16px;">
+            <div class="card card-white">
+              <div class="h3" style="margin-bottom:6px;">Revenue by platform</div>
+              <div id="revenueByPlatform" class="small" style="margin-top:10px;">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="h3" style="margin-bottom:6px;">Revenue by unit</div>
+              <div id="revenueByUnit" class="small" style="margin-top:10px;">—</div>
+            </div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="occupancy" style="margin-top:18px;">
@@ -221,6 +267,183 @@
         }
       });
     }
+
+    function formatCurrency(value) {
+      const num = Number(value || 0);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(num);
+    }
+
+    function getRevenueFilters() {
+      const from = document.getElementById('analyticsFrom')?.value || '';
+      const to = document.getElementById('analyticsTo')?.value || '';
+      const unitId = document.getElementById('analyticsUnit')?.value || '';
+      const platform = document.getElementById('analyticsPlatform')?.value || 'All';
+      return { from, to, unitId, platform };
+    }
+
+    function setDefaultRevenueFiltersToCurrentMonth() {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), 0, 1);
+      const last = new Date(now.getFullYear(), 11, 31);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      const fromEl = document.getElementById('analyticsFrom');
+      const toEl = document.getElementById('analyticsTo');
+      if (fromEl) fromEl.value = fmt(first);
+      if (toEl) toEl.value = fmt(last);
+      const unitEl = document.getElementById('analyticsUnit');
+      const platEl = document.getElementById('analyticsPlatform');
+      if (unitEl) unitEl.value = '';
+      if (platEl) platEl.value = 'All';
+    }
+
+    function formatMonthPretty(monthStr, opts = {}) {
+      if (!monthStr) return '';
+      const d = new Date(`${monthStr}-01T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return monthStr;
+      const monthOpt = opts.short ? 'short' : 'long';
+      return d.toLocaleString('en-US', { month: monthOpt, year: 'numeric' });
+    }
+
+    function formatFullDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function renderFilterSummary() {
+      const summaryEl = document.getElementById('analyticsFilterSummary');
+      if (!summaryEl) return;
+      const { from, to, unitId, platform } = getRevenueFilters();
+      const fromTxt = formatFullDate(from);
+      const toTxt = formatFullDate(to);
+      const unitTxt = unitId ? `Unit ID ${unitId}` : 'All units';
+      const platformTxt = platform || 'All';
+      const range = fromTxt && toTxt ? `${fromTxt} – ${toTxt}` : 'All time';
+      summaryEl.textContent = `Showing: ${range} · Unit: ${unitTxt} · Platform: ${platformTxt}`;
+    }
+
+    function renderRevenueSummary(summary = {}) {
+      const { totalRevenue = 0, bookingsCount = 0, bookedNights = 0, averageBookingValue = 0, adr = 0 } = summary;
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('revenueTotal', formatCurrency(totalRevenue));
+      set('revenueBookings', bookingsCount.toLocaleString());
+      set('revenueBookedNights', bookedNights.toLocaleString());
+      set('revenueAvgBookingValue', formatCurrency(averageBookingValue));
+      set('revenueADR', formatCurrency(adr));
+    }
+
+    function renderRevenueTrend(trend = []) {
+      const wrap = document.getElementById('revenueTrendChart');
+      if (!wrap) return;
+      if (!Array.isArray(trend) || trend.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No data for selected filters.</div>';
+        return;
+      }
+      const max = Math.max(...trend.map(t => t.revenue || 0), 1);
+      const items = trend.map(t => {
+        const h = Math.max(10, Math.round((t.revenue / max) * 170));
+        const label = formatCurrency(t.revenue);
+        const monthLabel = formatMonthPretty(t.month, { short: true });
+        return `
+          <div class="trend-item">
+            <div class="trend-value">${label}</div>
+            <div class="trend-bar-wrap">
+              <div class="trend-bar" style="height:${h}px;"></div>
+            </div>
+            <div class="trend-month">${monthLabel}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = `<div class="trend-chart">${items}</div>`;
+    }
+
+    function renderRevenueByMonth(trend = []) {
+      const wrap = document.getElementById('revenueByMonthTable');
+      if (!wrap) return;
+      if (!Array.isArray(trend) || trend.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No revenue data for selected filters.</div>';
+        return;
+      }
+      const rows = trend
+        .slice()
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .map(t => `<div class="row space-between" style="padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
+            <span class="small semibold">${formatMonthPretty(t.month)}</span>
+            <span class="small muted" style="text-align:right;">${formatCurrency(t.revenue)}</span>
+          </div>`).join('');
+      wrap.innerHTML = `
+        <div class="row space-between" style="margin-bottom:6px;">
+          <div class="small muted">Month</div>
+          <div class="small muted" style="text-align:right;">Revenue</div>
+        </div>
+        ${rows}
+      `;
+    }
+
+    function renderRevenueByPlatform(rows = []) {
+      const wrap = document.getElementById('revenueByPlatform');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No data for selected filters.</div>';
+        return;
+      }
+      wrap.innerHTML = rows.map((r, i) => `
+        <div style="margin-bottom:10px; ${i !== 0 ? 'padding-top:8px; border-top:1px solid rgba(0,0,0,0.05);' : ''}">
+          <div class="semibold">${r.platform || 'Unknown'}:</div>
+          <div class="small muted">Revenue: ${formatCurrency(r.revenue)}</div>
+          <div class="small muted">Bookings: ${r.bookings}</div>
+          <div class="small muted">Nights: ${r.bookedNights}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderRevenueByUnit(rows = []) {
+      const wrap = document.getElementById('revenueByUnit');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No data for selected filters.</div>';
+        return;
+      }
+      wrap.innerHTML = rows.map((r, i) => `
+        <div style="margin-bottom:10px; ${i !== 0 ? 'padding-top:8px; border-top:1px solid rgba(0,0,0,0.05);' : ''}">
+          <div class="semibold">${r.unitName || `Unit ${r.unitId || '—'}`}:</div>
+          <div class="small muted">Revenue: ${formatCurrency(r.revenue)}</div>
+          <div class="small muted">Bookings: ${r.bookings}</div>
+          <div class="small muted">Nights: ${r.bookedNights}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadRevenueTab() {
+      const { from, to, unitId, platform } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (platform) params.append('platform', platform);
+      const url = `/api/analytics/revenue-tab?${params.toString()}`;
+      const trendEl = document.getElementById('revenueTrendChart');
+      if (trendEl) trendEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load revenue data');
+        const data = await res.json();
+        renderRevenueSummary(data.summary || {});
+        renderRevenueTrend(data.trend || []);
+        renderRevenueByMonth(data.trend || []);
+        renderRevenueByPlatform(data.byPlatform || []);
+        renderRevenueByUnit(data.byUnit || []);
+      } catch (err) {
+        console.error(err);
+        if (trendEl) trendEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderRevenueSummary({});
+        renderRevenueByPlatform([]);
+        renderRevenueByUnit([]);
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       applyTheme();
       wireUserMenu();
@@ -245,6 +468,17 @@
         btn.addEventListener('click', () => setTab(btn.dataset.tab));
       });
       setTab('revenue');
+
+      setDefaultRevenueFiltersToCurrentMonth();
+      const applyBtn = document.getElementById('analyticsApply');
+      const resetBtn = document.getElementById('analyticsReset');
+      if (applyBtn) applyBtn.addEventListener('click', () => loadRevenueTab());
+      if (resetBtn) resetBtn.addEventListener('click', () => {
+        setDefaultRevenueFiltersToCurrentMonth();
+        loadRevenueTab();
+      });
+
+      loadRevenueTab();
     });
   </script>
 </body>
