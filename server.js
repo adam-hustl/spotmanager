@@ -2645,6 +2645,182 @@ app.get('/account-info', requireAnyUser, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'account-info.html'));
 });
 
+// Analytics API - Occupancy tab
+app.get('/api/analytics/occupancy-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const conditions = ['workspace_id = $1'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+
+  if (from) {
+    conditions.push(`check_in::date >= $${idx++}`);
+    params.push(from);
+  }
+  if (to) {
+    conditions.push(`check_in::date <= $${idx++}`);
+    params.push(to);
+  }
+  if (unitId) {
+    conditions.push(`unit_id = $${idx++}`);
+    params.push(unitId);
+  }
+  if (platform && platform !== 'All') {
+    conditions.push(`platform = $${idx++}`);
+    params.push(platform);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const daysBetween = (a, b) => {
+    if (!a || !b) return 0;
+    const start = new Date(a);
+    const end = new Date(b);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const diff = (end - start) / (1000 * 60 * 60 * 24);
+    return diff >= 0 ? Math.floor(diff) + 1 : 0;
+  };
+
+  const availableDaysInRange = daysBetween(from, to);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const kpiFrom = from || todayStr;
+  const selectedTo = to || todayStr;
+  const effectiveKpiTo =
+    new Date(selectedTo) < new Date(todayStr) ? selectedTo : todayStr;
+  const kpiDaysInRange = daysBetween(kpiFrom, effectiveKpiTo);
+
+  try {
+    if (!IS_PROD) console.log('[analytics] occupancy filters', { workspaceId, from, to, unitId, platform });
+
+    const unitCountRes = await pool.query(
+      'SELECT COUNT(*)::int AS cnt FROM units WHERE workspace_id = $1',
+      [workspaceId]
+    );
+    const unitCount = unitCountRes.rows[0]?.cnt || 0;
+
+    const summaryQuery = `
+      SELECT
+        COALESCE(SUM(GREATEST(0, LEAST(check_out::date, $${params.length + 2}) - GREATEST(check_in::date, $${params.length + 1}))), 0) AS booked_nights,
+        COUNT(*) FILTER (WHERE LEAST(check_out::date, $${params.length + 2}) > GREATEST(check_in::date, $${params.length + 1})) AS bookings_count
+      FROM bookings
+      WHERE ${whereClause} AND check_in::date <= $${params.length + 2} AND check_out::date >= $${params.length + 1}
+    `;
+
+    const trendQuery = `
+      SELECT to_char(check_in::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))), 0) AS booked_nights
+      FROM bookings
+      WHERE ${whereClause}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byUnitQuery = `
+      SELECT unit_id,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))), 0) AS booked_nights
+      FROM bookings
+      WHERE ${whereClause}
+      GROUP BY unit_id
+      ORDER BY booked_nights DESC
+    `;
+
+    const stayLengthQuery = `
+      SELECT
+        SUM(CASE WHEN len = 1 THEN 1 ELSE 0 END) AS n1,
+        SUM(CASE WHEN len = 2 THEN 1 ELSE 0 END) AS n2,
+        SUM(CASE WHEN len BETWEEN 3 AND 6 THEN 1 ELSE 0 END) AS n3_6,
+        SUM(CASE WHEN len >= 7 THEN 1 ELSE 0 END) AS n7p
+      FROM (
+        SELECT GREATEST(0, (check_out::date - check_in::date)) AS len
+        FROM bookings
+        WHERE ${whereClause}
+      ) t
+    `;
+
+    const kpiParams = [...params, kpiFrom, effectiveKpiTo];
+
+    const [summaryRes, trendRes, byUnitRes, stayLenRes] = await Promise.all([
+      kpiDaysInRange > 0 ? pool.query(summaryQuery, kpiParams) : Promise.resolve({ rows: [{ booked_nights: 0, bookings_count: 0 }] }),
+      pool.query(trendQuery, params),
+      pool.query(byUnitQuery, params),
+      pool.query(stayLengthQuery, params),
+    ]);
+
+    const summaryRow = summaryRes.rows[0] || {};
+    const bookedNights = Number(summaryRow.booked_nights || 0);
+    const bookingsCount = Number(summaryRow.bookings_count || 0);
+    const averageLengthOfStay = bookingsCount > 0 ? bookedNights / bookingsCount : 0;
+
+    const rangeUnitMultiplier = unitId ? 1 : unitCount || 0;
+    const availableNights = kpiDaysInRange * rangeUnitMultiplier;
+    const occupancyRate = availableNights > 0 ? (bookedNights / availableNights) * 100 : 0;
+
+    const trend = trendRes.rows.map((r) => {
+      const month = r.month;
+      const parts = month ? month.split('-') : [];
+      let daysInMonthRange = 0;
+      if (parts.length === 2) {
+        const y = Number(parts[0]);
+        const m = Number(parts[1]) - 1;
+        const monthStart = new Date(Date.UTC(y, m, 1));
+        const monthEnd = new Date(Date.UTC(y, m + 1, 0));
+        const startClamp = from ? new Date(from) : monthStart;
+        const endClamp = to ? new Date(to) : monthEnd;
+        const start = startClamp > monthStart ? startClamp : monthStart;
+        const end = endClamp < monthEnd ? endClamp : monthEnd;
+        const diff = (end - start) / (1000 * 60 * 60 * 24);
+        daysInMonthRange = diff >= 0 ? Math.floor(diff) + 1 : 0;
+      }
+      const available = daysInMonthRange * rangeUnitMultiplier;
+      const booked = Number(r.booked_nights || 0);
+      const rate = available > 0 ? (booked / available) * 100 : 0;
+      return { month, bookedNights: booked, availableNights: available, occupancyRate: rate };
+    });
+
+    const byUnit = byUnitRes.rows.map((r) => {
+      const booked = Number(r.booked_nights || 0);
+      const bookings = Number(r.bookings || 0);
+      const available = availableDaysInRange;
+      const rate = available > 0 ? (booked / available) * 100 : 0;
+      return {
+        unitId: r.unit_id,
+        bookedNights: booked,
+        bookings,
+        availableNights: available,
+        occupancyRate: rate,
+      };
+    });
+
+    const stayRow = stayLenRes.rows[0] || {};
+    const stayLengthBreakdown = [
+      { label: '1 night', count: Number(stayRow.n1 || 0) },
+      { label: '2 nights', count: Number(stayRow.n2 || 0) },
+      { label: '3-6 nights', count: Number(stayRow.n3_6 || 0) },
+      { label: '7+ nights', count: Number(stayRow.n7p || 0) },
+    ];
+
+    return res.json({
+      summary: {
+        occupancyRate,
+        bookedNights,
+        availableNights,
+        averageLengthOfStay,
+        kpiEndDate: effectiveKpiTo,
+      },
+      trend,
+      byUnit,
+      stayLengthBreakdown,
+    });
+  } catch (e) {
+    console.error('analytics occupancy-tab failed', e);
+    return res.status(500).json({ error: 'failed to load occupancy analytics' });
+  }
+});
+
 
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, async (req, res) => {

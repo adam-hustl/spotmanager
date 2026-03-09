@@ -192,9 +192,45 @@
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="occupancy" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Occupancy Analytics</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-4" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Occupancy (to date)</div>
+              <div id="occupancyRateCard" class="value-2xl">—</div>
+              <div id="occupancyRateEnd" class="muted xs" style="margin-top:4px;"></div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Booked Nights</div>
+              <div id="occupancyBookedNights" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Available Nights</div>
+              <div id="occupancyAvailableNights" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Avg Length of Stay</div>
+              <div id="occupancyAvgStay" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-chart-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Occupancy trend</div>
+                <div class="muted small">(Monthly)</div>
+              </div>
+              <div id="occupancyTrendChart" class="analytics-chart-wrap"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Occupancy by Unit</div>
+              </div>
+              <div id="occupancyByUnitTable" class="analytics-month-table"></div>
+            </div>
+          </div>
+
+          <div class="card card-white" style="margin-top:16px;">
+            <div class="h3" style="margin-bottom:8px;">Stay Length Breakdown</div>
+            <div id="occupancyStayLength" class="small"></div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="pricing" style="margin-top:18px;">
@@ -267,6 +303,8 @@
         }
       });
     }
+
+    let activeTab = 'revenue';
 
     function formatCurrency(value) {
       const num = Number(value || 0);
@@ -415,6 +453,126 @@
       `).join('');
     }
 
+    function formatPercent(val) {
+      if (val === null || val === undefined) return '0%';
+      return `${Math.round(val)}%`;
+    }
+
+    function renderOccupancySummary(summary = {}) {
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('occupancyRateCard', formatPercent(summary.occupancyRate || 0));
+      set('occupancyBookedNights', (summary.bookedNights || 0).toLocaleString());
+      set('occupancyAvailableNights', (summary.availableNights || 0).toLocaleString());
+      const avgStay = summary.averageLengthOfStay || 0;
+      set('occupancyAvgStay', `${avgStay.toFixed(1)} nights`);
+      const endEl = document.getElementById('occupancyRateEnd');
+      if (endEl) {
+        endEl.textContent = summary.kpiEndDate ? `Through ${summary.kpiEndDate}` : '';
+      }
+    }
+
+    function renderOccupancyTrend(trend = []) {
+      const wrap = document.getElementById('occupancyTrendChart');
+      if (!wrap) return;
+      if (!Array.isArray(trend) || trend.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No occupancy data for selected filters.</div>';
+        return;
+      }
+      const max = Math.max(...trend.map(t => t.occupancyRate || 0), 1);
+      const items = trend.map(t => {
+        const pct = Number(t.occupancyRate || 0);
+        const h = Math.max(10, Math.round((pct / max) * 170));
+        const monthLabel = formatMonthPretty(t.month, { short: true });
+        return `
+          <div class="trend-item">
+            <div class="trend-value">${formatPercent(pct)}</div>
+            <div class="trend-bar-wrap">
+              <div class="trend-bar" style="height:${h}px;"></div>
+            </div>
+            <div class="trend-month">${monthLabel}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = `<div class="trend-chart">${items}</div>`;
+    }
+
+    function renderOccupancyByUnit(rows = []) {
+      const wrap = document.getElementById('occupancyByUnitTable');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No occupancy data for selected filters.</div>';
+        return;
+      }
+      wrap.innerHTML = rows.map((r, i) => `
+        <div class="row space-between" style="${i !== 0 ? 'padding-top:8px; border-top:1px solid rgba(0,0,0,0.05);' : ''} padding:6px 0;">
+          <div>
+            <div class="semibold">${r.unitId ? `Unit ${r.unitId}` : 'Unit —'}</div>
+            <div class="small muted">${r.bookings || 0} bookings · ${r.bookedNights || 0} nights</div>
+          </div>
+          <div class="semibold">${formatPercent(r.occupancyRate || 0)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderOccupancyStayLength(rows = []) {
+      const wrap = document.getElementById('occupancyStayLength');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No occupancy data for selected filters.</div>';
+        return;
+      }
+      const max = Math.max(...rows.map(r => r.count || 0), 1);
+      wrap.innerHTML = rows.map(r => {
+        const pct = Math.max(4, (r.count / max) * 100);
+        return `
+          <div class="row space-between" style="align-items:center; margin-bottom:8px;">
+            <span class="small semibold">${r.label}</span>
+            <div style="flex:1; margin:0 12px; background:#f3f4f6; border-radius:999px; overflow:hidden; height:8px;">
+              <div style="width:${pct}%; height:8px; background:#10B981;"></div>
+            </div>
+            <span class="small muted">${r.count || 0}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadOccupancyTab() {
+      const { from, to, unitId, platform } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (platform) params.append('platform', platform);
+      const url = `/api/analytics/occupancy-tab?${params.toString()}`;
+      const trendEl = document.getElementById('occupancyTrendChart');
+      if (trendEl) trendEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load occupancy data');
+        const data = await res.json();
+        renderOccupancySummary(data.summary || {});
+        renderOccupancyTrend(data.trend || []);
+        renderOccupancyByUnit(data.byUnit || []);
+        renderOccupancyStayLength(data.stayLengthBreakdown || []);
+      } catch (err) {
+        console.error(err);
+        if (trendEl) trendEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderOccupancySummary({});
+        renderOccupancyByUnit([]);
+        renderOccupancyStayLength([]);
+      }
+    }
+
+    function loadActiveTab() {
+      if (activeTab === 'occupancy') {
+        loadOccupancyTab();
+      } else {
+        loadRevenueTab();
+      }
+    }
+
+
     async function loadRevenueTab() {
       const { from, to, unitId, platform } = getRevenueFilters();
       renderFilterSummary();
@@ -463,22 +621,23 @@
         panels.forEach((panel) => {
           panel.classList.toggle('active', panel.dataset.tabPanel === id);
         });
+        activeTab = id;
+        loadActiveTab();
       };
       tabButtons.forEach((btn) => {
         btn.addEventListener('click', () => setTab(btn.dataset.tab));
       });
-      setTab('revenue');
 
       setDefaultRevenueFiltersToCurrentMonth();
+      setTab('revenue');
       const applyBtn = document.getElementById('analyticsApply');
       const resetBtn = document.getElementById('analyticsReset');
-      if (applyBtn) applyBtn.addEventListener('click', () => loadRevenueTab());
+      if (applyBtn) applyBtn.addEventListener('click', () => loadActiveTab());
       if (resetBtn) resetBtn.addEventListener('click', () => {
         setDefaultRevenueFiltersToCurrentMonth();
-        loadRevenueTab();
+        loadActiveTab();
       });
 
-      loadRevenueTab();
     });
   </script>
 </body>
