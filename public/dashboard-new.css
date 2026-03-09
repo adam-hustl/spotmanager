@@ -431,6 +431,32 @@ body.page {
 .analytics-month-table .small.muted {
   color: #4b5563;
 }
+.unit-rank-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.unit-rank-name {
+  font-weight: 500;
+  color: #1f2937;
+}
+.unit-rank-bar-wrap {
+  height: 10px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.unit-rank-bar {
+  height: 100%;
+  background: #10b981;
+  border-radius: 8px;
+}
+.unit-rank-value {
+  text-align: right;
+  font-weight: 600;
+}
 
 /* Hide floating label text */
 #ctaT { display: none; }

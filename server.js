@@ -2821,6 +2821,103 @@ app.get('/api/analytics/occupancy-tab', requireAnyUser, async (req, res) => {
   }
 });
 
+// Analytics API - Unit Performance tab
+app.get('/api/analytics/unit-performance-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const conditions = ['b.workspace_id = $1'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+
+  if (from) {
+    conditions.push(`b.check_in::date >= $${idx++}`);
+    params.push(from);
+  }
+  if (to) {
+    conditions.push(`b.check_in::date <= $${idx++}`);
+    params.push(to);
+  }
+  if (unitId) {
+    conditions.push(`b.unit_id = $${idx++}`);
+    params.push(unitId);
+  }
+  if (platform && platform !== 'All') {
+    conditions.push(`b.platform = $${idx++}`);
+    params.push(platform);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const daysBetween = (a, b) => {
+    if (!a || !b) return 0;
+    const start = new Date(a);
+    const end = new Date(b);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const diff = (end - start) / (1000 * 60 * 60 * 24);
+    return diff >= 0 ? Math.floor(diff) + 1 : 0;
+  };
+  const availableDaysInRange = daysBetween(from, to);
+
+  try {
+    if (!IS_PROD) console.log('[analytics] unit-performance filters', { workspaceId, from, to, unitId, platform });
+
+    const unitsQuery = `
+      SELECT
+        b.unit_id,
+        u.name AS unit_name,
+        COUNT(*) AS bookings_count,
+        COALESCE(SUM(b.total_price), 0) AS revenue,
+        COALESCE(SUM(GREATEST(0, (b.check_out::date - b.check_in::date))), 0) AS booked_nights
+      FROM bookings b
+      LEFT JOIN units u ON u.id = b.unit_id AND u.workspace_id = b.workspace_id
+      WHERE ${whereClause}
+      GROUP BY b.unit_id, u.name
+      ORDER BY revenue DESC
+    `;
+
+    const { rows } = await pool.query(unitsQuery, params);
+
+    const units = rows.map((r) => {
+      const revenue = Number(r.revenue || 0);
+      const bookingsCount = Number(r.bookings_count || 0);
+      const bookedNights = Number(r.booked_nights || 0);
+      const availableNights = availableDaysInRange || 0;
+      const unitName = r.unit_name && r.unit_name.trim() !== '' ? r.unit_name : (r.unit_id ? `Unit ${r.unit_id}` : 'Unit —');
+      return {
+        unitId: r.unit_id,
+        unitName,
+        revenue,
+        bookingsCount,
+        bookedNights,
+        averageBookingValue: bookingsCount > 0 ? revenue / bookingsCount : 0,
+        adr: bookedNights > 0 ? revenue / bookedNights : 0,
+        availableNights,
+        occupancyRate: availableNights > 0 ? (bookedNights / availableNights) * 100 : 0,
+      };
+    });
+
+    const totalUnits = units.length;
+    const topRevenueUnit = units[0] || null;
+    const topOccupancyUnit = [...units].sort((a, b) => (b.occupancyRate || 0) - (a.occupancyRate || 0))[0] || null;
+
+    const summary = {
+      totalUnits,
+      topRevenueUnitName: topRevenueUnit ? topRevenueUnit.unitName : '',
+      topRevenueUnitValue: topRevenueUnit ? topRevenueUnit.revenue : 0,
+      topOccupancyUnitName: topOccupancyUnit ? topOccupancyUnit.unitName : '',
+      topOccupancyUnitValue: topOccupancyUnit ? topOccupancyUnit.occupancyRate : 0,
+    };
+
+    return res.json({ summary, units });
+  } catch (e) {
+    console.error('analytics unit-performance failed', e);
+    return res.status(500).json({ error: 'failed to load unit performance' });
+  }
+});
+
 
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, async (req, res) => {

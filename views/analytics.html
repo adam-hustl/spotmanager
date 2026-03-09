@@ -264,9 +264,36 @@
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="units" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Unit Performance</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-3" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Total Units</div>
+              <div id="unitPerfTotalUnits" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Top Revenue Unit</div>
+              <div id="unitPerfTopRevenueName" class="small muted" style="margin-top:4px;">—</div>
+              <div id="unitPerfTopRevenue" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Top Occupancy Unit</div>
+              <div id="unitPerfTopOccupancyName" class="small muted" style="margin-top:4px;">—</div>
+              <div id="unitPerfTopOccupancy" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-chart-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Unit Revenue Ranking</div>
+              </div>
+              <div id="unitPerformanceChart" class="analytics-chart-wrap"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Unit Performance</div>
+              </div>
+              <div id="unitPerformanceTable" class="analytics-month-table"></div>
+            </div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="forecast" style="margin-top:18px;">
@@ -536,6 +563,96 @@
       }).join('');
     }
 
+    function renderUnitPerformanceSummary(summary = {}) {
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('unitPerfTotalUnits', summary.totalUnits != null ? summary.totalUnits : '—');
+      set('unitPerfTopRevenue', formatCurrency(summary.topRevenueUnitValue || 0));
+      set('unitPerfTopRevenueName', summary.topRevenueUnitName || '—');
+      set('unitPerfTopOccupancy', formatPercent(summary.topOccupancyUnitValue || 0));
+      set('unitPerfTopOccupancyName', summary.topOccupancyUnitName || '—');
+    }
+
+    function renderUnitPerformanceChart(units = []) {
+      const wrap = document.getElementById('unitPerformanceChart');
+      if (!wrap) return;
+      if (!Array.isArray(units) || units.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No unit performance data for selected filters.</div>';
+        return;
+      }
+      const maxRevenue = Math.max(...units.map(u => u.revenue || 0), 1);
+      const rows = units.map(u => {
+        const pct = Math.max(6, (u.revenue / maxRevenue) * 100);
+        return `
+          <div class="unit-rank-row">
+            <div class="unit-rank-name">${u.unitName || 'Unit —'}</div>
+            <div class="unit-rank-bar-wrap">
+              <div class="unit-rank-bar" style="width:${pct}%;"></div>
+            </div>
+            <div class="unit-rank-value">${formatCurrency(u.revenue || 0)}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = rows;
+    }
+
+    function renderUnitPerformanceTable(units = []) {
+      const wrap = document.getElementById('unitPerformanceTable');
+      if (!wrap) return;
+      if (!Array.isArray(units) || units.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No unit performance data for selected filters.</div>';
+        return;
+      }
+      const sorted = units.slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+      const header = `
+        <div class="row space-between small muted" style="font-weight:600; padding-bottom:6px;">
+          <span style="flex:1;">Unit</span>
+          <span style="width:110px; text-align:right;">Revenue</span>
+          <span style="width:80px; text-align:right;">Bookings</span>
+          <span style="width:80px; text-align:right;">Nights</span>
+          <span style="width:90px; text-align:right;">ADR</span>
+          <span style="width:90px; text-align:right;">Occupancy</span>
+        </div>
+      `;
+      const rows = sorted.map((u, i) => `
+        <div class="row space-between" style="align-items:center; padding:8px 0; ${i!==0 ? 'border-top:1px solid rgba(0,0,0,0.05);' : ''}">
+          <span style="flex:1;" class="semibold">${u.unitName || 'Unit —'}</span>
+          <span style="width:110px; text-align:right;" class="small muted">${formatCurrency(u.revenue || 0)}</span>
+          <span style="width:80px; text-align:right;" class="small muted">${u.bookingsCount || 0}</span>
+          <span style="width:80px; text-align:right;" class="small muted">${u.bookedNights || 0}</span>
+          <span style="width:90px; text-align:right;" class="small muted">${formatCurrency(u.adr || 0)}</span>
+          <span style="width:90px; text-align:right;" class="small muted">${formatPercent(u.occupancyRate || 0)}</span>
+        </div>
+      `).join('');
+      wrap.innerHTML = header + rows;
+    }
+
+    async function loadUnitPerformanceTab() {
+      const { from, to, unitId, platform } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (platform) params.append('platform', platform);
+      const url = `/api/analytics/unit-performance-tab?${params.toString()}`;
+      const chartEl = document.getElementById('unitPerformanceChart');
+      if (chartEl) chartEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load unit performance');
+        const data = await res.json();
+        renderUnitPerformanceSummary(data.summary || {});
+        renderUnitPerformanceChart(data.units || []);
+        renderUnitPerformanceTable(data.units || []);
+      } catch (err) {
+        console.error(err);
+        if (chartEl) chartEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderUnitPerformanceSummary({});
+        renderUnitPerformanceChart([]);
+        renderUnitPerformanceTable([]);
+      }
+    }
+
     async function loadOccupancyTab() {
       const { from, to, unitId, platform } = getRevenueFilters();
       renderFilterSummary();
@@ -567,6 +684,8 @@
     function loadActiveTab() {
       if (activeTab === 'occupancy') {
         loadOccupancyTab();
+      } else if (activeTab === 'units') {
+        loadUnitPerformanceTab();
       } else {
         loadRevenueTab();
       }
