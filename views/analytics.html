@@ -53,6 +53,7 @@
             <a href="/logout" class="user-menu-item">Log out</a>
           </div>
         </div>
+        <div class="analytics-filter-divider"></div>
       </div>
     </div>
   </header>
@@ -95,48 +96,56 @@
           </div>
         </div>
 
+        <div class="analytics-manage-actions">
+          <a href="/expense-manager" class="ghost-btn ghost-btn--primary">Manage expenses</a>
+        </div>
+
         <div class="analytics-filters" style="margin-top:16px;">
-          <div class="row wrap gap-12">
-            <div>
-              <label class="small muted">Date range</label><br>
-              <div class="row gap-8">
-                <input id="analyticsFrom" type="date" class="ng-input" />
-                <input id="analyticsTo" type="date" class="ng-input" />
+          <div class="analytics-filter-bar">
+            <div class="analytics-filter-group analytics-filter-dates">
+              <div class="analytics-filter-control">
+                <label class="small muted">Date range</label><br>
+                <div class="analytics-filter-dates">
+                  <input id="analyticsFrom" type="date" class="ng-input" />
+                  <input id="analyticsTo" type="date" class="ng-input" />
+                </div>
               </div>
             </div>
-            <div>
-              <label class="small muted">Unit</label><br>
-              <select id="analyticsUnit" class="ng-input" style="min-width:160px;">
-                <option value="">All units</option>
-              </select>
+            <div class="analytics-filter-group analytics-filter-selects">
+              <div class="analytics-filter-control">
+                <label class="small muted">Unit</label><br>
+                <select id="analyticsUnit" class="ng-input">
+                  <option value="">All units</option>
+                </select>
+              </div>
+              <div class="analytics-filter-control">
+                <label class="small muted">Platform</label><br>
+                <select id="analyticsPlatform" class="ng-input">
+                  <option value="All">All</option>
+                  <option>Airbnb</option>
+                  <option>Booking.com</option>
+                  <option>Agoda</option>
+                  <option>Direct</option>
+                </select>
+              </div>
+              <div class="analytics-filter-control">
+                <label class="small muted">Category</label><br>
+                <select id="analyticsCategory" class="ng-input">
+                  <option value="All">All categories</option>
+                  <option>Rent</option>
+                  <option>Internet</option>
+                  <option>Utilities</option>
+                  <option>Cleaner</option>
+                  <option>HOA</option>
+                  <option>Condo dues</option>
+                  <option>Subscription</option>
+                  <option>Other</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label class="small muted">Platform</label><br>
-              <select id="analyticsPlatform" class="ng-input" style="min-width:160px;">
-                <option value="All">All</option>
-                <option>Airbnb</option>
-                <option>Booking.com</option>
-                <option>Agoda</option>
-                <option>Direct</option>
-              </select>
-            </div>
-            <div>
-              <label class="small muted">Category</label><br>
-              <select id="analyticsCategory" class="ng-input" style="min-width:160px;">
-                <option value="All">All categories</option>
-                <option>Rent</option>
-                <option>Internet</option>
-                <option>Utilities</option>
-                <option>Cleaner</option>
-                <option>HOA</option>
-                <option>Condo dues</option>
-                <option>Subscription</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div class="row gap-8 align-end" style="align-self:flex-end;">
-              <button id="analyticsApply" class="primary-btn" type="button" style="min-width:120px; height: 40px; padding:0 14px;">Apply</button>
-              <button id="analyticsReset" class="ghost-btn" type="button" style="min-width:120px; height: 40px;">Reset</button>
+            <div class="analytics-filter-group analytics-filter-actions">
+              <button id="analyticsApply" class="primary-btn" type="button">Apply</button>
+              <button id="analyticsReset" class="ghost-btn" type="button">Reset</button>
             </div>
           </div>
         </div>
@@ -254,9 +263,44 @@
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="profit" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Profit Analytics</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-4" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Net Profit</div>
+              <div id="profitNet" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Total Revenue</div>
+              <div id="profitRevenue" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Total Expenses</div>
+              <div id="profitExpenses" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Profit Margin</div>
+              <div id="profitMargin" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="card card-white analytics-chart-card" style="margin-top:16px;">
+            <div class="row space-between align-center wrap" style="margin-bottom:10px; gap:8px;">
+              <div class="h3" style="margin:0;">Profit trend</div>
+              <div class="muted small">(Monthly)</div>
+            </div>
+            <div id="profitTrendChart" class="analytics-chart-wrap"></div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Profit by unit</div>
+              </div>
+              <div id="profitByUnit" class="analytics-month-table"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="h3" style="margin-bottom:8px;">Profit breakdown</div>
+              <div id="profitBreakdown" class="analytics-month-table"></div>
+            </div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="expenses" style="margin-top:18px;">
@@ -284,7 +328,6 @@
               <div class="row space-between align-center wrap" style="margin-bottom:10px; gap:8px;">
                 <div class="h3" style="margin:0;">Expense trend</div>
                 <div class="muted small">(Monthly)</div>
-                <a href="/expense-manager" class="ghost-btn" style="margin-left:auto; min-width:140px; text-align:center;">Manage expenses</a>
               </div>
               <div id="expensesTrendChart" class="analytics-chart-wrap"></div>
             </div>
@@ -919,6 +962,151 @@
       }
     }
 
+    async function loadProfitTab() {
+      const { from, to, unitId, platform, category } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (platform) params.append('platform', platform);
+      if (category) params.append('category', category);
+      const url = `/api/analytics/profit-tab?${params.toString()}`;
+      const trendEl = document.getElementById('profitTrendChart');
+      if (trendEl) trendEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load profit data');
+        const data = await res.json();
+        renderProfitSummary(data.summary || {});
+        renderProfitTrend(data.trend || []);
+        renderProfitByUnit(data.byUnit || []);
+        renderProfitBreakdown(data.breakdown || {}, data.summary || {});
+      } catch (err) {
+        console.error(err);
+        if (trendEl) trendEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderProfitSummary({});
+        renderProfitByUnit([]);
+        renderProfitBreakdown({}, {});
+      }
+    }
+
+    function renderProfitSummary(summary = {}) {
+      const setText = (id, val, colorVal = null) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = val;
+        if (colorVal === null) {
+          el.style.color = '';
+        } else if (colorVal > 0) {
+          el.style.color = '#16a34a';
+        } else if (colorVal < 0) {
+          el.style.color = '#dc2626';
+        } else {
+          el.style.color = '';
+        }
+      };
+      if (!summary || typeof summary !== 'object') {
+        setText('profitNet', '—');
+        setText('profitRevenue', '—');
+        setText('profitExpenses', '—');
+        setText('profitMargin', '—');
+        return;
+      }
+      const net = Number(summary.netProfit || 0);
+      setText('profitNet', formatCurrency(net), net);
+      setText('profitRevenue', formatCurrency(summary.totalRevenue || 0));
+      setText('profitExpenses', formatCurrency(summary.totalExpenses || 0));
+      const pm = Number(summary.profitMargin);
+      setText('profitMargin', Number.isFinite(pm) ? `${pm.toFixed(1)}%` : '—', pm);
+    }
+
+    function renderProfitTrend(trend = []) {
+      const wrap = document.getElementById('profitTrendChart');
+      if (!wrap) return;
+      if (!trend.length) {
+        wrap.innerHTML = '<div class="muted small">No profit data for selected filters</div>';
+        return;
+      }
+      const maxAbs = Math.max(...trend.map(t => Math.abs(Number(t.profit || 0))), 1);
+      const items = trend.map(t => {
+        const profitVal = Number(t.profit || 0);
+        const widthPct = (Math.abs(profitVal) / maxAbs) * 50;
+        const isPos = profitVal > 0;
+        const isNeg = profitVal < 0;
+        const barClass = isPos ? 'profit-bar-positive' : isNeg ? 'profit-bar-negative' : '';
+        const barStyle = isPos
+          ? `left:50%; width:${widthPct}%;`
+          : isNeg
+            ? `right:50%; width:${widthPct}%;`
+            : 'left:50%; width:1px;';
+        return `
+          <div class="profit-row">
+            <div class="profit-month">${formatMonthPretty(t.month, { short: true })}</div>
+            <div class="profit-track">
+              <div class="profit-track-zero"></div>
+              <div class="profit-bar ${barClass}" style="${barStyle}"></div>
+            </div>
+            <div class="profit-value ${isPos ? 'profit-positive' : isNeg ? 'profit-negative' : ''}">${formatCurrency(profitVal)}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = `<div class="profit-trend-list">${items}</div>`;
+    }
+
+    function renderProfitByUnit(list = []) {
+      const wrap = document.getElementById('profitByUnit');
+      if (!wrap) return;
+      if (!list.length) {
+        wrap.innerHTML = '<div class="muted small">No profit data for selected filters</div>';
+        return;
+      }
+      const sorted = [...list].sort((a,b)=> (b.profit||0) - (a.profit||0));
+      const rows = sorted.map(u => {
+        const profitVal = Number(u.profit || 0);
+        const colorClass = profitVal > 0 ? 'profit-positive' : profitVal < 0 ? 'profit-negative' : '';
+        return `
+          <div class="profit-unit-summary-item">
+            <div class="profit-unit-summary-head">
+              <div class="profit-unit-summary-name">${u.unitName || 'Unit'}</div>
+              <div class="profit-unit-summary-profit ${colorClass}">${formatCurrency(profitVal)}</div>
+            </div>
+            <div class="profit-unit-summary-metrics">
+              <div class="profit-unit-summary-metric"><span>Revenue</span><strong>${formatCurrency(u.revenue || 0)}</strong></div>
+              <div class="profit-unit-summary-metric"><span>Expenses</span><strong>${formatCurrency(u.expenses || 0)}</strong></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = `
+        <div class="profit-unit-summary-list">
+          ${rows}
+        </div>
+      `;
+    }
+
+    function renderProfitBreakdown(breakdown = {}, summary = {}) {
+      const wrap = document.getElementById('profitBreakdown');
+      if (!wrap) return;
+      const recurring = breakdown.recurringExpenses || 0;
+      const onetime = breakdown.oneTimeExpenses || 0;
+      const net = summary.netProfit || 0;
+      wrap.innerHTML = `
+        <div class="row space-between" style="padding:6px 0; border-top:1px solid rgba(0,0,0,0.05);">
+          <div>Recurring expenses</div>
+          <div class="semibold">${formatCurrency(recurring)}</div>
+        </div>
+        <div class="row space-between" style="padding:6px 0; border-top:1px solid rgba(0,0,0,0.05);">
+          <div>One-time expenses</div>
+          <div class="semibold">${formatCurrency(onetime)}</div>
+        </div>
+        <div class="row space-between" style="padding:6px 0; border-top:1px solid rgba(0,0,0,0.05);">
+          <div>Net profit</div>
+          <div class="semibold" style="color:${net>0?'#16a34a':net<0?'#dc2626':'#0f172a'};">${formatCurrency(net)}</div>
+        </div>
+      `;
+    }
+
 
 
     async function loadOccupancyTab() {
@@ -958,6 +1146,8 @@
         loadPlatformPerformanceTab();
       } else if (activeTab === 'expenses') {
         loadExpensesTab();
+      } else if (activeTab === 'profit') {
+        loadProfitTab();
       } else {
         loadRevenueTab();
       }
@@ -1001,6 +1191,11 @@
       }
       const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
       const panels = Array.from(document.querySelectorAll('.tab-panel'));
+      const validTabs = tabButtons.map(btn => btn.dataset.tab);
+      const getHashTab = () => {
+        const h = (location.hash || '').replace('#','').trim();
+        return validTabs.includes(h) ? h : null;
+      };
       const setTab = (id) => {
         tabButtons.forEach((btn) => {
           const active = btn.dataset.tab === id;
@@ -1020,7 +1215,12 @@
       });
 
       setDefaultRevenueFiltersToCurrentMonth();
-      setTab('revenue');
+      const initialTab = getHashTab() || 'revenue';
+      setTab(initialTab);
+      window.addEventListener('hashchange', () => {
+        const target = getHashTab();
+        if (target && target !== activeTab) setTab(target);
+      });
       const applyBtn = document.getElementById('analyticsApply');
       const resetBtn = document.getElementById('analyticsReset');
       if (applyBtn) applyBtn.addEventListener('click', () => loadActiveTab());

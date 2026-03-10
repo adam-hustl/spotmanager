@@ -74,8 +74,13 @@
     <main class="main" style="grid-column:1 / -1; display: grid; gap: 1rem; margin-top:12px;">
 
       <section class="card card-white expense-manager-header">
-        <div class="h3" style="margin:0;">Expense Manager</div>
-        <div class="muted small">Add and manage property expenses</div>
+        <div class="row space-between align-center wrap">
+          <div>
+            <div class="h3" style="margin:0;">Expense Manager</div>
+            <div class="muted small">Add and manage property expenses</div>
+          </div>
+          <a href="/analytics#expenses" class="ghost-btn ghost-btn--primary" style="width:auto; min-width:160px; text-align:center;">View expense analytics</a>
+        </div>
       </section>
 
       <section class="card card-white" id="expenseFormCard">
@@ -86,40 +91,40 @@
           </div>
           <button id="expenseCancelEdit" class="ghost-btn" style="display:none;">Cancel edit</button>
         </div>
-        <form id="expenseForm" class="expense-form-grid">
-          <div>
-            <label class="small muted">Date</label><br>
-            <input type="date" id="expenseDate" class="ng-input" required />
-          </div>
-          <div>
-            <label class="small muted">Unit</label><br>
-            <select id="expenseUnit" class="ng-input expense-select">
-              <option value="">General / no unit</option>
-            </select>
-          </div>
-          <div>
-            <label class="small muted">Category</label><br>
-            <div class="row gap-6">
+        <form id="expenseForm" class="expense-form-main">
+          <div class="expense-form-fields">
+            <div>
+              <label class="small muted">Date</label><br>
+              <input type="date" id="expenseDate" class="ng-input" required />
+            </div>
+            <div>
+              <label class="small muted">Unit</label><br>
+              <select id="expenseUnit" class="ng-input expense-select">
+                <option value="">General / no unit</option>
+              </select>
+            </div>
+            <div>
+              <label class="small muted">Category</label><br>
               <select id="expenseCategory" class="ng-input expense-select">
                 <option value="">Select category</option>
               </select>
             </div>
-            <div class="expense-category-toggle-wrap">
-              <button type="button" class="ghost-btn expense-category-toggle-btn" id="manageCategoriesToggle">
-                Manage categories
-              </button>
+            <div>
+              <label class="small muted">Amount</label><br>
+              <input type="number" id="expenseAmount" class="ng-input" min="0" step="0.01" required />
             </div>
-          </div>
-          <div>
-            <label class="small muted">Amount</label><br>
-            <input type="number" id="expenseAmount" class="ng-input" min="0" step="0.01" required />
-          </div>
-          <div>
-            <label class="small muted">Notes</label><br>
-            <input type="text" id="expenseNotes" class="ng-input" placeholder="Optional note" />
+            <div class="expense-form-notes">
+              <label class="small muted">Notes</label><br>
+              <input type="text" id="expenseNotes" class="ng-input" placeholder="Optional note" />
+            </div>
           </div>
           <div class="expense-form-actions">
             <button type="submit" class="primary-btn" id="expenseSaveBtn">Save expense</button>
+            <div class="expense-category-toggle-wrap">
+              <button type="button" class="ghost-btn expense-category-toggle-btn" id="manageCategoriesToggle">
+                Add expense category
+              </button>
+            </div>
           </div>
         </form>
       </section>
@@ -151,24 +156,41 @@
       </section>
 
       <section class="card card-white">
-        <div class="row space-between align-center expense-history-toolbar">
-          <div>
-            <div class="h3" style="margin:0;">Expense history</div>
-            <div class="muted small">View, filter, edit, and delete saved expenses</div>
+        <div class="expense-history-toolbar">
+          <div class="row space-between align-center">
+            <div>
+              <div class="h3" style="margin:0;">Expense history</div>
+              <div class="muted small">View, filter, edit, and delete saved expenses</div>
+            </div>
           </div>
-          <div class="row gap-8 wrap expense-filter-row">
-            <input type="date" id="expenseFilterFrom" class="ng-input" />
-            <input type="date" id="expenseFilterTo" class="ng-input" />
-            <select id="expenseFilterUnit" class="ng-input expense-select">
-              <option value="">All units</option>
-            </select>
-            <select id="expenseFilterCategory" class="ng-input expense-select">
-              <option value="">All categories</option>
-            </select>
+          <div class="expense-history-filter-bar">
+            <div class="expense-history-filter-group expense-history-filter-dates">
+              <div class="expense-history-filter-control">
+                <input type="date" id="expenseFilterFrom" class="ng-input" />
+              </div>
+              <div class="expense-history-filter-control">
+                <input type="date" id="expenseFilterTo" class="ng-input" />
+              </div>
+            </div>
+            <div class="expense-history-filter-group expense-history-filter-selects">
+              <div class="expense-history-filter-control">
+                <select id="expenseFilterUnit" class="ng-input expense-select">
+                  <option value="">All units</option>
+                </select>
+              </div>
+              <div class="expense-history-filter-control">
+                <select id="expenseFilterCategory" class="ng-input expense-select">
+                  <option value="">All categories</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="expense-history-actions">
             <button id="expenseFilterApply" class="ghost-btn ghost-btn--primary">Apply</button>
             <button id="expenseFilterReset" class="ghost-btn">Reset</button>
           </div>
         </div>
+        <div class="expense-history-divider"></div>
         <div id="expenseList" class="expense-list-table"></div>
       </section>
 
@@ -556,9 +578,9 @@
           mgr.style.display = show ? 'block' : 'none';
           if (show) {
             loadExpenseCategories();
-            catToggle.textContent = 'Hide categories';
+            catToggle.textContent = 'Hide expense categories';
           } else {
-            catToggle.textContent = 'Manage categories';
+            catToggle.textContent = 'Add expense category';
           }
         });
       }

@@ -3594,6 +3594,166 @@ app.get('/api/analytics/expenses-tab', requireAnyUser, async (req, res) => {
   }
 });
 
+// Analytics API - Profit tab
+app.get('/api/analytics/profit-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform, category } = req.query || {};
+
+  try {
+    if (!IS_PROD) console.log('[analytics] profit filters', { workspaceId, from, to, unitId, platform, category });
+
+    // Revenue filters (bookings)
+    const revCond = ['b.workspace_id = $1', 'b.total_price IS NOT NULL'];
+    const revParams = [workspaceId];
+    let rIdx = revParams.length + 1;
+    if (from) { revCond.push(`b.check_in::date >= $${rIdx++}`); revParams.push(from); }
+    if (to) { revCond.push(`b.check_in::date <= $${rIdx++}`); revParams.push(to); }
+    if (unitId) { revCond.push(`b.unit_id = $${rIdx++}`); revParams.push(unitId); }
+    if (platform && platform !== 'All') { revCond.push(`b.platform = $${rIdx++}`); revParams.push(platform); }
+    const revWhere = revCond.join(' AND ');
+
+    // Expense filters (finance_entries)
+    const expCond = ['fe.workspace_id = $1', `fe.type = 'expense'`];
+    const expParams = [workspaceId];
+    let eIdx = expParams.length + 1;
+    if (from) { expCond.push(`fe.entry_date::date >= $${eIdx++}`); expParams.push(from); }
+    if (to) { expCond.push(`fe.entry_date::date <= $${eIdx++}`); expParams.push(to); }
+    if (unitId) { expCond.push(`fe.unit_id = $${eIdx++}`); expParams.push(unitId); }
+    if (category && category !== 'All') { expCond.push(`fe.category = $${eIdx++}`); expParams.push(category); }
+    const expWhere = expCond.join(' AND ');
+
+    // Summary queries
+    const revenueSummaryQ = `SELECT COALESCE(SUM(b.total_price),0) AS total FROM bookings b WHERE ${revWhere}`;
+    const expenseSummaryQ = `SELECT COALESCE(SUM(fe.amount),0) AS total FROM finance_entries fe WHERE ${expWhere}`;
+
+    // Trend queries (group month)
+    const revenueTrendQ = `
+      SELECT to_char(b.check_in::date, 'YYYY-MM') AS month, COALESCE(SUM(b.total_price),0) AS revenue
+      FROM bookings b
+      WHERE ${revWhere}
+      GROUP BY 1
+      ORDER BY 1 ASC`;
+    const expenseTrendQ = `
+      SELECT to_char(fe.entry_date::date, 'YYYY-MM') AS month, COALESCE(SUM(fe.amount),0) AS expenses
+      FROM finance_entries fe
+      WHERE ${expWhere}
+      GROUP BY 1
+      ORDER BY 1 ASC`;
+
+    // By unit queries
+    const revenueByUnitQ = `
+      SELECT b.unit_id,
+             COALESCE(SUM(b.total_price),0) AS revenue
+      FROM bookings b
+      WHERE ${revWhere}
+      GROUP BY b.unit_id`;
+    const expenseByUnitQ = `
+      SELECT fe.unit_id,
+             COALESCE(SUM(fe.amount),0) AS expenses
+      FROM finance_entries fe
+      WHERE ${expWhere}
+      GROUP BY fe.unit_id`;
+
+    // Breakdown recurring
+    const breakdownQ = `
+      SELECT
+        COALESCE(SUM(CASE WHEN COALESCE(fe.is_recurring, false) THEN fe.amount ELSE 0 END),0) AS recurring,
+        COALESCE(SUM(CASE WHEN COALESCE(fe.is_recurring, false) THEN 0 ELSE fe.amount END),0) AS onetime
+      FROM finance_entries fe
+      WHERE ${expWhere}`;
+
+    const [revSumRes, expSumRes, revTrendRes, expTrendRes, revUnitRes, expUnitRes, breakdownRes] = await Promise.all([
+      pool.query(revenueSummaryQ, revParams),
+      pool.query(expenseSummaryQ, expParams),
+      pool.query(revenueTrendQ, revParams),
+      pool.query(expenseTrendQ, expParams),
+      pool.query(revenueByUnitQ, revParams),
+      pool.query(expenseByUnitQ, expParams),
+      pool.query(breakdownQ, expParams),
+    ]);
+
+    const totalRevenue = Number(revSumRes.rows[0]?.total || 0);
+    const totalExpenses = Number(expSumRes.rows[0]?.total || 0);
+    const netProfit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    // Merge trends
+    const trendMap = new Map();
+    revTrendRes.rows.forEach(r => {
+      trendMap.set(r.month, { month: r.month, revenue: Number(r.revenue || 0), expenses: 0 });
+    });
+    expTrendRes.rows.forEach(r => {
+      const existing = trendMap.get(r.month) || { month: r.month, revenue: 0, expenses: 0 };
+      existing.expenses = Number(r.expenses || 0);
+      trendMap.set(r.month, existing);
+    });
+    const trend = Array.from(trendMap.values())
+      .map(r => ({ ...r, profit: (r.revenue || 0) - (r.expenses || 0) }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    // Merge by unit
+    const unitMap = new Map();
+    revUnitRes.rows.forEach(r => {
+      unitMap.set(String(r.unit_id), { unitId: r.unit_id, revenue: Number(r.revenue || 0), expenses: 0 });
+    });
+    expUnitRes.rows.forEach(r => {
+      const key = String(r.unit_id);
+      const existing = unitMap.get(key) || { unitId: r.unit_id, revenue: 0, expenses: Number(r.expenses || 0) };
+      existing.expenses = Number(r.expenses || 0);
+      unitMap.set(key, existing);
+    });
+    // enrich unit names
+    let unitIds = Array.from(unitMap.values()).map(u => u.unitId).filter(u => u != null);
+    let unitNameMap = new Map();
+    if (unitIds.length) {
+      const placeholders = unitIds.map((_, i) => `$${i + 2}`).join(',');
+      const { rows: unitRows } = await pool.query(
+        `SELECT id, name FROM units WHERE workspace_id = $1 AND id IN (${placeholders})`,
+        [workspaceId, ...unitIds]
+      );
+      unitRows.forEach(u => unitNameMap.set(u.id, u.name));
+    }
+    const byUnit = Array.from(unitMap.values()).map(u => {
+      const uid = u.unitId;
+      const nm = uid != null ? (unitNameMap.get(uid) || `Unit ${uid}`) : 'General';
+      const expensesVal = Number(u.expenses || 0);
+      const revenueVal = Number(u.revenue || 0);
+      return {
+        unitId: uid,
+        unitName: nm,
+        revenue: revenueVal,
+        expenses: expensesVal,
+        profit: revenueVal - expensesVal,
+      };
+    }).sort((a, b) => b.profit - a.profit);
+
+    const breakdownRow = breakdownRes.rows[0] || {};
+    const recurringExpenses = Number(breakdownRow.recurring || 0);
+    const oneTimeExpenses = Number(breakdownRow.onetime || 0);
+
+    return res.json({
+      summary: {
+        totalRevenue,
+        totalExpenses,
+        netProfit,
+        profitMargin,
+      },
+      trend,
+      byUnit,
+      breakdown: {
+        recurringExpenses,
+        oneTimeExpenses,
+      },
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('analytics profit failed', e);
+    return res.status(500).json({ error: 'failed to load profit analytics' });
+  }
+});
+
 
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, async (req, res) => {
