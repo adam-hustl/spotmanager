@@ -458,6 +458,179 @@ body.page {
   font-weight: 600;
 }
 
+.platform-table-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.9fr 0.8fr 1fr 1fr 0.9fr;
+  gap: 8px;
+  align-items: center;
+}
+.text-right { text-align: right; }
+
+.platform-perf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.platform-perf-item {
+  border-bottom: 1px solid rgba(15,23,42,0.08);
+  padding-bottom: 12px;
+}
+.platform-perf-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.platform-perf-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.platform-perf-name {
+  font-weight: 600;
+  color: #1f2937;
+}
+.platform-perf-revenue {
+  font-weight: 700;
+  color: #111827;
+}
+.platform-perf-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+.platform-perf-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #4b5563;
+}
+.platform-perf-metric strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.expense-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.expense-form-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
+.expense-history-toolbar {
+  gap: 12px;
+}
+
+.expense-list-table {
+  margin-top: 10px;
+}
+.expense-list-row {
+  display: grid;
+  grid-template-columns: 120px 140px 140px 120px 1fr 180px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid rgba(0,0,0,0.05);
+}
+.expense-list-head {
+  font-weight: 600;
+  color: #6b7280;
+  border-top: none;
+  padding-top: 0;
+}
+.flex-1 { flex: 1; }
+.justify-end { justify-content: flex-end; }
+
+.expense-manager-page .page-grid {
+  max-width: 1200px;
+  margin-top: 1rem;
+}
+.expense-manager-header {
+  padding: 1.1rem 1.25rem;
+}
+.expense-history-toolbar {
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.expense-filter-row {
+  gap: 10px;
+}
+
+.expense-actions button {
+  height: 34px;
+}
+
+.expense-list-table {
+  margin-top: 10px;
+}
+
+.expense-list-row {
+  display: grid;
+  grid-template-columns: 120px 140px 140px 120px 1fr 180px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(0,0,0,0.05);
+}
+.expense-list-head {
+  font-weight: 600;
+  color: #6b7280;
+  border-top: none;
+  padding-top: 0;
+}
+.flex-1 { flex: 1; }
+.justify-end { justify-content: flex-end; }
+
+.expense-manager-page .ng-input {
+  width: 100%;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(16,185,129,0.35);
+  padding: 10px 12px;
+  background: rgba(16,185,129,0.08);
+  font-weight: 600;
+  color: #0f172a;
+}
+.expense-manager-page .ng-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+  border-color: rgba(16,185,129,0.6);
+  background-color: #fff;
+}
+.expense-manager-page select.ng-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.25rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #0f172a 50%),
+    linear-gradient(135deg, #0f172a 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% + 2px),
+    calc(100% - 12px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+.expense-manager-page .primary-btn {
+  height: 42px;
+}
+.expense-manager-page .ghost-btn {
+  height: 40px;
+}
+.expense-manager-page .ghost-btn.ghost-btn--primary {
+  background: rgba(16,185,129,0.16);
+  border-color: rgba(16,185,129,0.55);
+}
+.expense-select {
+  min-width: 170px;
+}
+
 /* Hide floating label text */
 #ctaT { display: none; }
 .unit-modal__actions {
@@ -1112,4 +1285,153 @@ body.booking-sidebar-open .page-grid {
   color: #6b7280;
   text-align: center;
   line-height: 1.2;
+}
+
+/* Expense manager category manager polish */
+.category-manager-inline {
+  margin-top: -4px;
+}
+.category-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: end;
+}
+.category-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(15,23,42,0.08);
+}
+.category-item:first-child {
+  border-top: none;
+}
+.category-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.category-name {
+  font-weight: 600;
+  color: #1f2937;
+}
+.category-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid rgba(16,185,129,0.35);
+}
+.category-badge.one-time {
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+.category-list {
+  margin-top: 6px;
+}
+.category-manager-inline .toggle {
+  position: relative;
+  display: inline-flex;
+  width: 46px;
+  height: 24px;
+}
+.category-manager-inline .toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.category-manager-inline .toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #e5e7eb;
+  transition: .2s;
+  border-radius: 999px;
+}
+.category-manager-inline .toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+}
+.category-manager-inline .toggle input:checked + .toggle-slider {
+  background-color: #10b981;
+}
+.category-manager-inline .toggle input:checked + .toggle-slider:before {
+  transform: translateX(22px);
+}
+
+.expense-category-toggle-wrap {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 6px;
+}
+.expense-category-toggle-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.expense-category-toggle-btn::after {
+  content: '▾';
+  font-size: 12px;
+  color: #111827;
+}
+.category-delete-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(239,68,68,0.35);
+  background: rgba(248,113,113,0.08);
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.category-delete-btn:hover {
+  background: rgba(248,113,113,0.16);
+}
+
+/* Toast reused for expense manager */
+.cd-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 24px;
+  background: #0f172a;
+  color: #f9fafb;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.25);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 80;
+  font-size: 14px;
+}
+.cd-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }

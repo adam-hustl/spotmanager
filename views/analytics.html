@@ -120,6 +120,20 @@
                 <option>Direct</option>
               </select>
             </div>
+            <div>
+              <label class="small muted">Category</label><br>
+              <select id="analyticsCategory" class="ng-input" style="min-width:160px;">
+                <option value="All">All categories</option>
+                <option>Rent</option>
+                <option>Internet</option>
+                <option>Utilities</option>
+                <option>Cleaner</option>
+                <option>HOA</option>
+                <option>Condo dues</option>
+                <option>Subscription</option>
+                <option>Other</option>
+              </select>
+            </div>
             <div class="row gap-8 align-end" style="align-self:flex-end;">
               <button id="analyticsApply" class="primary-btn" type="button" style="min-width:120px; height: 40px; padding:0 14px;">Apply</button>
               <button id="analyticsReset" class="ghost-btn" type="button" style="min-width:120px; height: 40px;">Reset</button>
@@ -246,15 +260,78 @@
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="expenses" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Expenses Overview</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-4" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Total Expenses</div>
+              <div id="expensesTotal" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Recurring Expenses</div>
+              <div id="expensesRecurring" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">One-Time Expenses</div>
+              <div id="expensesOneTime" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Avg Monthly Expense</div>
+              <div id="expensesAvgMonthly" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-chart-card">
+              <div class="row space-between align-center wrap" style="margin-bottom:10px; gap:8px;">
+                <div class="h3" style="margin:0;">Expense trend</div>
+                <div class="muted small">(Monthly)</div>
+                <a href="/expense-manager" class="ghost-btn" style="margin-left:auto; min-width:140px; text-align:center;">Manage expenses</a>
+              </div>
+              <div id="expensesTrendChart" class="analytics-chart-wrap"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Expenses by category</div>
+              </div>
+              <div id="expensesByCategory" class="analytics-month-table"></div>
+            </div>
+          </div>
+
+          <div class="card card-white" style="margin-top:16px;">
+            <div class="h3" style="margin-bottom:8px;">Expenses by unit</div>
+            <div id="expensesByUnit" class="analytics-month-table"></div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="platforms" style="margin-top:18px;">
-          <div class="card card-white">
-            <div class="h3" style="margin-bottom:6px;">Platform Performance</div>
-            <div class="muted small">This section will be added in the next step.</div>
+          <div class="grid-3" style="gap:1rem;">
+            <div class="card card-white">
+              <div class="muted small">Total Platforms</div>
+              <div id="platformPerfTotalPlatforms" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Top Revenue Platform</div>
+              <div id="platformPerfTopRevenueName" class="small muted" style="margin-top:4px;">—</div>
+              <div id="platformPerfTopRevenue" class="value-2xl">—</div>
+            </div>
+            <div class="card card-white">
+              <div class="muted small">Top Bookings Platform</div>
+              <div id="platformPerfTopBookingsName" class="small muted" style="margin-top:4px;">—</div>
+              <div id="platformPerfTopBookings" class="value-2xl">—</div>
+            </div>
+          </div>
+
+          <div class="analytics-split" style="margin-top:16px;">
+            <div class="card card-white analytics-chart-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Platform Revenue Ranking</div>
+              </div>
+              <div id="platformPerformanceChart" class="analytics-chart-wrap"></div>
+            </div>
+            <div class="card card-white analytics-table-card">
+              <div class="row space-between align-center" style="margin-bottom:10px;">
+                <div class="h3" style="margin:0;">Platform Performance</div>
+              </div>
+              <div id="platformPerformanceTable" class="analytics-month-table"></div>
+            </div>
           </div>
         </div>
         <div class="tab-panel" data-tab-panel="bookings" style="margin-top:18px;">
@@ -343,7 +420,8 @@
       const to = document.getElementById('analyticsTo')?.value || '';
       const unitId = document.getElementById('analyticsUnit')?.value || '';
       const platform = document.getElementById('analyticsPlatform')?.value || 'All';
-      return { from, to, unitId, platform };
+      const category = document.getElementById('analyticsCategory')?.value || 'All';
+      return { from, to, unitId, platform, category };
     }
 
     function setDefaultRevenueFiltersToCurrentMonth() {
@@ -357,8 +435,10 @@
       if (toEl) toEl.value = fmt(last);
       const unitEl = document.getElementById('analyticsUnit');
       const platEl = document.getElementById('analyticsPlatform');
+      const catEl = document.getElementById('analyticsCategory');
       if (unitEl) unitEl.value = '';
       if (platEl) platEl.value = 'All';
+      if (catEl) catEl.value = 'All';
     }
 
     function formatMonthPretty(monthStr, opts = {}) {
@@ -653,6 +733,194 @@
       }
     }
 
+    function renderPlatformPerformanceSummary(summary = {}) {
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('platformPerfTotalPlatforms', summary.totalPlatforms != null ? summary.totalPlatforms : '—');
+      set('platformPerfTopRevenue', formatCurrency(summary.topRevenueValue || 0));
+      set('platformPerfTopRevenueName', summary.topRevenuePlatform || '—');
+      set('platformPerfTopBookings', `${summary.topBookingsValue || 0} bookings`);
+      set('platformPerfTopBookingsName', summary.topBookingsPlatform || '—');
+    }
+
+    function renderPlatformPerformanceChart(platforms = []) {
+      const wrap = document.getElementById('platformPerformanceChart');
+      if (!wrap) return;
+      if (!Array.isArray(platforms) || platforms.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No platform performance data for selected filters.</div>';
+        return;
+      }
+      const maxRevenue = Math.max(...platforms.map(p => p.revenue || 0), 1);
+      const rows = platforms.map(p => {
+        const pct = Math.max(6, (p.revenue / maxRevenue) * 100);
+        return `
+          <div class="unit-rank-row">
+            <div class="unit-rank-name">${p.platform || 'Unknown'}</div>
+            <div class="unit-rank-bar-wrap">
+              <div class="unit-rank-bar" style="width:${pct}%;"></div>
+            </div>
+            <div class="unit-rank-value">${formatCurrency(p.revenue || 0)}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = rows;
+    }
+
+    function renderPlatformPerformanceTable(platforms = []) {
+      const wrap = document.getElementById('platformPerformanceTable');
+      if (!wrap) return;
+      if (!Array.isArray(platforms) || platforms.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No platform performance data for selected filters.</div>';
+        return;
+      }
+      const sorted = platforms.slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+      const rows = sorted.map((p, i) => `
+        <div class="platform-perf-item">
+          <div class="platform-perf-head">
+            <div class="platform-perf-name">${p.platform || 'Unknown'}</div>
+            <div class="platform-perf-revenue">${formatCurrency(p.revenue || 0)}</div>
+          </div>
+          <div class="platform-perf-metrics">
+            <div class="platform-perf-metric"><span>Bookings</span><strong>${p.bookingsCount || 0}</strong></div>
+            <div class="platform-perf-metric"><span>Nights</span><strong>${p.bookedNights || 0}</strong></div>
+            <div class="platform-perf-metric"><span>Avg Booking</span><strong>${formatCurrency(p.averageBookingValue || 0)}</strong></div>
+            <div class="platform-perf-metric"><span>ADR</span><strong>${formatCurrency(p.adr || 0)}</strong></div>
+            <div class="platform-perf-metric"><span>Occupancy</span><strong>${formatPercent(p.occupancyRate || 0)}</strong></div>
+          </div>
+        </div>
+      `).join('');
+      wrap.innerHTML = `<div class="platform-perf-list">${rows}</div>`;
+    }
+
+    async function loadPlatformPerformanceTab() {
+      const { from, to, unitId, platform } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (platform) params.append('platform', platform);
+      const url = `/api/analytics/platform-performance-tab?${params.toString()}`;
+      const chartEl = document.getElementById('platformPerformanceChart');
+      if (chartEl) chartEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load platform performance');
+        const data = await res.json();
+        renderPlatformPerformanceSummary(data.summary || {});
+        renderPlatformPerformanceChart(data.platforms || []);
+        renderPlatformPerformanceTable(data.platforms || []);
+      } catch (err) {
+        console.error(err);
+        if (chartEl) chartEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderPlatformPerformanceSummary({});
+        renderPlatformPerformanceChart([]);
+        renderPlatformPerformanceTable([]);
+      }
+    }
+
+    function renderExpensesSummary(summary = {}) {
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('expensesTotal', formatCurrency(summary.totalExpenses || 0));
+      set('expensesRecurring', formatCurrency(summary.recurringExpenses || 0));
+      set('expensesOneTime', formatCurrency(summary.oneTimeExpenses || 0));
+      set('expensesAvgMonthly', formatCurrency(summary.averageMonthlyExpense || 0));
+    }
+
+    function renderExpensesTrend(trend = []) {
+      const wrap = document.getElementById('expensesTrendChart');
+      if (!wrap) return;
+      if (!Array.isArray(trend) || trend.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No expense data for selected filters.</div>';
+        return;
+      }
+      const max = Math.max(...trend.map(t => t.total || 0), 1);
+      const items = trend.map(t => {
+        const h = Math.max(10, Math.round((t.total / max) * 170));
+        const label = formatCurrency(t.total);
+        const monthLabel = formatMonthPretty(t.month, { short: true });
+        return `
+          <div class="trend-item">
+            <div class="trend-value">${label}</div>
+            <div class="trend-bar-wrap">
+              <div class="trend-bar" style="height:${h}px;"></div>
+            </div>
+            <div class="trend-month">${monthLabel}</div>
+          </div>
+        `;
+      }).join('');
+      wrap.innerHTML = `<div class="trend-chart">${items}</div>`;
+    }
+
+    function renderExpensesByCategory(rows = []) {
+      const wrap = document.getElementById('expensesByCategory');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No expense data for selected filters.</div>';
+        return;
+      }
+      wrap.innerHTML = `
+        <div class="platform-perf-list">
+          ${rows.map((r, i) => `
+            <div class="platform-perf-item">
+              <div class="platform-perf-head">
+                <div class="platform-perf-name">${r.category || 'Uncategorized'}</div>
+                <div class="platform-perf-revenue">${formatCurrency(r.total || 0)}</div>
+              </div>
+              <div class="platform-perf-metrics">
+                <div class="platform-perf-metric"><span>Entries</span><strong>${r.count || 0}</strong></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderExpensesByUnit(rows = []) {
+      const wrap = document.getElementById('expensesByUnit');
+      if (!wrap) return;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        wrap.innerHTML = '<div class="muted small">No expense data for selected filters.</div>';
+        return;
+      }
+      wrap.innerHTML = rows.map((r, i) => `
+        <div class="row space-between" style="align-items:center; padding:8px 0; ${i!==0 ? 'border-top:1px solid rgba(0,0,0,0.05);' : ''}">
+          <span class="semibold">${r.unitName || 'General'}</span>
+          <span class="small muted">${formatCurrency(r.total || 0)}</span>
+          <span class="small muted">${r.count || 0} entries</span>
+        </div>
+      `).join('');
+    }
+
+    async function loadExpensesTab() {
+      const { from, to, unitId, category } = getRevenueFilters();
+      renderFilterSummary();
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (category && category !== 'All') params.append('category', category);
+      const url = `/api/analytics/expenses-tab?${params.toString()}`;
+      const trendEl = document.getElementById('expensesTrendChart');
+      if (trendEl) trendEl.innerHTML = '<div class="muted small">Loading...</div>';
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load expenses data');
+        const data = await res.json();
+        renderExpensesSummary(data.summary || {});
+        renderExpensesTrend(data.trend || []);
+        renderExpensesByCategory(data.byCategory || []);
+        renderExpensesByUnit(data.byUnit || []);
+      } catch (err) {
+        console.error(err);
+        if (trendEl) trendEl.innerHTML = '<div class="muted small">Unable to load data.</div>';
+        renderExpensesSummary({});
+        renderExpensesByCategory([]);
+        renderExpensesByUnit([]);
+      }
+    }
+
+
+
     async function loadOccupancyTab() {
       const { from, to, unitId, platform } = getRevenueFilters();
       renderFilterSummary();
@@ -686,6 +954,10 @@
         loadOccupancyTab();
       } else if (activeTab === 'units') {
         loadUnitPerformanceTab();
+      } else if (activeTab === 'platforms') {
+        loadPlatformPerformanceTab();
+      } else if (activeTab === 'expenses') {
+        loadExpensesTab();
       } else {
         loadRevenueTab();
       }

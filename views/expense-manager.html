@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense Manager</title>
+  <link rel="stylesheet" href="/dashboard-new.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="page expense-manager-page">
+  <!-- Background bubbles for consistency with dashboard -->
+  <div id="b1" class="bubble bubble-1"></div>
+  <div id="b2" class="bubble bubble-2"></div>
+  <div id="expenseToast" class="cd-toast" role="status" aria-live="polite"></div>
+  <div id="categoryErrorOverlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-card">
+      <div class="confirm-title">Cannot delete category</div>
+      <div id="categoryErrorText" class="confirm-sub">This category is already being used and can therefore not be deleted.</div>
+      <div class="confirm-actions">
+        <button id="categoryErrorOk" class="primary-btn" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="categoryConfirmOverlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-card">
+      <div class="confirm-title">Delete category?</div>
+      <div class="confirm-sub">Are you sure you want to delete this category?</div>
+      <div class="confirm-actions">
+        <button id="categoryConfirmCancel" class="ghost-btn" type="button">Cancel</button>
+        <button id="categoryConfirmOk" class="ghost-btn ghost-btn--danger" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+  <div id="expenseConfirmOverlay" class="confirm-overlay" style="display:none;">
+    <div class="confirm-card">
+      <div class="confirm-title">Delete expense?</div>
+      <div class="confirm-sub">Are you sure you want to delete this expense?</div>
+      <div class="confirm-actions">
+        <button id="expenseConfirmCancel" class="ghost-btn" type="button">Cancel</button>
+        <button id="expenseConfirmOk" class="ghost-btn ghost-btn--danger" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Topbar -->
+  <header id="topbar" class="topbar glass">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <span class="hello">Hello, <span class="hello-user">User</span></span>
+        <span class="hello-note md-inline">Manage your workspace expenses</span>
+      </div>
+      <div class="topbar-right">
+        <button class="icon-btn" type="button">
+          <i data-lucide="bell" class="icon-20"></i>
+        </button>
+        <div class="user-menu-wrap">
+          <button id="userMenuToggle" class="user-btn" type="button">
+            <i data-lucide="user-circle" class="icon-24"></i>
+            <span class="user-name sm-inline">User</span>
+            <i data-lucide="chevron-down" class="icon-16"></i>
+          </button>
+          <div id="userMenu" class="user-menu" style="display:none;">
+            <a href="/account-info" class="user-menu-item">Account information</a>
+            <a href="/analytics" class="user-menu-item">Analytics</a>
+            <a href="/dashboard-new" class="user-menu-item">Back to dashboard</a>
+            <a href="/logout" class="user-menu-item">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-grid expense-manager-main">
+    <main class="main" style="grid-column:1 / -1; display: grid; gap: 1rem; margin-top:12px;">
+
+      <section class="card card-white expense-manager-header">
+        <div class="h3" style="margin:0;">Expense Manager</div>
+        <div class="muted small">Add and manage property expenses</div>
+      </section>
+
+      <section class="card card-white" id="expenseFormCard">
+        <div class="row space-between align-center form-header">
+          <div>
+            <div class="h3" id="expenseFormTitle" style="margin:0;">Add expense</div>
+            <div class="muted small" id="expenseFormHelper">Create a new expense entry for this workspace</div>
+          </div>
+          <button id="expenseCancelEdit" class="ghost-btn" style="display:none;">Cancel edit</button>
+        </div>
+        <form id="expenseForm" class="expense-form-grid">
+          <div>
+            <label class="small muted">Date</label><br>
+            <input type="date" id="expenseDate" class="ng-input" required />
+          </div>
+          <div>
+            <label class="small muted">Unit</label><br>
+            <select id="expenseUnit" class="ng-input expense-select">
+              <option value="">General / no unit</option>
+            </select>
+          </div>
+          <div>
+            <label class="small muted">Category</label><br>
+            <div class="row gap-6">
+              <select id="expenseCategory" class="ng-input expense-select">
+                <option value="">Select category</option>
+              </select>
+            </div>
+            <div class="expense-category-toggle-wrap">
+              <button type="button" class="ghost-btn expense-category-toggle-btn" id="manageCategoriesToggle">
+                Manage categories
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="small muted">Amount</label><br>
+            <input type="number" id="expenseAmount" class="ng-input" min="0" step="0.01" required />
+          </div>
+          <div>
+            <label class="small muted">Notes</label><br>
+            <input type="text" id="expenseNotes" class="ng-input" placeholder="Optional note" />
+          </div>
+          <div class="expense-form-actions">
+            <button type="submit" class="primary-btn" id="expenseSaveBtn">Save expense</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card card-white category-manager-inline" id="categoryManager" style="display:none;">
+        <div class="row space-between align-center" style="margin-bottom:10px;">
+          <div>
+            <div class="h3" style="margin:0;">Manage categories</div>
+            <div class="muted small">Create and mark recurring expense categories</div>
+          </div>
+        </div>
+        <form id="categoryForm" class="category-form-row" style="margin-bottom:12px;">
+          <div class="flex-1">
+            <label class="small muted">Category name</label><br>
+            <input type="text" id="categoryNameInput" class="ng-input" placeholder="e.g. Landscaping" required />
+          </div>
+          <div class="category-toggle-row">
+            <label class="small muted">Recurring category</label>
+            <label class="toggle">
+              <input type="checkbox" id="categoryRecurringInput" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div>
+            <button type="submit" class="primary-btn">Save category</button>
+          </div>
+        </form>
+        <div id="categoryList" class="category-list"></div>
+      </section>
+
+      <section class="card card-white">
+        <div class="row space-between align-center expense-history-toolbar">
+          <div>
+            <div class="h3" style="margin:0;">Expense history</div>
+            <div class="muted small">View, filter, edit, and delete saved expenses</div>
+          </div>
+          <div class="row gap-8 wrap expense-filter-row">
+            <input type="date" id="expenseFilterFrom" class="ng-input" />
+            <input type="date" id="expenseFilterTo" class="ng-input" />
+            <select id="expenseFilterUnit" class="ng-input expense-select">
+              <option value="">All units</option>
+            </select>
+            <select id="expenseFilterCategory" class="ng-input expense-select">
+              <option value="">All categories</option>
+            </select>
+            <button id="expenseFilterApply" class="ghost-btn ghost-btn--primary">Apply</button>
+            <button id="expenseFilterReset" class="ghost-btn">Reset</button>
+          </div>
+        </div>
+        <div id="expenseList" class="expense-list-table"></div>
+      </section>
+
+      <section class="card card-white" id="categoryManager" style="display:none;">
+        <div class="row space-between align-center" style="margin-bottom:10px;">
+          <div>
+            <div class="h3" style="margin:0;">Manage categories</div>
+            <div class="muted small">Create and mark recurring expense categories</div>
+          </div>
+        </div>
+        <form id="categoryForm" class="row wrap gap-12" style="margin-bottom:12px;">
+          <div>
+            <label class="small muted">Category name</label><br>
+            <input type="text" id="categoryNameInput" class="ng-input" placeholder="e.g. Landscaping" required />
+          </div>
+          <div class="row gap-8 align-center" style="align-self:flex-end;">
+            <label class="small muted"><input type="checkbox" id="categoryRecurringInput" /> Recurring</label>
+            <button type="submit" class="primary-btn">Save category</button>
+          </div>
+        </form>
+        <div id="categoryList" class="analytics-month-table"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const THEME = { accent:"#10B981", accent50:"#ECFDF5", border:"#A7F3D0", bgFrom:"#D1FAE5", bgMid:"#ECFDF5", tint:"rgba(16,185,129,0.12)", ring:"rgba(16,185,129,0.35)", borderAlpha:"rgba(16,185,129,0.40)" };
+    let categories = [];
+
+    function applyExpenseTheme() {
+      const b1 = document.getElementById('b1');
+      const b2 = document.getElementById('b2');
+      if (b1) b1.style.background = THEME.tint;
+      if (b2) b2.style.background = THEME.tint;
+      document.body.style.background = `radial-gradient(120% 80% at 0% 0%, ${THEME.bgFrom}, transparent 55%), radial-gradient(120% 80% at 90% 10%, ${THEME.bgMid}, transparent 55%)`;
+    }
+
+    function setHelloName(name) {
+      const el = document.querySelector('.hello-user');
+      const userNameEl = document.querySelector('.user-name');
+      if (el && name) el.textContent = name;
+      if (userNameEl && name) {
+        const first = name.trim().split(/\s+/)[0] || name;
+        userNameEl.textContent = first;
+      }
+    }
+
+    async function loadProfile() {
+      try {
+        const res = await fetch('/api/session-profile');
+        if (!res.ok) return;
+        const data = await res.json();
+        const name = (data && data.fullName) ? data.fullName : '';
+        if (name) {
+          setHelloName(name);
+          try { localStorage.setItem('userFullName', name); } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
+    // preload name from localStorage if present
+    try {
+      const cachedName = localStorage.getItem('userFullName');
+      if (cachedName) setHelloName(cachedName);
+    } catch (_) {}
+
+    function renderCategoryOptions(cats = []) {
+      const formSel = document.getElementById('expenseCategory');
+      const filterSel = document.getElementById('expenseFilterCategory');
+      if (formSel) {
+        const current = formSel.value;
+        formSel.innerHTML = '<option value=\"\">Select category</option>';
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          formSel.appendChild(opt);
+        });
+        if (current) formSel.value = current;
+      }
+      if (filterSel) {
+        const current = filterSel.value;
+        filterSel.innerHTML = '<option value=\"\">All categories</option>';
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          filterSel.appendChild(opt);
+        });
+        if (current) filterSel.value = current;
+      }
+    }
+
+    function renderCategoryList(cats = []) {
+      const list = document.getElementById('categoryList');
+      if (!list) return;
+      if (!cats.length) {
+        list.innerHTML = '<div class="muted small">Create your first category to start organizing expenses</div>';
+        return;
+      }
+      list.innerHTML = cats.map(c => `
+        <div class="category-item">
+          <div class="category-main">
+            <div class="category-name">${c.name}</div>
+            <div class="category-badge ${c.is_recurring ? 'recurring' : 'one-time'}">${c.is_recurring ? 'Recurring' : 'One-time'}</div>
+          </div>
+          <button class="category-delete-btn" onclick="deleteCategory(${c.id})">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    async function loadExpenseCategories(selectNewId = null) {
+      try {
+        const res = await fetch('/api/expense-manager/categories');
+        if (!res.ok) return;
+        categories = await res.json();
+        renderCategoryOptions(categories);
+        renderCategoryList(categories);
+        if (selectNewId) {
+          const formSel = document.getElementById('expenseCategory');
+          if (formSel) formSel.value = selectNewId;
+        }
+      } catch (e) {
+        console.error('loadExpenseCategories failed', e);
+      }
+    }
+
+    async function submitCategoryForm(e) {
+      e.preventDefault();
+      const name = document.getElementById('categoryNameInput')?.value || '';
+      const is_recurring = document.getElementById('categoryRecurringInput')?.checked || false;
+      const res = await fetch('/api/expense-manager/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, is_recurring }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById('categoryNameInput').value = '';
+        document.getElementById('categoryRecurringInput').checked = false;
+        await loadExpenseCategories(data.category?.id);
+        const formSel = document.getElementById('expenseCategory');
+        if (formSel && data.category?.id) formSel.value = data.category.id;
+      } else {
+        alert('Failed to save category');
+      }
+    }
+
+    let pendingDeleteCategoryId = null;
+
+    function deleteCategory(id) {
+      pendingDeleteCategoryId = id;
+      openCategoryConfirm();
+    }
+
+    async function performDeleteCategory() {
+      const id = pendingDeleteCategoryId;
+      if (!id) return closeCategoryConfirm();
+      const res = await fetch(`/api/expense-manager/categories/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        pendingDeleteCategoryId = null;
+        closeCategoryConfirm();
+        loadExpenseCategories();
+      } else {
+        let msg = 'Failed to delete category';
+        try {
+          const j = await res.json();
+          if (j && j.error === 'CATEGORY_IN_USE') {
+            msg = 'This category is already being used and can therefore not be deleted';
+          }
+        } catch (_) {}
+        closeCategoryConfirm();
+        showCategoryModal(msg);
+      }
+    }
+
+    function wireUserMenu() {
+      const toggle = document.getElementById('userMenuToggle');
+      const menu = document.getElementById('userMenu');
+      if (!toggle || !menu) return;
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const show = menu.style.display === 'none' || menu.style.display === '';
+        menu.style.display = show ? 'block' : 'none';
+      });
+      document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+          menu.style.display = 'none';
+        }
+      });
+    }
+
+    let editId = null;
+
+    const formatMoney = (v)=> new Intl.NumberFormat('en-US',{ style:'currency', currency:'PHP', currencyDisplay:'narrowSymbol', maximumFractionDigits:0}).format(Number(v||0));
+
+    function renderExpenseTable(entries = []) {
+      const wrap = document.getElementById('expenseList');
+      if (!wrap) return;
+      if (!entries.length) {
+        wrap.innerHTML = '<div class="muted small">No expenses found</div>';
+        return;
+      }
+      const header = `
+        <div class="expense-list-row expense-list-head">
+          <span>Date</span>
+          <span>Unit</span>
+          <span>Category</span>
+          <span class="text-right">Amount</span>
+          <span class="flex-1">Notes</span>
+          <span class="text-right">Actions</span>
+        </div>`;
+      const rows = entries.map(e => `
+        <div class="expense-list-row">
+          <span class="small semibold">${(e.entry_date || '').slice(0,10)}</span>
+          <span class="small muted">${e.unit_name || (e.unit_id ? 'Unit '+e.unit_id : 'General')}</span>
+          <span class="small muted">${e.category || 'Uncategorized'}</span>
+          <span class="small semibold text-right">${formatMoney(e.amount)}</span>
+          <span class="small muted flex-1">${e.notes || ''}</span>
+          <span class="row gap-6 justify-end expense-actions">
+            <button class="ghost-btn" onclick="startEditExpense(${e.id})">Edit</button>
+            <button class="ghost-btn ghost-btn--danger" onclick="deleteExpense(${e.id})">Delete</button>
+          </span>
+        </div>
+      `).join('');
+      wrap.innerHTML = header + rows;
+    }
+
+    async function loadExpenseUnits() {
+      const res = await fetch('/api/expense-manager/units');
+      if (!res.ok) return;
+      const units = await res.json();
+      const unitSelects = [document.getElementById('expenseUnit'), document.getElementById('expenseFilterUnit')];
+      unitSelects.forEach(sel => {
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = sel.id === 'expenseUnit'
+          ? '<option value=\"\">General / no unit</option>'
+          : '<option value=\"\">All units</option>';
+        (units || []).forEach(u => {
+          const name = u.name && u.name.trim() ? u.name : `Unit ${u.id}`;
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+      });
+    }
+
+    async function loadExpenseEntries() {
+      const from = document.getElementById('expenseFilterFrom')?.value || '';
+      const to = document.getElementById('expenseFilterTo')?.value || '';
+      const unitId = document.getElementById('expenseFilterUnit')?.value || '';
+      const category = document.getElementById('expenseFilterCategory')?.value || '';
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (unitId) params.append('unitId', unitId);
+      if (category) params.append('category', category);
+      const res = await fetch('/api/expense-manager/entries?' + params.toString());
+      if (!res.ok) {
+        console.error('loadExpenseEntries failed');
+        return;
+      }
+      const data = await res.json();
+      renderExpenseTable(data || []);
+    }
+
+    function resetExpenseForm() {
+      editId = null;
+      document.getElementById('expenseDate').value = '';
+      document.getElementById('expenseUnit').value = '';
+      document.getElementById('expenseCategory').value = '';
+      document.getElementById('expenseAmount').value = '';
+      document.getElementById('expenseNotes').value = '';
+      const cancelBtn = document.getElementById('expenseCancelEdit');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+      const saveBtn = document.getElementById('expenseSaveBtn');
+      if (saveBtn) saveBtn.textContent = 'Save';
+    }
+
+    async function submitExpenseForm(e) {
+      e.preventDefault();
+      const payload = {
+        entry_date: document.getElementById('expenseDate').value,
+        unit_id: document.getElementById('expenseUnit').value || '',
+        category_id: document.getElementById('expenseCategory').value,
+        amount: document.getElementById('expenseAmount').value,
+        notes: document.getElementById('expenseNotes').value || '',
+      };
+      const DEBUG = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (DEBUG) console.log('expense-manager submit payload', payload);
+      const method = editId ? 'PUT' : 'POST';
+      const url = editId ? `/api/expense-manager/entries/${editId}` : '/api/expense-manager/entries';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        resetExpenseForm();
+        loadExpenseEntries();
+      } else {
+        let msg = 'Failed to save expense. Please check all required fields.';
+        try {
+          const j = await res.json();
+          if (j && j.error) {
+            console.error('expense save error', j.error);
+          }
+        } catch (_) {}
+        alert(msg);
+      }
+    }
+
+    async function startEditExpense(id) {
+      const res = await fetch('/api/expense-manager/entries');
+      if (!res.ok) return;
+      const data = await res.json();
+      const entry = (data || []).find(e => String(e.id) === String(id));
+      if (!entry) return;
+      editId = id;
+      document.getElementById('expenseDate').value = (entry.entry_date || '').slice(0,10);
+      document.getElementById('expenseUnit').value = entry.unit_id || '';
+      document.getElementById('expenseCategory').value = entry.category_id || '';
+      document.getElementById('expenseAmount').value = entry.amount;
+      document.getElementById('expenseNotes').value = entry.notes || '';
+      const cancelBtn = document.getElementById('expenseCancelEdit');
+      if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+      const saveBtn = document.getElementById('expenseSaveBtn');
+      if (saveBtn) saveBtn.textContent = 'Update expense';
+      const title = document.getElementById('expenseFormTitle');
+      const helper = document.getElementById('expenseFormHelper');
+      if (title) title.textContent = 'Edit expense';
+      if (helper) helper.textContent = 'Update an existing expense entry';
+    }
+
+    let pendingDeleteExpenseId = null;
+
+    function deleteExpense(id) {
+      pendingDeleteExpenseId = id;
+      openExpenseConfirm();
+    }
+
+    async function performDeleteExpense() {
+      const id = pendingDeleteExpenseId;
+      if (!id) return closeExpenseConfirm();
+      const res = await fetch(`/api/expense-manager/entries/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        pendingDeleteExpenseId = null;
+        closeExpenseConfirm();
+        loadExpenseEntries();
+      } else {
+        closeExpenseConfirm();
+        alert('Failed to delete expense');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      applyExpenseTheme();
+      loadProfile();
+      wireUserMenu();
+      loadExpenseUnits();
+      loadExpenseCategories();
+      loadExpenseEntries();
+      const form = document.getElementById('expenseForm');
+      if (form) form.addEventListener('submit', submitExpenseForm);
+      const cancelBtn = document.getElementById('expenseCancelEdit');
+      if (cancelBtn) cancelBtn.addEventListener('click', (e)=>{ e.preventDefault(); resetExpenseForm(); document.getElementById('expenseFormTitle').textContent='Add expense'; document.getElementById('expenseFormHelper').textContent='Create a new expense entry for this workspace'; const saveBtn=document.getElementById('expenseSaveBtn'); if (saveBtn) saveBtn.textContent='Save expense';});
+      document.getElementById('expenseFilterApply')?.addEventListener('click', loadExpenseEntries);
+      document.getElementById('expenseFilterReset')?.addEventListener('click', () => {
+        document.getElementById('expenseFilterFrom').value = '';
+        document.getElementById('expenseFilterTo').value = '';
+        document.getElementById('expenseFilterUnit').value = '';
+        document.getElementById('expenseFilterCategory').value = '';
+        loadExpenseEntries();
+      });
+      document.getElementById('categoryForm')?.addEventListener('submit', submitCategoryForm);
+      const catToggle = document.getElementById('manageCategoriesToggle');
+      if (catToggle) {
+        catToggle.addEventListener('click', () => {
+          const mgr = document.getElementById('categoryManager');
+          if (!mgr) return;
+          const show = mgr.style.display === 'none' || mgr.style.display === '';
+          mgr.style.display = show ? 'block' : 'none';
+          if (show) {
+            loadExpenseCategories();
+            catToggle.textContent = 'Hide categories';
+          } else {
+            catToggle.textContent = 'Manage categories';
+          }
+        });
+      }
+      resetExpenseForm();
+      if (window.lucide && lucide.createIcons) lucide.createIcons();
+
+      const catConfirmOk = document.getElementById('categoryConfirmOk');
+      const catConfirmCancel = document.getElementById('categoryConfirmCancel');
+      if (catConfirmOk) catConfirmOk.onclick = (e)=>{ e.preventDefault(); performDeleteCategory(); };
+      if (catConfirmCancel) catConfirmCancel.onclick = (e)=>{ e.preventDefault(); closeCategoryConfirm(); };
+
+      const expConfirmOk = document.getElementById('expenseConfirmOk');
+      const expConfirmCancel = document.getElementById('expenseConfirmCancel');
+      if (expConfirmOk) expConfirmOk.onclick = (e)=>{ e.preventDefault(); performDeleteExpense(); };
+      if (expConfirmCancel) expConfirmCancel.onclick = (e)=>{ e.preventDefault(); closeExpenseConfirm(); };
+    });
+
+    function showExpenseToast(message) {
+      const el = document.getElementById('expenseToast');
+      if (!el) return alert(message);
+      el.textContent = message;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2000);
+    }
+
+    function showCategoryModal(message) {
+      const overlay = document.getElementById('categoryErrorOverlay');
+      const ok = document.getElementById('categoryErrorOk');
+      const text = document.getElementById('categoryErrorText');
+      if (!overlay || !ok) return alert('This category is already being used and can therefore not be deleted');
+      if (text && message) text.textContent = message;
+      overlay.style.display = 'flex';
+      ok.onclick = (e) => {
+        e.preventDefault();
+        overlay.style.display = 'none';
+      };
+    }
+
+    function openCategoryConfirm() {
+      const overlay = document.getElementById('categoryConfirmOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'flex';
+    }
+
+    function closeCategoryConfirm() {
+      const overlay = document.getElementById('categoryConfirmOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'none';
+    }
+
+    function openExpenseConfirm() {
+      const overlay = document.getElementById('expenseConfirmOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'flex';
+    }
+
+    function closeExpenseConfirm() {
+      const overlay = document.getElementById('expenseConfirmOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'none';
+    }
+  </script>
+</body>
+</html>

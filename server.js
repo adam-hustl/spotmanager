@@ -2018,6 +2018,167 @@ async function pgSetCancelled(workspaceId, bookingId, isCancelled) {
   return mapBookingRow(rows[0]) || false;
 }
 
+// ---------- Finance (Postgres) ----------
+async function pgGetFinanceSettings(workspaceId) {
+  if (!pool || !workspaceId) return null;
+  const { rows } = await pool.query(
+    `SELECT workspace_id, cleaner_rate, internet_amount, rent_amount, cleaner_paid_thru
+     FROM finance_settings
+     WHERE workspace_id = $1
+     LIMIT 1`,
+    [workspaceId]
+  );
+  return rows[0] || null;
+}
+
+async function pgUpsertFinanceSettings(workspaceId, data = {}) {
+  if (!pool || !workspaceId) return null;
+  const { cleanerRate, internetAmount, rentAmount, cleanerPaidThru } = data;
+  const { rows } = await pool.query(
+    `INSERT INTO finance_settings (workspace_id, cleaner_rate, internet_amount, rent_amount, cleaner_paid_thru)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (workspace_id) DO UPDATE
+     SET cleaner_rate = EXCLUDED.cleaner_rate,
+         internet_amount = EXCLUDED.internet_amount,
+         rent_amount = EXCLUDED.rent_amount,
+         cleaner_paid_thru = EXCLUDED.cleaner_paid_thru
+     RETURNING workspace_id, cleaner_rate, internet_amount, rent_amount, cleaner_paid_thru`,
+    [workspaceId, cleanerRate || null, internetAmount || null, rentAmount || null, cleanerPaidThru || null]
+  );
+  return rows[0] || null;
+}
+
+async function pgFinanceExpenseSummary(workspaceId, filters = {}) {
+  if (!pool || !workspaceId) return { totalExpenses: 0, byCategory: [] };
+  const { from, to, unitId } = filters;
+  const cond = ['workspace_id = $1', `type = 'expense'`];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { cond.push(`entry_date::date >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`entry_date::date <= $${idx++}`); params.push(to); }
+  if (unitId) { cond.push(`unit_id = $${idx++}`); params.push(unitId); }
+  const where = cond.join(' AND ');
+  const totalRes = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM finance_entries WHERE ${where}`,
+    params
+  );
+  const catRes = await pool.query(
+    `SELECT category, COALESCE(SUM(amount), 0) AS total
+     FROM finance_entries
+     WHERE ${where}
+     GROUP BY category
+     ORDER BY total DESC`,
+    params
+  );
+  return {
+    totalExpenses: Number(totalRes.rows[0]?.total || 0),
+    byCategory: catRes.rows.map(r => ({ category: r.category, total: Number(r.total || 0) })),
+  };
+}
+
+// Helpers for normalizing inputs
+function toNullableInt(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
+}
+function toNullableNumber(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function toNullableText(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === '' ? null : s;
+}
+
+function toNullableBool(v) {
+  if (v === '' || v == null) return null;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') {
+    const s = v.toLowerCase();
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+  }
+  return null;
+}
+
+async function pgGetFinanceCategory(workspaceId, categoryId) {
+  if (!pool || !workspaceId || !categoryId) return null;
+  const { rows } = await pool.query(
+    `SELECT id, name, is_recurring FROM finance_categories WHERE workspace_id = $1 AND id = $2 LIMIT 1`,
+    [workspaceId, categoryId]
+  );
+  return rows[0] || null;
+}
+
+async function pgListFinanceEntries(workspaceId, filters = {}, limit = null) {
+  if (!pool || !workspaceId) return [];
+  const { from, to, type, unitId, category } = filters;
+  const cond = ['workspace_id = $1'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { cond.push(`entry_date::date >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`entry_date::date <= $${idx++}`); params.push(to); }
+  if (type) { cond.push(`type = $${idx++}`); params.push(type); }
+  if (unitId) { cond.push(`unit_id = $${idx++}`); params.push(unitId); }
+  if (category && category !== 'All') { cond.push(`category = $${idx++}`); params.push(category); }
+  const where = cond.join(' AND ');
+  const sql = `
+    SELECT id, workspace_id, entry_date, type, category, amount, notes, unit_id, created_at, updated_at
+    FROM finance_entries
+    WHERE ${where}
+    ORDER BY entry_date DESC, id DESC
+    ${limit ? 'LIMIT ' + Number(limit) : ''}
+  `;
+  const { rows } = await pool.query(sql, params);
+  return rows || [];
+}
+
+async function pgAddFinanceEntry(workspaceId, data = {}) {
+  if (!pool || !workspaceId) return null;
+  const { entryDate, type, category, amount, notes, unitId } = data;
+  const { rows } = await pool.query(
+    `INSERT INTO finance_entries (workspace_id, entry_date, type, category, amount, notes, unit_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, workspace_id, entry_date, type, category, amount, notes, unit_id, created_at, updated_at`,
+    [workspaceId, entryDate || new Date(), type || null, category || null, amount || 0, notes || '', unitId || null]
+  );
+  return rows[0] || null;
+}
+
+async function pgUpdateFinanceEntry(workspaceId, id, data = {}) {
+  if (!pool || !workspaceId || !id) return null;
+  const { entryDate, category, amount, notes, unitId } = data;
+  const { rows } = await pool.query(
+    `UPDATE finance_entries
+     SET entry_date = $1, category = $2, amount = $3, notes = $4, unit_id = $5, updated_at = NOW()
+     WHERE workspace_id = $6 AND id = $7 AND type = 'expense'
+     RETURNING id, workspace_id, entry_date, type, category, amount, notes, unit_id, created_at, updated_at`,
+    [entryDate || new Date(), category || null, amount || 0, notes || '', unitId || null, workspaceId, id]
+  );
+  return rows[0] || null;
+}
+
+async function pgDeleteFinanceEntry(workspaceId, id) {
+  if (!pool || !workspaceId || !id) return false;
+  const { rowCount } = await pool.query(
+    `DELETE FROM finance_entries WHERE workspace_id = $1 AND id = $2 AND type = 'expense'`,
+    [workspaceId, id]
+  );
+  return rowCount > 0;
+}
+
+async function pgListUnitsSimple(workspaceId) {
+  if (!pool || !workspaceId) return [];
+  const { rows } = await pool.query(
+    `SELECT id, name FROM units WHERE workspace_id = $1 ORDER BY id ASC`,
+    [workspaceId]
+  );
+  return rows || [];
+}
+
 
 
 
@@ -2915,6 +3076,521 @@ app.get('/api/analytics/unit-performance-tab', requireAnyUser, async (req, res) 
   } catch (e) {
     console.error('analytics unit-performance failed', e);
     return res.status(500).json({ error: 'failed to load unit performance' });
+  }
+});
+
+// Analytics API - Platform Performance tab
+app.get('/api/analytics/platform-performance-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const conditions = ['workspace_id = $1'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+
+  if (from) {
+    conditions.push(`check_in::date >= $${idx++}`);
+    params.push(from);
+  }
+  if (to) {
+    conditions.push(`check_in::date <= $${idx++}`);
+    params.push(to);
+  }
+  if (unitId) {
+    conditions.push(`unit_id = $${idx++}`);
+    params.push(unitId);
+  }
+  if (platform && platform !== 'All') {
+    conditions.push(`platform = $${idx++}`);
+    params.push(platform);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const daysBetween = (a, b) => {
+    if (!a || !b) return 0;
+    const start = new Date(a);
+    const end = new Date(b);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const diff = (end - start) / (1000 * 60 * 60 * 24);
+    return diff >= 0 ? Math.floor(diff) + 1 : 0;
+  };
+  const availableDaysInRange = daysBetween(from, to);
+
+  try {
+    if (!IS_PROD) console.log('[analytics] platform-performance filters', { workspaceId, from, to, unitId, platform });
+
+    const unitCountRes = await pool.query(
+      'SELECT COUNT(*)::int AS cnt FROM units WHERE workspace_id = $1',
+      [workspaceId]
+    );
+    const unitCount = unitCountRes.rows[0]?.cnt || 0;
+    const multiplier = unitId ? 1 : unitCount || 0;
+    const availableNightsBase = availableDaysInRange * multiplier;
+
+    const q = `
+      SELECT
+        platform,
+        COUNT(*) AS bookings_count,
+        COALESCE(SUM(total_price), 0) AS revenue,
+        COALESCE(SUM(GREATEST(0, (check_out::date - check_in::date))), 0) AS booked_nights
+      FROM bookings
+      WHERE ${whereClause}
+      GROUP BY platform
+      ORDER BY revenue DESC
+    `;
+
+    const { rows } = await pool.query(q, params);
+
+    const platforms = rows.map((r) => {
+      const revenue = Number(r.revenue || 0);
+      const bookingsCount = Number(r.bookings_count || 0);
+      const bookedNights = Number(r.booked_nights || 0);
+      const availableNights = availableNightsBase;
+      return {
+        platform: r.platform || 'Unknown',
+        revenue,
+        bookingsCount,
+        bookedNights,
+        averageBookingValue: bookingsCount > 0 ? revenue / bookingsCount : 0,
+        adr: bookedNights > 0 ? revenue / bookedNights : 0,
+        availableNights,
+        occupancyRate: availableNights > 0 ? (bookedNights / availableNights) * 100 : 0,
+      };
+    });
+
+    const totalPlatforms = platforms.length;
+    const topRevenue = platforms[0] || null;
+    const topBookings = [...platforms].sort((a, b) => (b.bookingsCount || 0) - (a.bookingsCount || 0))[0] || null;
+
+    const summary = {
+      totalPlatforms,
+      topRevenuePlatform: topRevenue ? topRevenue.platform : '',
+      topRevenueValue: topRevenue ? topRevenue.revenue : 0,
+      topBookingsPlatform: topBookings ? topBookings.platform : '',
+      topBookingsValue: topBookings ? topBookings.bookingsCount : 0,
+    };
+
+    return res.json({ summary, platforms });
+  } catch (e) {
+    console.error('analytics platform-performance failed', e);
+    return res.status(500).json({ error: 'failed to load platform performance' });
+  }
+});
+
+// Finance settings (Postgres-backed)
+app.get('/api/finance/settings', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const settings = await pgGetFinanceSettings(workspaceId);
+    return res.json(settings || {});
+  } catch (e) {
+    console.error('finance settings get failed', e);
+    return res.status(500).json({ error: 'failed to load settings' });
+  }
+});
+
+app.post('/api/finance/settings', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const payload = {
+      cleanerRate: req.body.cleanerRate,
+      internetAmount: req.body.internetAmount,
+      rentAmount: req.body.rentAmount,
+      cleanerPaidThru: req.body.cleanerPaidThru,
+    };
+    const settings = await pgUpsertFinanceSettings(workspaceId, payload);
+    return res.json({ ok: true, settings });
+  } catch (e) {
+    console.error('finance settings upsert failed', e);
+    return res.status(500).json({ error: 'failed to save settings' });
+  }
+});
+
+// Finance entries
+app.get('/api/finance/entries', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const { from, to, type, unitId } = req.query || {};
+  try {
+    const entries = await pgListFinanceEntries(workspaceId, { from, to, type, unitId });
+    const mapped = entries.map(e => ({ ...e, note: e.notes }));
+    return res.json(mapped);
+  } catch (e) {
+    console.error('finance entries list failed', e);
+    return res.status(500).json({ error: 'failed to load entries' });
+  }
+});
+
+app.post('/api/finance/entries', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const { entryDate, type, category, amount, note, notes, unitId } = req.body || {};
+  const noteValue = notes != null ? notes : note;
+  try {
+    const entry = await pgAddFinanceEntry(workspaceId, {
+      entryDate,
+      type,
+      category,
+      amount: amount ? Number(amount) : 0,
+      notes: noteValue,
+      unitId: unitId || null,
+    });
+    return res.json({ ok: true, entry: { ...entry, note: entry.notes } });
+  } catch (e) {
+    console.error('finance entry add failed', e);
+    return res.status(500).json({ error: 'failed to add entry' });
+  }
+});
+
+// Finance expenses summary
+app.get('/api/finance/expenses-summary', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const { from, to, unitId } = req.query || {};
+  try {
+    const summary = await pgFinanceExpenseSummary(workspaceId, { from, to, unitId });
+    return res.json(summary);
+  } catch (e) {
+    console.error('finance expenses summary failed', e);
+    return res.status(500).json({ error: 'failed to load expenses summary' });
+  }
+});
+
+// Expense Manager UI
+app.get('/expense-manager', requireAnyUser, (req, res) => {
+  res.sendFile(path.join(__dirname, 'views', 'expense-manager.html'));
+});
+
+// Expense Manager APIs
+app.get('/api/expense-manager/entries', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const from = toNullableText(req.query?.from);
+    const to = toNullableText(req.query?.to);
+    const unitId = toNullableInt(req.query?.unitId);
+    const category = toNullableText(req.query?.category);
+
+    const cond = ['fe.workspace_id = $1', `fe.type = 'expense'`];
+    const params = [workspaceId];
+    let idx = params.length + 1;
+    if (from) { cond.push(`fe.entry_date::date >= $${idx++}`); params.push(from); }
+    if (to) { cond.push(`fe.entry_date::date <= $${idx++}`); params.push(to); }
+    if (unitId) { cond.push(`fe.unit_id = $${idx++}`); params.push(unitId); }
+    if (category && category !== 'All categories') {
+      const catId = toNullableInt(category);
+      if (catId) { cond.push(`fe.category_id = $${idx++}`); params.push(catId); }
+      else { cond.push(`fe.category = $${idx++}`); params.push(category); }
+    }
+    const where = cond.join(' AND ');
+
+    const { rows } = await pool.query(
+      `SELECT fe.id, fe.workspace_id, fe.unit_id, fe.type, fe.entry_date, fe.category_id, fe.category, fe.amount, fe.notes, fe.is_recurring, fe.created_at, fe.updated_at,
+              COALESCE(NULLIF(u.name, ''), CASE WHEN fe.unit_id IS NOT NULL THEN 'Unit ' || fe.unit_id::text ELSE 'General / no unit' END) AS unit_name
+       FROM finance_entries fe
+       LEFT JOIN units u ON u.id = fe.unit_id AND u.workspace_id = fe.workspace_id
+       WHERE ${where}
+       ORDER BY fe.entry_date DESC, fe.id DESC`,
+      params
+    );
+    return res.json(rows || []);
+  } catch (e) {
+    if (!IS_PROD) console.error('expense-manager GET failed', e);
+    return res.status(500).json({ error: 'failed to load entries' });
+  }
+});
+
+app.post('/api/expense-manager/entries', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const entryDate = toNullableText(req.body?.entry_date || req.body?.date);
+    const unitId = toNullableInt(req.body?.unit_id || req.body?.unitId);
+    const categoryId = toNullableInt(req.body?.category_id || req.body?.categoryId);
+    const category = toNullableText(req.body?.category);
+    const amount = toNullableNumber(req.body?.amount);
+    const notes = toNullableText(req.body?.notes);
+
+    if (!IS_PROD) console.log('expense-manager POST normalized', { workspaceId, entryDate, unitId, categoryId, category, amount, notes });
+
+    if (!entryDate) return res.status(400).json({ ok:false, error: 'MISSING_ENTRY_DATE' });
+    if (!categoryId) return res.status(400).json({ ok:false, error: 'MISSING_CATEGORY' });
+    if (amount === null) return res.status(400).json({ ok:false, error: 'MISSING_AMOUNT' });
+
+    const catRow = await pgGetFinanceCategory(workspaceId, categoryId);
+    if (!catRow) return res.status(400).json({ ok:false, error: 'CATEGORY_NOT_FOUND' });
+    const categoryName = catRow.name || category || null;
+    const isRecurring = catRow.is_recurring === true;
+
+    const { rows } = await pool.query(
+      `INSERT INTO finance_entries (workspace_id, unit_id, type, entry_date, category_id, category, amount, notes, is_recurring)
+       VALUES ($1, $2, 'expense', $3, $4, $5, $6, $7, $8)
+       RETURNING id, workspace_id, unit_id, type, entry_date, category_id, category, amount, notes, is_recurring, created_at, updated_at`,
+      [workspaceId, unitId, entryDate, categoryId, categoryName, amount, notes, isRecurring]
+    );
+    return res.json({ ok: true, entry: rows[0] });
+  } catch (e) {
+    if (!IS_PROD) console.error('expense-manager POST failed', e);
+    return res.status(500).json({ error: 'failed to add entry' });
+  }
+});
+
+app.put('/api/expense-manager/entries/:id', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const entryId = toNullableInt(req.params.id);
+  try {
+    const entryDate = toNullableText(req.body?.entry_date || req.body?.date);
+    const unitId = toNullableInt(req.body?.unit_id || req.body?.unitId);
+    const categoryId = toNullableInt(req.body?.category_id || req.body?.categoryId);
+    const category = toNullableText(req.body?.category);
+    const amount = toNullableNumber(req.body?.amount);
+    const notes = toNullableText(req.body?.notes);
+
+    const DEBUG = process.env.APP_ENV !== 'production';
+    if (DEBUG) console.log('expense-manager PUT normalized', { workspaceId, entryId, entryDate, unitId, categoryId, category, amount, notes });
+
+    if (!entryId) return res.status(400).json({ ok:false, error: 'MISSING_ENTRY_ID' });
+    if (!entryDate) return res.status(400).json({ ok:false, error: 'MISSING_ENTRY_DATE' });
+    if (!categoryId) return res.status(400).json({ ok:false, error: 'MISSING_CATEGORY' });
+    if (amount === null) return res.status(400).json({ ok:false, error: 'MISSING_AMOUNT' });
+
+    const catRow = await pgGetFinanceCategory(workspaceId, categoryId);
+    if (!catRow) return res.status(400).json({ ok:false, error: 'CATEGORY_NOT_FOUND' });
+    const categoryName = catRow.name || category || null;
+    const isRecurring = catRow.is_recurring === true;
+
+    const { rows } = await pool.query(
+      `UPDATE finance_entries
+       SET entry_date = $1,
+           unit_id = $2,
+           category_id = $3,
+           category = $4,
+           amount = $5,
+           notes = $6,
+           is_recurring = $7,
+           updated_at = NOW()
+       WHERE id = $8
+         AND workspace_id = $9
+         AND type = 'expense'
+       RETURNING id, workspace_id, unit_id, type, entry_date, category_id, category, amount, notes, is_recurring, created_at, updated_at`,
+      [entryDate, unitId, categoryId, categoryName, amount, notes, isRecurring, entryId, workspaceId]
+    );
+
+    if (!rows || !rows[0]) return res.status(404).json({ ok:false, error: 'ENTRY_NOT_FOUND' });
+    return res.json({ ok: true, entry: rows[0] });
+  } catch (e) {
+    const DEBUG = process.env.APP_ENV !== 'production';
+    if (DEBUG) console.error('expense-manager PUT failed', e);
+    return res.status(500).json({ error: 'failed to update entry' });
+  }
+});
+
+app.delete('/api/expense-manager/entries/:id', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const id = toNullableInt(req.params.id);
+  try {
+    const ok = await pgDeleteFinanceEntry(workspaceId, id);
+    if (!ok) return res.status(404).json({ error: 'not found' });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('expense-manager delete failed', e);
+    return res.status(500).json({ error: 'failed to delete entry' });
+  }
+});
+
+app.get('/api/expense-manager/units', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const units = await pgListUnitsSimple(workspaceId);
+    return res.json(units);
+  } catch (e) {
+    console.error('expense-manager units failed', e);
+    return res.status(500).json({ error: 'failed to load units' });
+  }
+});
+
+// Expense categories
+app.get('/api/expense-manager/categories', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, is_recurring FROM finance_categories WHERE workspace_id = $1 ORDER BY name ASC`,
+      [workspaceId]
+    );
+    return res.json(rows || []);
+  } catch (e) {
+    console.error('expense-manager categories list failed', e);
+    return res.status(500).json({ error: 'failed to load categories' });
+  }
+});
+
+app.post('/api/expense-manager/categories', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const name = toNullableText(req.body?.name);
+  const isRecurring = toNullableBool(req.body?.is_recurring) === true;
+  if (!name) return res.status(400).json({ ok:false, error: 'MISSING_NAME' });
+  try {
+    const dup = await pool.query(
+      `SELECT 1 FROM finance_categories WHERE workspace_id = $1 AND lower(name) = lower($2) LIMIT 1`,
+      [workspaceId, name]
+    );
+    if (dup.rows && dup.rows.length) return res.status(409).json({ ok:false, error: 'CATEGORY_EXISTS' });
+    const { rows } = await pool.query(
+      `INSERT INTO finance_categories (workspace_id, name, is_recurring)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, is_recurring`,
+      [workspaceId, name, isRecurring]
+    );
+    return res.json({ ok:true, category: rows[0] });
+  } catch (e) {
+    console.error('expense-manager categories create failed', e);
+    return res.status(500).json({ error: 'failed to create category' });
+  }
+});
+
+app.delete('/api/expense-manager/categories/:id', requireAdmin, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  const categoryId = toNullableInt(req.params.id);
+  if (!categoryId) return res.status(400).json({ ok:false, error: 'MISSING_CATEGORY_ID' });
+  try {
+    const inUse = await pool.query(
+      `SELECT COUNT(*)::int AS cnt FROM finance_entries WHERE workspace_id = $1 AND category_id = $2`,
+      [workspaceId, categoryId]
+    );
+    if ((inUse.rows?.[0]?.cnt || 0) > 0) {
+      return res.status(400).json({ ok:false, error: 'CATEGORY_IN_USE' });
+    }
+    const { rowCount } = await pool.query(
+      `DELETE FROM finance_categories WHERE workspace_id = $1 AND id = $2`,
+      [workspaceId, categoryId]
+    );
+    if (!rowCount) return res.status(404).json({ ok:false, error: 'CATEGORY_NOT_FOUND' });
+    return res.json({ ok:true });
+  } catch (e) {
+    console.error('expense-manager categories delete failed', e);
+    return res.status(500).json({ error: 'failed to delete category' });
+  }
+});
+
+// Analytics API - Expenses tab
+app.get('/api/analytics/expenses-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, category } = req.query || {};
+  const cond = ['fe.workspace_id = $1', `fe.type = 'expense'`];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { cond.push(`fe.entry_date::date >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`fe.entry_date::date <= $${idx++}`); params.push(to); }
+  if (unitId) { cond.push(`fe.unit_id = $${idx++}`); params.push(unitId); }
+  if (category && category !== 'All') { cond.push(`fe.category = $${idx++}`); params.push(category); }
+  const where = cond.join(' AND ');
+
+  try {
+    if (!IS_PROD) console.log('[analytics] expenses filters', { workspaceId, from, to, unitId, category });
+
+    const summaryQuery = `
+      SELECT
+        COALESCE(SUM(fe.amount),0) AS total,
+        COALESCE(SUM(CASE WHEN COALESCE(fe.is_recurring, fc.is_recurring, false) = true THEN fe.amount ELSE 0 END),0) AS recurring
+      FROM finance_entries fe
+      LEFT JOIN finance_categories fc
+        ON fc.id = fe.category_id AND fc.workspace_id = fe.workspace_id
+      WHERE ${where}
+    `;
+    const summaryParams = [...params];
+
+    const trendQuery = `
+      SELECT to_char(fe.entry_date::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(fe.amount),0) AS total
+      FROM finance_entries fe
+      WHERE ${where}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byCategoryQuery = `
+      SELECT COALESCE(NULLIF(fe.category, ''), 'Uncategorized') AS category,
+             COUNT(*) AS count,
+             COALESCE(SUM(fe.amount),0) AS total
+      FROM finance_entries fe
+      WHERE ${where}
+      GROUP BY fe.category
+      ORDER BY total DESC
+    `;
+
+    const byUnitQuery = `
+      SELECT fe.unit_id,
+             u.name AS unit_name,
+             COUNT(*) AS count,
+             COALESCE(SUM(fe.amount),0) AS total
+      FROM finance_entries fe
+      LEFT JOIN units u ON u.id = fe.unit_id AND u.workspace_id = fe.workspace_id
+      WHERE ${where}
+      GROUP BY fe.unit_id, u.name
+      ORDER BY total DESC
+    `;
+
+    const [summaryRes, trendRes, byCategoryRes, byUnitRes] = await Promise.all([
+      pool.query(summaryQuery, summaryParams),
+      pool.query(trendQuery, params),
+      pool.query(byCategoryQuery, params),
+      pool.query(byUnitQuery, params),
+    ]);
+
+    const summaryRow = summaryRes.rows[0] || {};
+    const totalExpenses = Number(summaryRow.total || 0);
+    const recurringExpenses = Number(summaryRow.recurring || 0);
+    const oneTimeExpenses = totalExpenses - recurringExpenses;
+    const trend = trendRes.rows.map(r => ({ month: r.month, total: Number(r.total || 0) }));
+    const averageMonthlyExpense = trend.length ? trend.reduce((s, r) => s + (r.total || 0), 0) / trend.length : 0;
+
+    const byCategory = byCategoryRes.rows.map(r => ({
+      category: r.category || 'Uncategorized',
+      total: Number(r.total || 0),
+      count: Number(r.count || 0),
+    }));
+
+    const byUnit = byUnitRes.rows.map(r => {
+      const uid = r.unit_id;
+      const unitName = r.unit_name && r.unit_name.trim() !== ''
+        ? r.unit_name
+        : (uid ? `Unit ${uid}` : 'General');
+      return {
+        unitId: uid,
+        unitName,
+        total: Number(r.total || 0),
+        count: Number(r.count || 0),
+      };
+    });
+
+    return res.json({
+      summary: {
+        totalExpenses,
+        recurringExpenses,
+        oneTimeExpenses,
+        averageMonthlyExpense,
+      },
+      trend,
+      byCategory,
+      byUnit,
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('analytics expenses failed', e);
+    return res.status(500).json({ error: 'failed to load expenses analytics' });
   }
 });
 
