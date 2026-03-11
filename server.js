@@ -3594,6 +3594,95 @@ app.get('/api/analytics/expenses-tab', requireAnyUser, async (req, res) => {
   }
 });
 
+// Analytics API - Bookings tab
+app.get('/api/analytics/bookings-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const cond = ['b.workspace_id = $1'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { cond.push(`b.check_in::date >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`b.check_in::date <= $${idx++}`); params.push(to); }
+  if (unitId) { cond.push(`b.unit_id = $${idx++}`); params.push(unitId); }
+  if (platform && platform !== 'All') { cond.push(`b.platform = $${idx++}`); params.push(platform); }
+  const where = cond.join(' AND ');
+
+  try {
+    const summaryQ = `
+      SELECT
+        COUNT(*) AS total_bookings,
+        COALESCE(AVG(GREATEST(0, b.check_out::date - b.check_in::date)),0) AS avg_stay_length,
+        COALESCE(AVG(GREATEST(0, b.check_in::date - b.created_at::date)),0) AS avg_lead_time,
+        COALESCE(SUM(b.people),0) AS total_guests
+      FROM bookings b
+      WHERE ${where}
+    `;
+
+    const trendQ = `
+      SELECT to_char(b.check_in::date, 'YYYY-MM') AS month, COUNT(*) AS bookings
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byPlatformQ = `
+      SELECT COALESCE(NULLIF(b.platform,''),'Unknown') AS platform, COUNT(*) AS bookings
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY b.platform
+      ORDER BY bookings DESC
+    `;
+
+    const stayBucketsQ = `
+      WITH src AS (
+        SELECT GREATEST(0, b.check_out::date - b.check_in::date) AS nights
+        FROM bookings b
+        WHERE ${where}
+      )
+      SELECT
+        SUM(CASE WHEN nights = 1 THEN 1 ELSE 0 END) AS n1,
+        SUM(CASE WHEN nights BETWEEN 2 AND 3 THEN 1 ELSE 0 END) AS n2_3,
+        SUM(CASE WHEN nights BETWEEN 4 AND 7 THEN 1 ELSE 0 END) AS n4_7,
+        SUM(CASE WHEN nights >= 8 THEN 1 ELSE 0 END) AS n8_plus
+      FROM src
+    `;
+
+    const [summaryRes, trendRes, platformRes, stayRes] = await Promise.all([
+      pool.query(summaryQ, params),
+      pool.query(trendQ, params),
+      pool.query(byPlatformQ, params),
+      pool.query(stayBucketsQ, params),
+    ]);
+
+    const summaryRow = summaryRes.rows[0] || {};
+    const buckets = stayRes.rows[0] || {};
+
+    return res.json({
+      summary: {
+        totalBookings: Number(summaryRow.total_bookings || 0),
+        avgStayLength: Number(summaryRow.avg_stay_length || 0),
+        avgLeadTime: Number(summaryRow.avg_lead_time || 0),
+        totalGuests: Number(summaryRow.total_guests || 0),
+      },
+      trend: trendRes.rows.map(r => ({ month: r.month, bookings: Number(r.bookings || 0) })),
+      byPlatform: platformRes.rows.map(r => ({ platform: r.platform || 'Unknown', bookings: Number(r.bookings || 0) })),
+      stayLengthBuckets: {
+        oneNight: Number(buckets.n1 || 0),
+        twoToThree: Number(buckets.n2_3 || 0),
+        fourToSeven: Number(buckets.n4_7 || 0),
+        eightPlus: Number(buckets.n8_plus || 0),
+      },
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('analytics bookings failed', e);
+    return res.status(500).json({ error: 'failed to load bookings analytics' });
+  }
+});
+
 // Analytics API - Profit tab
 app.get('/api/analytics/profit-tab', requireAnyUser, async (req, res) => {
   const workspaceId = req.session ? req.session.workspaceId : null;
