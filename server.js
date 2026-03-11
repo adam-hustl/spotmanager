@@ -3683,6 +3683,281 @@ app.get('/api/analytics/bookings-tab', requireAnyUser, async (req, res) => {
   }
 });
 
+// Analytics API - Pricing tab
+app.get('/api/analytics/pricing-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const cond = [
+    'b.workspace_id = $1',
+    'b.total_price IS NOT NULL',
+    `(b.check_out::date - b.check_in::date) > 0`
+  ];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { cond.push(`b.check_in::date >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`b.check_in::date <= $${idx++}`); params.push(to); }
+  if (unitId) { cond.push(`b.unit_id = $${idx++}`); params.push(unitId); }
+  if (platform && platform !== 'All') { cond.push(`b.platform = $${idx++}`); params.push(platform); }
+  const where = cond.join(' AND ');
+
+  try {
+    if (!IS_PROD) console.log('[analytics] pricing filters', { workspaceId, from, to, unitId, platform });
+
+    const summaryQ = `
+      WITH src AS (
+        SELECT b.total_price,
+               GREATEST(0, b.check_out::date - b.check_in::date) AS nights,
+               (b.total_price / NULLIF(GREATEST(0, b.check_out::date - b.check_in::date),0)) AS nightly_rate
+        FROM bookings b
+        WHERE ${where}
+      )
+      SELECT
+        MAX(nightly_rate) AS max_rate,
+        MIN(nightly_rate) AS min_rate,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY nightly_rate) AS median_rate
+      FROM src
+    `;
+
+    const trendQ = `
+      SELECT to_char(b.check_in::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(b.total_price) / NULLIF(SUM(GREATEST(0, b.check_out::date - b.check_in::date)),0), 0) AS adr
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byPlatformQ = `
+      SELECT COALESCE(NULLIF(b.platform,''),'Unknown') AS platform,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(b.total_price) / NULLIF(SUM(GREATEST(0, b.check_out::date - b.check_in::date)),0), 0) AS adr
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY b.platform
+      ORDER BY adr DESC
+    `;
+
+    const weekdayWeekendQ = `
+      WITH src AS (
+        SELECT
+          b.check_in::date AS check_in_date,
+          GREATEST(0, b.check_out::date - b.check_in::date) AS nights,
+          b.total_price
+        FROM bookings b
+        WHERE ${where}
+      ), rates AS (
+        SELECT
+          EXTRACT(DOW FROM check_in_date) AS dow,
+          (total_price / NULLIF(nights,0)) AS nightly_rate
+        FROM src
+        WHERE nights > 0
+      )
+      SELECT
+        dow,
+        AVG(nightly_rate) AS adr,
+        COUNT(*) AS bookings
+      FROM rates
+      GROUP BY dow
+    `;
+
+    const distributionQ = `
+      WITH src AS (
+        SELECT (b.total_price / NULLIF(GREATEST(0, b.check_out::date - b.check_in::date),0)) AS nightly_rate
+        FROM bookings b
+        WHERE ${where}
+      )
+      SELECT
+        SUM(CASE WHEN nightly_rate < 2500 THEN 1 ELSE 0 END) AS under_2500,
+        SUM(CASE WHEN nightly_rate >= 2500 AND nightly_rate < 3500 THEN 1 ELSE 0 END) AS band_25_3499,
+        SUM(CASE WHEN nightly_rate >= 3500 AND nightly_rate < 4500 THEN 1 ELSE 0 END) AS band_35_4499,
+        SUM(CASE WHEN nightly_rate >= 4500 AND nightly_rate < 5500 THEN 1 ELSE 0 END) AS band_45_5499,
+        SUM(CASE WHEN nightly_rate >= 5500 THEN 1 ELSE 0 END) AS over_55
+      FROM src
+    `;
+
+    const [summaryRes, trendRes, platformRes, weekdayWeekendRes, distRes] = await Promise.all([
+      pool.query(summaryQ, params),
+      pool.query(trendQ, params),
+      pool.query(byPlatformQ, params),
+      pool.query(weekdayWeekendQ, params),
+      pool.query(distributionQ, params),
+    ]);
+
+    const s = summaryRes.rows[0] || {};
+    const high = Number(s.max_rate || 0);
+    const low = Number(s.min_rate || 0);
+    const median = Number(s.median_rate || 0);
+    const spread = high - low;
+
+    const distRow = distRes.rows[0] || {};
+
+    // weekday / weekend aggregation
+    let weekdayAdr = 0;
+    let weekendAdr = 0;
+    let weekdayBookings = 0;
+    let weekendBookings = 0;
+    if (weekdayWeekendRes.rows?.length) {
+      weekdayWeekendRes.rows.forEach((r) => {
+        const dow = Number(r.dow);
+        const adr = Number(r.adr || 0);
+        const bks = Number(r.bookings || 0);
+        if (dow === 0 || dow === 6) {
+          weekendBookings += bks;
+          // average of per-booking nightly rates: accumulate weighted by count
+          weekendAdr = weekendBookings ? ((weekendAdr * (weekendBookings - bks)) + (adr * bks)) / weekendBookings : adr;
+        } else {
+          weekdayBookings += bks;
+          weekdayAdr = weekdayBookings ? ((weekdayAdr * (weekdayBookings - bks)) + (adr * bks)) / weekdayBookings : adr;
+        }
+      });
+    }
+
+    return res.json({
+      summary: {
+        highestNightlyRate: high,
+        lowestNightlyRate: low,
+        medianNightlyRate: median,
+        rateSpread: spread,
+      },
+      trend: trendRes.rows.map(r => ({ month: r.month, adr: Number(r.adr || 0) })),
+      byPlatform: platformRes.rows.map(r => ({
+        platform: r.platform || 'Unknown',
+        adr: Number(r.adr || 0),
+        bookings: Number(r.bookings || 0),
+      })),
+      weekdayWeekend: {
+        weekdayAdr,
+        weekendAdr,
+        weekdayBookings,
+        weekendBookings,
+      },
+      distribution: [
+        { label: 'Under ₱2,500', count: Number(distRow.under_2500 || 0) },
+        { label: '₱2,500–₱3,499', count: Number(distRow.band_25_3499 || 0) },
+        { label: '₱3,500–₱4,499', count: Number(distRow.band_35_4499 || 0) },
+        { label: '₱4,500–₱5,499', count: Number(distRow.band_45_5499 || 0) },
+        { label: '₱5,500+', count: Number(distRow.over_55 || 0) },
+      ],
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('analytics pricing failed', e);
+    return res.status(500).json({ error: 'failed to load pricing analytics' });
+  }
+});
+
+// Analytics API - Forecast tab (booked revenue only)
+app.get('/api/analytics/forecast-tab', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const { from, to, unitId, platform } = req.query || {};
+  const baseCond = ['b.workspace_id = $1', 'b.total_price IS NOT NULL', 'b.check_in::date >= CURRENT_DATE'];
+  const params = [workspaceId];
+  let idx = params.length + 1;
+  if (from) { baseCond.push(`b.check_in::date >= $${idx++}`); params.push(from); }
+  if (to) { baseCond.push(`b.check_in::date <= $${idx++}`); params.push(to); }
+  if (unitId) { baseCond.push(`b.unit_id = $${idx++}`); params.push(unitId); }
+  if (platform && platform !== 'All') { baseCond.push(`b.platform = $${idx++}`); params.push(platform); }
+  const where = baseCond.join(' AND ');
+
+  try {
+    if (!IS_PROD) console.log('[analytics] forecast filters', { workspaceId, from, to, unitId, platform });
+
+    const summaryQ = `
+      SELECT
+        COALESCE(SUM(b.total_price),0) AS revenue,
+        COUNT(*) AS bookings,
+        COALESCE(SUM(GREATEST(0, b.check_out::date - b.check_in::date)),0) AS nights
+      FROM bookings b
+      WHERE ${where}
+    `;
+
+    const projectedMonthQ = `
+      SELECT COALESCE(SUM(b.total_price),0) AS revenue
+      FROM bookings b
+      WHERE b.workspace_id = $1
+        AND b.total_price IS NOT NULL
+        AND date_trunc('month', b.check_in::date) = date_trunc('month', CURRENT_DATE)
+        AND b.check_in::date >= CURRENT_DATE
+    `;
+
+    const trendQ = `
+      SELECT to_char(b.check_in::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(b.total_price),0) AS revenue,
+             COUNT(*) AS bookings
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byUnitQ = `
+      SELECT b.unit_id,
+             COALESCE(SUM(b.total_price),0) AS revenue,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(GREATEST(0, b.check_out::date - b.check_in::date)),0) AS nights,
+             u.name AS unit_name
+      FROM bookings b
+      LEFT JOIN units u ON u.id = b.unit_id AND u.workspace_id = b.workspace_id
+      WHERE ${where}
+      GROUP BY b.unit_id, u.name
+      ORDER BY revenue DESC
+    `;
+
+    const pipelineQ = `
+      SELECT
+        SUM(CASE WHEN CURRENT_DATE BETWEEN b.check_in::date AND b.check_out::date THEN 1 ELSE 0 END) AS checked_in,
+        SUM(CASE WHEN b.check_in::date > CURRENT_DATE THEN 1 ELSE 0 END) AS upcoming
+      FROM bookings b
+      WHERE b.workspace_id = $1
+        AND b.total_price IS NOT NULL
+    `;
+
+    const [summaryRes, projectedRes, trendRes, byUnitRes, pipeRes] = await Promise.all([
+      pool.query(summaryQ, params),
+      pool.query(projectedMonthQ, [workspaceId]),
+      pool.query(trendQ, params),
+      pool.query(byUnitQ, params),
+      pool.query(pipelineQ, [workspaceId]),
+    ]);
+
+    const summaryRow = summaryRes.rows[0] || {};
+    const projectedRow = projectedRes.rows[0] || {};
+    const pipelineRow = pipeRes.rows[0] || {};
+
+    return res.json({
+      summary: {
+        upcomingRevenue: Number(summaryRow.revenue || 0),
+        upcomingBookings: Number(summaryRow.bookings || 0),
+        upcomingBookedNights: Number(summaryRow.nights || 0),
+        projectedMonthRevenue: Number(projectedRow.revenue || 0),
+      },
+      trend: trendRes.rows.map(r => ({
+        month: r.month,
+        revenue: Number(r.revenue || 0),
+        bookings: Number(r.bookings || 0),
+      })),
+      byUnit: byUnitRes.rows.map(r => ({
+        unitName: r.unit_name || (r.unit_id != null ? `Unit ${r.unit_id}` : 'General'),
+        revenue: Number(r.revenue || 0),
+        bookings: Number(r.bookings || 0),
+        bookedNights: Number(r.nights || 0),
+      })),
+      pipeline: {
+        checkedInCount: Number(pipelineRow.checked_in || 0),
+        upcomingCount: Number(pipelineRow.upcoming || 0),
+      },
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('analytics forecast failed', e);
+    return res.status(500).json({ error: 'failed to load forecast analytics' });
+  }
+});
+
 // Analytics API - Profit tab
 app.get('/api/analytics/profit-tab', requireAnyUser, async (req, res) => {
   const workspaceId = req.session ? req.session.workspaceId : null;
