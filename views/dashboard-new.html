@@ -216,174 +216,40 @@
 </div>
 
       </section>
-
-      <!-- Finance (static UI; can be wired later) -->
-      <section id="finance" class="card">
-        <div class="row space-between">
-          <h3 class="h3">Finance</h3>
-          <span id="financeUnit" class="muted">Unit · Feb 2025</span>
-        </div>
-        <div class="grid-3">
-          <div class="card card-white">
-            <div class="row space-between small muted">
-              <span class="row gap-8 semibold">
-                <i data-lucide="wallet" class="icon-16"></i> Income (MTD)
-              </span>
-              <i data-lucide="trending-up" class="icon-16"></i>
-            </div>
-            <div class="row gap-12 mt-12">
-              <div id="d1" class="conic"></div>
-              <div>
-                <div class="value-xl">€ 48,200</div>
-                <div class="muted xs">Goal € 67,000</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card card-white">
-            <div class="row space-between small muted">
-              <span class="row gap-8 semibold">
-                <i data-lucide="credit-card" class="icon-16"></i> Expenses (MTD)
-              </span>
-              <i data-lucide="trending-down" class="icon-16"></i>
-            </div>
-            <div class="row gap-12 mt-12">
-              <div id="d2" class="conic"></div>
-              <div>
-                <div class="value-xl">€ 18,900</div>
-                <div class="muted xs">Incl. cleaning, fees, supplies</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="net" class="card net">
-            <div class="row space-between small">
-              <span class="row gap-8 semibold">
-                <i data-lucide="coins" class="icon-16"></i> Net revenue
-              </span>
-              <span id="delta" class="row gap-6 xs"><i data-lucide="trending-up" class="icon-12"></i> +12%</span>
-            </div>
-            <div class="grid-2 mt-8">
-              <div>
-                <div class="value-2xl">€ 29,300</div>
-                <div class="muted xs">Month to date</div>
-              </div>
-              <div class="bars-wrap">
-                <div id="bars" class="bars"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Analytics (Revenue Overview) -->
+      <!-- Analytics (Dashboard KPIs) -->
       <section id="analytics" class="card">
-        <div class="row space-between">
+        <div class="row space-between align-center">
           <div>
             <h3 class="h3">Analytics</h3>
-            <div class="muted">Revenue Overview</div>
+            <div class="muted">Dashboard KPIs</div>
           </div>
+          <a href="/analytics" class="ghost-btn ghost-btn--primary" style="padding:6px 10px; text-decoration:none; font-size:12px; display:inline-flex; width:auto; margin-left:auto;">See full analytics overview</a>
         </div>
 
-        <!-- KPI cards fixed periods -->
-        <div class="grid-4 mt-12">
+        <div class="grid-3 mt-12" style="gap:1rem;">
           <div class="card card-white">
-            <div class="muted small">Today</div>
-            <div id="kpiToday" class="value-2xl">—</div>
+            <div class="muted small">Guests staying</div>
+            <div id="dashboardGuestsStaying" class="value-2xl">—</div>
           </div>
           <div class="card card-white">
-            <div class="muted small">This month</div>
-            <div id="kpiThisMonth" class="value-2xl">—</div>
+            <div class="muted small">Check-ins today</div>
+            <div id="dashboardCheckInsToday" class="value-2xl">—</div>
           </div>
           <div class="card card-white">
-            <div class="muted small">Last month</div>
-            <div id="kpiLastMonth" class="value-2xl">—</div>
+            <div class="muted small">Check-outs today</div>
+            <div id="dashboardCheckOutsToday" class="value-2xl">—</div>
           </div>
           <div class="card card-white">
-            <div class="muted small">Year-to-date</div>
-            <div id="kpiYTD" class="value-2xl">—</div>
-          </div>
-        </div>
-
-        <!-- Filters -->
-        <div class="analytics-filters" style="margin-top:16px;">
-          <div class="row wrap gap-12">
-            <div>
-              <label class="small muted">Date preset</label><br>
-              <select id="analyticsPreset" class="ng-input" style="min-width:140px;">
-                <option value="thisMonth">This month</option>
-                <option value="lastMonth">Last month</option>
-                <option value="ytd">Year-to-date</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
-            <div id="analyticsCustomDates" class="row gap-8" style="display:none;">
-              <div>
-                <label class="small muted">From</label><br>
-                <input type="date" id="analyticsFrom" class="ng-input" />
-              </div>
-              <div>
-                <label class="small muted">To</label><br>
-                <input type="date" id="analyticsTo" class="ng-input" />
-              </div>
-            </div>
-            <div>
-              <label class="small muted">Unit</label><br>
-              <select id="analyticsUnit" class="ng-input" style="min-width:140px;">
-                <option value="">All units</option>
-              </select>
-            </div>
-            <div>
-              <label class="small muted">Platform</label><br>
-              <select id="analyticsPlatform" class="ng-input" style="min-width:140px;">
-                <option value="All">All</option>
-                <option value="Airbnb">Airbnb</option>
-                <option value="Booking.com">Booking.com</option>
-                <option value="Agoda">Agoda</option>
-                <option value="Direct">Direct</option>
-              </select>
-            </div>
-            <div class="row gap-8 align-end" style="align-self:flex-end;">
-              <button id="analyticsApply" class="ghost-btn ghost-btn--primary" style="min-width:140px; height:42px; background:rgba(16,185,129,0.16); border-color:rgba(16,185,129,0.55);">Apply</button>
-              <button id="analyticsReset" class="ghost-btn" style="min-width:140px; height:42px;">Reset</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Filtered metrics -->
-        <div class="grid-5 mt-12">
-          <div class="card card-white">
-            <div class="muted small">Filtered total revenue</div>
-            <div id="filteredTotalRevenue" class="value-2xl">—</div>
+            <div class="muted small">Occupancy (MTD)</div>
+            <div id="dashboardOccupancyMonth" class="value-2xl">—</div>
           </div>
           <div class="card card-white">
-            <div class="muted small">Bookings</div>
-            <div id="filteredBookingsCount" class="value-2xl">—</div>
+            <div class="muted small">Revenue (MTD)</div>
+            <div id="dashboardRevenueMonth" class="value-2xl">—</div>
           </div>
           <div class="card card-white">
-            <div class="muted small">Booked nights</div>
-            <div id="filteredBookedNights" class="value-2xl">—</div>
-          </div>
-          <div class="card card-white">
-            <div class="muted small">Avg booking value</div>
-            <div id="filteredAvgBookingValue" class="value-2xl">—</div>
-          </div>
-          <div class="card card-white">
-            <div class="muted small">Average daily rate</div>
-            <div id="filteredADR" class="value-2xl">—</div>
-          </div>
-        </div>
-        <div class="muted small" id="filteredSummary" style="margin-top:6px;">Filtered by: —</div>
-
-        <!-- Breakdown tables -->
-        <div class="grid-2 mt-12">
-          <div class="card card-white">
-            <div class="muted small">Revenue by platform</div>
-            <div id="revenueByPlatformTable" class="small" style="margin-top:8px;">—</div>
-          </div>
-          <div class="card card-white">
-            <div class="muted small">Revenue by unit</div>
-            <div id="revenueByUnitTable" class="small" style="margin-top:8px;">—</div>
+            <div class="muted small">Upcoming bookings</div>
+            <div id="dashboardUpcomingBookings" class="value-2xl">—</div>
           </div>
         </div>
       </section>
@@ -1185,19 +1051,19 @@ if (spanStart !== null && spanEnd !== null) {
     if (prev) prev.addEventListener('click', () => {
       miniCalOffset--;
       renderMiniCalendar();
-      loadRevenueDashboard();
+      loadDashboardKpis();
     });
 
     if (next) next.addEventListener('click', () => {
       miniCalOffset++;
       renderMiniCalendar();
-      loadRevenueDashboard();
+      loadDashboardKpis();
     });
 
     if (todayBtn) todayBtn.addEventListener('click', () => {
       miniCalOffset = 0;
       renderMiniCalendar();
-      loadRevenueDashboard();
+      loadDashboardKpis();
     });
   }
 
@@ -1214,11 +1080,11 @@ if (spanStart !== null && spanEnd !== null) {
     const c=document.getElementById('ctaB'); c.style.backgroundColor=t.accent; c.style.borderColor=t.borderAlpha;
     const guest=document.getElementById('guest'); guest.style.borderColor=t.borderAlpha; guest.style.backgroundColor=t.tint;
     document.getElementById('calendar').style.borderColor=t.border;
-    const net=document.getElementById('net'); net.style.borderColor=t.border; net.style.backgroundColor=t.accent50;
+    const net=document.getElementById('net'); if(net){ net.style.borderColor=t.border; net.style.backgroundColor=t.accent50; }
     document.getElementById('progress').style.backgroundColor=t.accent;
-    donut(document.getElementById('d1'),72,t.accent);
-    donut(document.getElementById('d2'),38,'#EF4444');
-    minibars(document.getElementById('bars'),[3200,2100,0,4312,900,1200,2600,1800],4500,3,t.accent);
+    const d1=document.getElementById('d1'); if(d1) donut(d1,72,t.accent);
+    const d2=document.getElementById('d2'); if(d2) donut(d2,38,'#EF4444');
+    const barsEl=document.getElementById('bars'); if(barsEl) minibars(barsEl,[3200,2100,0,4312,900,1200,2600,1800],4500,3,t.accent);
     document.querySelectorAll('[data-menu]').forEach((el,idx)=>{ if(idx===0){ el.classList.add('menu-active'); } else { el.classList.remove('menu-active'); } });
     lucide.createIcons();
   }
@@ -1610,6 +1476,31 @@ function setAccessPickedState(isPicked, persist=true){
         const rows = byUnit.map(u=>`<div>Unit ${u.unitId ?? 'N/A'} — ${Number(u.revenue||0).toLocaleString()} (${u.bookings} bookings)</div>`).join('');
         unitEl.innerHTML = rows;
       } else unitEl.textContent = '—';
+    }
+  }
+
+  // Dashboard KPIs (operational)
+  const formatCurrency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'PHP', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(Number(value || 0));
+
+  function renderDashboardKpis(data = {}) {
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setText('dashboardGuestsStaying', (data.guestsStaying || 0).toLocaleString());
+    setText('dashboardCheckInsToday', (data.checkInsToday || 0).toLocaleString());
+    setText('dashboardCheckOutsToday', (data.checkOutsToday || 0).toLocaleString());
+    setText('dashboardOccupancyMonth', `${Math.round(data.occupancyThisMonth || 0)}%`);
+    setText('dashboardRevenueMonth', formatCurrency(data.revenueThisMonth || 0));
+    setText('dashboardUpcomingBookings', (data.upcomingBookings || 0).toLocaleString());
+  }
+
+  async function loadDashboardKpis() {
+    try {
+      const res = await fetch('/api/dashboard-kpis');
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      renderDashboardKpis(data || {});
+    } catch (e) {
+      console.warn('Failed to load dashboard KPIs', e);
+      renderDashboardKpis({});
     }
   }
 
@@ -2199,7 +2090,7 @@ try {
     wireAddGuest();
     wireCommentButtons();
     wireSupportChat();
-    loadRevenueDashboard();
+    loadDashboardKpis();
     refreshSupportUnread();
     setInterval(refreshSupportUnread, 10000);
     renderProgress();
@@ -2229,26 +2120,7 @@ try {
       });
     }
 
-    const presetSel = document.getElementById('analyticsPreset');
-    if (presetSel) {
-      presetSel.addEventListener('change', ()=>{
-        applyPresetToDates(presetSel.value);
-      });
-      applyPresetToDates(presetSel.value);
-    }
-    const applyBtn = document.getElementById('analyticsApply');
-    const resetBtn = document.getElementById('analyticsReset');
-    if (applyBtn) applyBtn.addEventListener('click', (e)=>{ e.preventDefault(); loadRevenueDashboard(); });
-    if (resetBtn) resetBtn.addEventListener('click', (e)=>{
-      e.preventDefault();
-      if (presetSel) presetSel.value = 'thisMonth';
-      applyPresetToDates('thisMonth');
-      const unitSel = document.getElementById('analyticsUnit');
-      const platSel = document.getElementById('analyticsPlatform');
-      if (unitSel) unitSel.value = '';
-      if (platSel) platSel.value = 'All';
-      loadRevenueDashboard();
-    });
+    // Old revenue filter controls removed; KPI load happens automatically
 
     // Unit modal actions
     const unitModal = document.getElementById('unitModal');

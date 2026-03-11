@@ -2806,6 +2806,119 @@ app.get('/account-info', requireAnyUser, (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'account-info.html'));
 });
 
+// Dashboard KPI summary
+app.get('/api/dashboard-kpis', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  try {
+    const today = new Date();
+    const monthStart = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().slice(0, 10);
+    const monthEnd = new Date(Date.UTC(today.getFullYear(), today.getMonth() + 1, 0)).toISOString().slice(0, 10);
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+    const sql = `
+      WITH future_bookings AS (
+        SELECT *
+        FROM bookings
+        WHERE workspace_id = $1
+          AND total_price IS NOT NULL
+      ),
+      month_overlap AS (
+        SELECT
+          GREATEST(0,
+            LEAST(check_out::date - 1, $3::date) - GREATEST(check_in::date, $2::date) + 1
+          ) AS nights_in_month
+        FROM future_bookings
+        WHERE check_in::date <= $3::date
+          AND check_out::date >= $2::date
+      )
+      SELECT
+        SUM(CASE WHEN CURRENT_DATE BETWEEN check_in::date AND check_out::date THEN 1 ELSE 0 END) AS guests_staying,
+        SUM(CASE WHEN check_in::date = CURRENT_DATE THEN 1 ELSE 0 END) AS checkins_today,
+        SUM(CASE WHEN check_out::date = CURRENT_DATE THEN 1 ELSE 0 END) AS checkouts_today,
+        COALESCE((SELECT SUM(nights_in_month) FROM month_overlap),0) AS nights_this_month,
+        COALESCE(SUM(CASE WHEN date_trunc('month', check_in::date) = date_trunc('month', CURRENT_DATE) THEN total_price ELSE 0 END),0) AS revenue_this_month,
+        SUM(CASE WHEN check_in::date > CURRENT_DATE THEN 1 ELSE 0 END) AS upcoming_bookings
+      FROM future_bookings
+    `;
+
+    const trendQ = `
+      SELECT to_char(check_in::date, 'YYYY-MM') AS month,
+             COALESCE(SUM(total_price),0) AS revenue,
+             COUNT(*) AS bookings
+      FROM bookings
+      WHERE workspace_id = $1
+        AND total_price IS NOT NULL
+        AND check_in::date >= CURRENT_DATE
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `;
+
+    const byUnitQ = `
+      SELECT b.unit_id,
+             COALESCE(SUM(b.total_price),0) AS revenue,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(GREATEST(0, b.check_out::date - b.check_in::date)),0) AS nights,
+             u.name AS unit_name
+      FROM bookings b
+      LEFT JOIN units u ON u.id = b.unit_id AND u.workspace_id = b.workspace_id
+      WHERE b.workspace_id = $1
+        AND b.total_price IS NOT NULL
+        AND b.check_in::date >= CURRENT_DATE
+      GROUP BY b.unit_id, u.name
+      ORDER BY revenue DESC
+    `;
+
+    const pipelineQ = `
+      SELECT
+        SUM(CASE WHEN CURRENT_DATE BETWEEN check_in::date AND check_out::date THEN 1 ELSE 0 END) AS checked_in,
+        SUM(CASE WHEN check_in::date > CURRENT_DATE THEN 1 ELSE 0 END) AS upcoming
+      FROM bookings
+      WHERE workspace_id = $1
+        AND total_price IS NOT NULL
+    `;
+
+    const [[summaryRow], trendRes, byUnitRes, [pipeRow]] = await Promise.all([
+      pool.query(sql, [workspaceId, monthStart, monthEnd]).then(r => r.rows),
+      pool.query(trendQ, [workspaceId]),
+      pool.query(byUnitQ, [workspaceId]),
+      pool.query(pipelineQ, [workspaceId]).then(r => r.rows),
+    ]);
+
+    const nightsThisMonth = Number(summaryRow.nights_this_month || 0);
+    const occupancyThisMonth = daysInMonth > 0 ? (nightsThisMonth / daysInMonth) * 100 : 0;
+
+    return res.json({
+      guestsStaying: Number(summaryRow.guests_staying || 0),
+      checkInsToday: Number(summaryRow.checkins_today || 0),
+      checkOutsToday: Number(summaryRow.checkouts_today || 0),
+      occupancyThisMonth,
+      revenueThisMonth: Number(summaryRow.revenue_this_month || 0),
+      upcomingBookings: Number(summaryRow.upcoming_bookings || 0),
+      trend: trendRes.rows.map(r => ({
+        month: r.month,
+        revenue: Number(r.revenue || 0),
+        bookings: Number(r.bookings || 0),
+      })),
+      byUnit: byUnitRes.rows.map(r => ({
+        unitName: r.unit_name || (r.unit_id != null ? `Unit ${r.unit_id}` : 'General'),
+        revenue: Number(r.revenue || 0),
+        bookings: Number(r.bookings || 0),
+        bookedNights: Number(r.nights || 0),
+      })),
+      pipeline: {
+        checkedInCount: Number(pipeRow?.checked_in || 0),
+        upcomingCount: Number(pipeRow?.upcoming || 0),
+      },
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('dashboard kpis failed', e);
+    return res.status(500).json({ error: 'failed to load dashboard kpis' });
+  }
+});
+
 // Analytics API - Occupancy tab
 app.get('/api/analytics/occupancy-tab', requireAnyUser, async (req, res) => {
   const workspaceId = req.session ? req.session.workspaceId : null;
