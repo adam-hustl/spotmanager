@@ -102,26 +102,73 @@
     .btn:hover { background: var(--accent-dark); }
     .links { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 14px; }
     .links a { color: var(--accent-dark); text-decoration: none; font-weight: 600; }
-    .fb-btn {
+    .links a:hover { text-decoration: underline; }
+    .helper { margin-top: 10px; font-size: 13px; color: var(--muted); }
+    .social-login-wrap {
+      margin-top: 18px;
+      margin-bottom: 18px;
+    }
+
+    .social-divider {
+      position: relative;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .social-divider::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      border-top: 1px solid #e5e7eb;
+      transform: translateY(-50%);
+    }
+
+    .social-divider span {
+      position: relative;
+      display: inline-block;
+      padding: 0 12px;
+      background: #fff;
+      color: #6b7280;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .facebook-login-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 100%;
-      gap: 8px;
-      margin-top: 6px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #1877f2;
-      color: #fff !important;
-      font-weight: 700;
+      gap: 0;
+
+      width: auto;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 10px;
+
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+
+      background: #ffffff;
+      color: #111827;
       text-decoration: none;
-      box-shadow: 0 8px 18px rgba(24, 119, 242, 0.25);
+      font-weight: 600;
+
+      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
     }
-    .fb-btn:hover { background: #145dbf; }
-    .fb-btn svg { width: 18px; height: 18px; }
-    .fb-btn { color: #fff; }
-    .links a:hover { text-decoration: underline; }
-    .helper { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+    .facebook-login-btn:hover {
+      background: #f9fafb;
+      border-color: #cbd5e1;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .fb-icon {
+      width: 18px;
+      height: 18px;
+      color: #1877f2;
+    }
     @media (max-width: 900px) {
       body { grid-template-columns: 1fr; }
       .hero { display: none; }
@@ -142,13 +189,6 @@
           </div>
         </div>
 
-        <div class="links" style="margin-top:8px; display:block;">
-          <a href="/auth/facebook" class="fb-btn" aria-label="Continue with Facebook">
-            <svg viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M22.675 0H1.325C.593 0 0 .6 0 1.341v21.318C0 23.4.593 24 1.325 24h11.49v-9.294H9.691v-3.622h3.124V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.794.143v3.24l-1.918.001c-1.504 0-1.796.716-1.796 1.767v2.319h3.587l-.467 3.622h-3.12V24h6.116C23.407 24 24 23.4 24 22.659V1.341C24 .6 23.407 0 22.675 0z"/></svg>
-            Continue with Facebook
-          </a>
-        </div>
-
       <form action="/login" method="POST" class="login-form">
         <div id="loginError" class="muted" style="color:#b91c1c; display:none;">Login failed. Please try again.</div>
         <div>
@@ -163,6 +203,17 @@
         <div class="links">
           <a href="/forgot-password">Forgot password?</a>
           <a href="#" id="resendLink" style="display:none;">Resend verification</a>
+        </div>
+        <div class="social-login-wrap">
+          <div class="social-divider">
+            <span>Or continue with</span>
+          </div>
+
+          <a href="/auth/facebook" class="facebook-login-btn" aria-label="Continue with Facebook">
+            <svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.79c0-2.5 1.49-3.88 3.77-3.88 1.09 0 2.23.19 2.23.19v2.45h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.77l-.44 2.89h-2.33v6.99A10 10 0 0 0 22 12z"/>
+            </svg>
+          </a>
         </div>
         <div class="links">
           <a href="/signup">Create account</a>
