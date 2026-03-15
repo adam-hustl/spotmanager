@@ -61,7 +61,11 @@
   <div class="nav"><a href="/dashboard-new">← Back to dashboard</a></div>
   <div class="card">
     <h1>Unit settings</h1>
-    <p class="muted">Edit the default unit details and upload a signature.</p>
+    <p class="muted">Edit per-unit details and upload a signature.</p>
+
+    <label>Choose unit
+      <select id="unitSelect" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; font-size:14px; margin-top:4px;"></select>
+    </label>
 
     <form id="unitForm">
       <label>Unit name (optional)
@@ -112,9 +116,21 @@
 
   <script>
     let currentUnitId = null;
+    let unitsList = [];
 
-    async function fetchUnit() {
-      const res = await fetch('/api/unit/default');
+    function getQueryUnitId(){
+      const params = new URLSearchParams(window.location.search || '');
+      return params.get('unitId');
+    }
+
+    async function fetchUnits() {
+      const res = await fetch('/api/units');
+      if (!res.ok) throw new Error('Failed to load units');
+      return res.json();
+    }
+
+    async function fetchUnit(id) {
+      const res = await fetch(`/api/units/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error('Failed to load unit');
       return res.json();
     }
@@ -123,16 +139,17 @@
       if (!unit) return;
       currentUnitId = unit.id;
       document.getElementById('name').value = unit.name || '';
-      document.getElementById('unit_number').value = unit.unit_number || '';
-      document.getElementById('unit_owner_name').value = unit.unit_owner_name || '';
-      document.getElementById('unit_phone').value = unit.unit_phone || '';
+      document.getElementById('unit_number').value = unit.unitNumber || unit.unit_number || '';
+      document.getElementById('unit_owner_name').value = unit.unitOwnerName || unit.unit_owner_name || '';
+      document.getElementById('unit_phone').value = unit.unitPhone || unit.unit_phone || '';
       renderSignature(unit);
     }
 
     function renderSignature(unit) {
       const wrap = document.getElementById('sigPreview');
       if (!wrap) return;
-      if (unit.signature_file_key && currentUnitId) {
+      const sigKey = unit.signatureFileKey || unit.signature_file_key;
+      if (sigKey && currentUnitId) {
         const cacheBust = Date.now();
         wrap.innerHTML = `<div class="muted">Current signature:</div><img src="/signature/${currentUnitId}?t=${cacheBust}" alt="Signature" />`;
       } else {
@@ -142,15 +159,16 @@
 
     async function saveUnit(e) {
       e.preventDefault();
+      if (!currentUnitId) return;
       const payload = {
         name: document.getElementById('name').value,
-        unit_number: document.getElementById('unit_number').value,
-        unit_owner_name: document.getElementById('unit_owner_name').value,
-        unit_phone: document.getElementById('unit_phone').value,
+        unitNumber: document.getElementById('unit_number').value,
+        unitOwnerName: document.getElementById('unit_owner_name').value,
+        unitPhone: document.getElementById('unit_phone').value,
       };
       const status = document.getElementById('saveStatus');
       status.textContent = 'Saving...';
-      const res = await fetch('/api/unit/default', {
+      const res = await fetch(`/api/units/${encodeURIComponent(currentUnitId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -169,6 +187,10 @@
       const input = document.getElementById('signatureInput');
       const file = input.files && input.files[0];
       const status = document.getElementById('sigStatus');
+      if (!currentUnitId) {
+        status.textContent = 'Select a unit first';
+        return;
+      }
       if (!file) {
         status.textContent = 'Select a file first';
         return;
@@ -176,7 +198,7 @@
       status.textContent = 'Uploading...';
       const form = new FormData();
       form.append('signature', file);
-      const res = await fetch('/api/unit/default/signature', { method: 'POST', body: form });
+      const res = await fetch(`/api/units/${encodeURIComponent(currentUnitId)}/signature`, { method: 'POST', body: form });
       if (!res.ok) {
         status.textContent = 'Upload failed';
         return;
@@ -243,12 +265,13 @@
       const saveBtn = document.getElementById('saveDrawing');
       if (saveBtn) saveBtn.addEventListener('click', ()=> {
         const status = document.getElementById('sigStatus');
+        if (!currentUnitId) { status.textContent='Select a unit first'; return; }
         status.textContent = 'Uploading...';
         canvas.toBlob(async (blob)=>{
           if (!blob) { status.textContent='Upload failed'; return; }
           const form = new FormData();
           form.append('signature', blob, 'signature.png');
-          const res = await fetch('/api/unit/default/signature', { method:'POST', body: form });
+          const res = await fetch(`/api/units/${encodeURIComponent(currentUnitId)}/signature`, { method:'POST', body: form });
           if (!res.ok) { status.textContent='Upload failed'; return; }
           const data = await res.json().catch(()=>({}));
           status.textContent='Uploaded!';
@@ -286,15 +309,54 @@
     document.getElementById('uploadSignatureBtn').addEventListener('click', uploadSignature);
     wireSignatureModes();
 
-    (async () => {
+    async function populateUnitSelect() {
+      const select = document.getElementById('unitSelect');
+      if (!select) return;
+      select.innerHTML = '';
+      unitsList.forEach((u)=>{
+        const opt = document.createElement('option');
+        const label = `${u.buildingName || 'Building'} — ${u.unitNumber || u.displayName || u.unit_number || ''}`;
+        opt.value = u.id;
+        opt.textContent = label;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadInitialUnit() {
       try {
-        const unit = await fetchUnit();
+        unitsList = await fetchUnits();
+        if (!Array.isArray(unitsList) || !unitsList.length) {
+          document.getElementById('saveStatus').textContent = 'No units found';
+          return;
+        }
+        populateUnitSelect();
+        const select = document.getElementById('unitSelect');
+        const queryUnitId = getQueryUnitId();
+        if (select) {
+          const hasQuery = queryUnitId && unitsList.some(u=>String(u.id)===String(queryUnitId));
+          select.value = hasQuery ? queryUnitId : String(unitsList[0].id);
+          select.addEventListener('change', async ()=>{
+            const val = select.value;
+            if (!val) return;
+            try {
+              const unit = await fetchUnit(val);
+              renderUnit(unit);
+            } catch (e) {
+              document.getElementById('saveStatus').textContent = 'Failed to load unit';
+              console.error(e);
+            }
+          });
+        }
+        const initialId = select?.value || queryUnitId || unitsList[0].id;
+        const unit = await fetchUnit(initialId);
         renderUnit(unit);
       } catch (e) {
-        document.getElementById('saveStatus').textContent = 'Failed to load unit';
+        document.getElementById('saveStatus').textContent = 'Failed to load units';
         console.error(e);
       }
-    })();
+    }
+
+    loadInitialUnit();
   </script>
 </body>
 </html>

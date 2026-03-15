@@ -128,6 +128,9 @@
       <option value="Agoda">Agoda</option>
       <option value="Direct">Direct</option>
     </select>
+    <select name="unitId" id="newBookingUnit" class="ng-input">
+      <option value="">Select unit</option>
+    </select>
 
     <input
       type="date"
@@ -177,6 +180,9 @@
       <option value="Agoda">Agoda</option>
       <option value="Direct">Direct</option>
     </select>
+    <select name="unitId" id="editBookingUnit" class="ng-input">
+      <option value="">Select unit</option>
+    </select>
     <input type="date" name="checkIn" class="ng-input" required />
     <input type="date" name="checkOut" class="ng-input" required />
     <input type="number" name="people" class="ng-input ng-people" min="1" placeholder="# guests" />
@@ -206,7 +212,12 @@
             <button id="calNext" class="chip-btn" type="button">▶</button>
 
           </div>
-          <button class="chip-btn outlined">Settings</button>
+          <div class="row gap-8 align-center">
+            <select id="dashboardUnitFilter" class="chip-btn outlined" style="padding:6px 10px; min-width: 200px;">
+              <option value="all">All units</option>
+            </select>
+            <button class="chip-btn outlined">Settings</button>
+          </div>
         </div>
         <div class="mt-12"><h2 id="monthTitle" class="h2">Feb 2025</h2></div>
         <div id="calendarGrid" class="calendar-grid">
@@ -251,6 +262,61 @@
             <div class="muted small">Upcoming bookings</div>
             <div id="dashboardUpcomingBookings" class="value-2xl">—</div>
           </div>
+        </div>
+      </section>
+
+      <!-- Buildings setup (temporary) -->
+      <section class="card" id="buildingsSetup">
+        <div class="row space-between align-center">
+          <div>
+            <h3 class="h3">Buildings setup</h3>
+            <div class="muted">Add a building and choose its workflow steps</div>
+          </div>
+        </div>
+        <div class="mt-12">
+          <label class="small muted">Building name</label><br>
+          <input id="buildingName" class="ng-input" type="text" placeholder="e.g. Tower A" style="max-width:320px;" />
+        </div>
+        <div class="mt-12">
+          <div class="muted small" style="margin-bottom:8px;">Workflow steps</div>
+          <div class="grid-3" style="gap:10px;">
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="upload_id" checked /> Upload ID</label>
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="send_endorsement_email" checked /> Send endorsement email</label>
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="payment_receipt" checked /> payment receipt</label>
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="access_card_paid" checked /> Access card is paid</label>
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="access_card_picked_up" checked /> Access card picked up</label>
+            <label class="row gap-8 align-center small"><input type="checkbox" class="building-step" value="cleaning_status" checked /> Cleaning status</label>
+          </div>
+        </div>
+        <div class="row gap-8 mt-12">
+          <button id="buildingSaveBtn" class="ghost-btn ghost-btn--primary" type="button">Save building</button>
+          <div id="buildingSaveStatus" class="muted small"></div>
+        </div>
+      </section>
+
+      <!-- Units setup (temporary) -->
+      <section class="card" id="unitsSetup">
+        <div class="row space-between align-center">
+          <div>
+            <h3 class="h3">Add unit</h3>
+            <div class="muted">Assign a unit to an existing building</div>
+          </div>
+        </div>
+        <div class="grid-3 mt-12" style="gap:12px;">
+          <div>
+            <label class="small muted">Unit number</label><br>
+            <input id="unitNumberInput" class="ng-input" type="text" placeholder="e.g. 1203" />
+          </div>
+          <div>
+            <label class="small muted">Building</label><br>
+            <select id="unitBuildingSelect" class="ng-input">
+              <option value="">Select building</option>
+            </select>
+          </div>
+        </div>
+        <div class="row gap-8 mt-12">
+          <button id="unitSaveBtn" class="ghost-btn ghost-btn--primary" type="button">Save unit</button>
+          <div id="unitSaveStatus" class="muted small"></div>
         </div>
       </section>
     </main>
@@ -385,15 +451,18 @@
   <script>
   // ---------- THEME -----------
   const THEMES={emerald:{accent:"#10B981",accent50:"#ECFDF5",border:"#A7F3D0",bgFrom:"#D1FAE5",bgMid:"#ECFDF5",tint:"rgba(16,185,129,0.12)",ring:"rgba(16,185,129,0.35)",borderAlpha:"rgba(16,185,129,0.40)"}};
-  const steps=[
-    {label:"Upload ID",icon:"upload"},
-    {label:"Send endorsement email",icon:"mail"},
-    {label:"payment receipt",icon:"stamp"},
-    { label: "Access card is paid",    icon: "credit-card" },
-    { label: "Access card picked up",  icon: "id-card" },
-    { label: "Cleaning status", icon:"brush" }
+  const defaultSteps=[
+    {label:"Upload ID",icon:"upload",stepKey:"upload_id"},
+    {label:"Send endorsement email",icon:"mail",stepKey:"send_endorsement_email"},
+    {label:"payment receipt",icon:"stamp",stepKey:"payment_receipt"},
+    { label: "Access card is paid",    icon: "credit-card", stepKey:"access_card_paid" },
+    { label: "Access card picked up",  icon: "id-card", stepKey:"access_card_picked_up" },
+    { label: "Cleaning status", icon:"brush", stepKey:"cleaning_status" }
   ];
-  let theme="emerald",grad=true,comp=new Array(steps.length).fill(false),cur=0;
+  let currentWorkflowSteps = [...defaultSteps];
+  let theme="emerald",grad=true,comp=new Array(defaultSteps.length).fill(false),cur=0;
+  let dashboardSelectedUnitId = 'all';
+  let dashboardUnits = [];
   let currentBookingId = null; // id of the booking shown in the top header
   let currentBookingData = null; // full booking object currently selected
   let defaultBookingData = null; // next upcoming booking used for "Next guest"
@@ -456,10 +525,128 @@
   }
   console.log('saveChecklist defined');
   function getNextBooking(){
-    const pool = (latestBookings && latestBookings.length) ? latestBookings : (calendarBookings || []);
+    const base = (latestBookings && latestBookings.length) ? latestBookings : (calendarBookings || []);
+    const pool = getFilteredBookings(base);
     return pickCurrent(pool);
   }
   const getBookingId = (b)=> b && (b.timestamp || b.id);
+  function getFilteredBookings(bookings) {
+    const list = Array.isArray(bookings) ? bookings : [];
+    if (dashboardSelectedUnitId === 'all') return list;
+    return list.filter((b) => String(b.unitId || b.unit_id || '') === String(dashboardSelectedUnitId));
+  }
+  function groupBookingsByUnit(bookings, units) {
+    const map = new Map();
+    (units || []).forEach((u) => {
+      map.set(String(u.id), {
+        unitId: u.id,
+        label: `${u.buildingName || 'Building'} — ${u.unitNumber || 'Unit'}`,
+        bookings: []
+      });
+    });
+    (bookings || []).forEach((b) => {
+      const key = String(b.unitId || b.unit_id || '');
+      if (!map.has(key)) {
+        map.set(key, {
+          unitId: key,
+          label: b.buildingName ? `${b.buildingName} — ${b.unitNumber || 'Unit'}` : (b.unitNumber || 'Unit'),
+          bookings: []
+        });
+      }
+      map.get(key).bookings.push(b);
+    });
+    return Array.from(map.values());
+  }
+  async function loadDashboardUnits() {
+    try {
+      const res = await fetch('/api/units');
+      if (!res.ok) throw new Error('Failed to load units');
+      const rows = await res.json();
+      dashboardUnits = Array.isArray(rows) ? rows : [];
+
+      const select = document.getElementById('dashboardUnitFilter');
+      if (!select) return;
+
+      select.innerHTML = '';
+
+      const allOpt = document.createElement('option');
+      allOpt.value = 'all';
+      allOpt.textContent = 'All units';
+      select.appendChild(allOpt);
+
+      dashboardUnits.forEach((u) => {
+        const opt = document.createElement('option');
+        opt.value = String(u.id);
+        opt.textContent = `${u.buildingName || 'Building'} — ${u.unitNumber || 'Unit'}`;
+        select.appendChild(opt);
+      });
+
+      select.value = dashboardSelectedUnitId;
+    } catch (err) {
+      console.error('Failed to load dashboard units', err);
+    }
+  }
+  async function loadWorkflowForBooking(booking) {
+    try {
+      if (!booking || !booking.buildingId) {
+        currentWorkflowSteps = [...defaultSteps];
+        stepsRow();
+        if (typeof window.bindStepActions === 'function') {
+          window.bindStepActions();
+        }
+        recomputeCompletion(currentBookingData);
+        renderProgress();
+        return;
+      }
+
+      const res = await fetch(`/api/buildings/${booking.buildingId}/workflow`);
+      if (!res.ok) throw new Error('Failed to load workflow');
+
+      const rows = await res.json();
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        currentWorkflowSteps = [...defaultSteps];
+        stepsRow();
+        if (typeof window.bindStepActions === 'function') {
+          window.bindStepActions();
+        }
+        recomputeCompletion(currentBookingData);
+        renderProgress();
+        return;
+      }
+
+      const iconMap = {
+        upload_id: 'upload',
+        send_endorsement_email: 'mail',
+        payment_receipt: 'stamp',
+        access_card_paid: 'credit-card',
+        access_card_picked_up: 'id-card',
+        cleaning_status: 'brush'
+      };
+
+      currentWorkflowSteps = rows.map((row) => ({
+        label: row.stepLabel,
+        stepKey: row.stepKey,
+        icon: iconMap[row.stepKey] || 'check-circle'
+      }));
+
+      stepsRow();
+      if (typeof window.bindStepActions === 'function') {
+        window.bindStepActions();
+      }
+      recomputeCompletion(currentBookingData);
+      renderProgress();
+    } catch (err) {
+      console.error('Failed to load workflow for booking', err);
+      currentWorkflowSteps = [...defaultSteps];
+      stepsRow();
+      if (typeof window.bindStepActions === 'function') {
+        window.bindStepActions();
+      }
+      recomputeCompletion(currentBookingData);
+      renderProgress();
+    }
+  }
   function isCleanFlag(val){
     return val===true || val==='true' || val===1 || val==='1';
   }
@@ -511,6 +698,25 @@
       }
     });
   }
+  function isStepComplete(stepKey, booking){
+    const checklist = booking?.checklist || {};
+    if (stepKey === 'upload_id') return checklist.step1 === true;
+    if (stepKey === 'send_endorsement_email') return booking?.emailSent === true;
+    if (stepKey === 'payment_receipt') return checklist.step3 === true;
+    if (stepKey === 'access_card_paid') return checklist.step4 === true;
+    if (stepKey === 'access_card_picked_up') return checklist.step5 === true;
+    if (stepKey === 'cleaning_status') return booking?.cleaned === true;
+    return false;
+  }
+  function getStepIndex(stepKey){
+    return currentWorkflowSteps.findIndex((s)=>s.stepKey===stepKey);
+  }
+  function recomputeCompletion(booking){
+    if (!currentWorkflowSteps || !currentWorkflowSteps.length) {
+      currentWorkflowSteps = [...defaultSteps];
+    }
+    comp = currentWorkflowSteps.map((step)=>isStepComplete(step.stepKey, booking));
+  }
 function bookingCompleteFromData(b){
     if(!b) return false;
     const idStr = String(b.timestamp || b.id || '');
@@ -551,7 +757,7 @@ function updateCheckinCell(b){
 
   function refreshAllCheckins(){
     if (!Array.isArray(calendarBookings)) return;
-    calendarBookings.forEach((b)=>updateCheckinCell(b));
+    getFilteredBookings(calendarBookings).forEach((b)=>updateCheckinCell(b));
   }
   function syncCalendarBooking(updated){
     if (!Array.isArray(calendarBookings) || !updated) return;
@@ -580,11 +786,11 @@ function updateCheckinCell(b){
       wrap.appendChild(b);
     });
   }
-  function menu(){const items=[["home","Home"],["calendar-days","Bookings"],["bar-chart-3","Analytics","/analytics"],["message-square","Cleaners Dashboard"],["settings","Profile"]];const wrap=document.getElementById('menu');wrap.innerHTML='';items.forEach((it,i)=>{const b=document.createElement('button');b.className='menu-btn';b.dataset.menu=i===0; b.innerHTML=`<i data-lucide="${it[0]}" class="icon-16"></i><span class="semibold">${it[1]}</span>`;if(it[2]){b.type='button';b.addEventListener('click',()=>{window.location.href=it[2];});}wrap.appendChild(b);});}
+  function menu(){const items=[["home","Home"],["calendar-days","Bookings"],["bar-chart-3","Analytics","#analytics"],["message-square","Cleaners Dashboard"],["settings","Profile"]];const wrap=document.getElementById('menu');wrap.innerHTML='';items.forEach((it,i)=>{const b=document.createElement('button');b.className='menu-btn';b.dataset.menu=i===0; b.innerHTML=`<i data-lucide="${it[0]}" class="icon-16"></i><span class="semibold">${it[1]}</span>`;if(it[2]){b.type='button';b.addEventListener('click',(e)=>{e.preventDefault();const href=it[2];if(href.startsWith('#')){const target=document.querySelector(href);if(target){target.scrollIntoView({behavior:'smooth', block:'start'});} else {window.location.href=href;}}else{window.location.href=href;}});}wrap.appendChild(b);});}
   function stepsRow(){
     const wrap=document.getElementById('steps');
     wrap.innerHTML='';
-    steps.forEach((s,i)=>{
+    currentWorkflowSteps.forEach((s,i)=>{
       const isIdStep = i===0;
       const isEndorseStep = i===1;
       const isReceiptStep = i===2;
@@ -601,7 +807,8 @@ function updateCheckinCell(b){
         : (isCleanStep ? 'Not cleaned' : s.label);
       const btn=document.createElement('button');
       btn.className='step';
-      btn.onclick=()=>{cur=i;renderProgress();stepsRow();};
+      btn.dataset.stepKey = s.stepKey || '';
+      btn.dataset.stepIndex = String(i);
       btn.innerHTML=`<div class="step-circle ${state}"><i data-lucide="${icon}" class="icon-16"></i></div><span class="step-label">${label}</span>`;
       wrap.appendChild(btn);
     });
@@ -789,7 +996,7 @@ let supportChatPoll = null;
 
   
 
- function renderMiniCalendar() {
+function renderMiniCalendar() {
   const target = new Date(
     miniCalBase.getFullYear(),
     miniCalBase.getMonth() + miniCalOffset,
@@ -813,10 +1020,104 @@ let supportChatPoll = null;
   const grid = document.getElementById('calendarGrid');
   if (!grid) return;
 
-  // Keep the first 7 children (the weekday headings) and remove the rest
-  while (grid.children.length > 7) {
-    grid.removeChild(grid.lastElementChild);
+  // reset grid for this render pass
+  grid.innerHTML = '';
+
+  // All-units lane view
+  if (dashboardSelectedUnitId === 'all') {
+    grid.classList.add('calendar-grid--lanes');
+    const grouped = groupBookingsByUnit(calendarBookings, dashboardUnits);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const visibleStart = new Date(year, month, 1);
+    const visibleEnd = new Date(year, month, daysInMonth);
+
+    // timeline header
+    const header = document.createElement('div');
+    header.className = 'unit-lanes-header';
+    const headerLabel = document.createElement('div');
+    headerLabel.className = 'unit-lanes-header-label';
+    const headerTrack = document.createElement('div');
+    headerTrack.className = 'unit-lanes-header-track';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const isMajor = d === 1 || d === daysInMonth || d % 5 === 0;
+      if (!isMajor) continue;
+      const pos = ((d - 1) / daysInMonth) * 100;
+      const mark = document.createElement('div');
+      mark.className = 'unit-lanes-scale-mark';
+      mark.style.left = `${pos}%`;
+      mark.textContent = d;
+      headerTrack.appendChild(mark);
+    }
+    header.appendChild(headerLabel);
+    header.appendChild(headerTrack);
+
+    const lanesWrap = document.createElement('div');
+    lanesWrap.className = 'unit-lanes';
+    lanesWrap.style.gridColumn = '1 / -1';
+
+    grouped.forEach((unit)=>{
+      const row = document.createElement('div');
+      row.className = 'unit-lane';
+      const label = document.createElement('div');
+      label.className = 'unit-label';
+      label.textContent = unit.label;
+      row.appendChild(label);
+      const track = document.createElement('div');
+      track.className = 'unit-track';
+      // guide lines
+      for (let d = 1; d <= daysInMonth; d++) {
+        const isMajor = d === 1 || d === daysInMonth || d % 5 === 0;
+        if (!isMajor) continue;
+        const pos = ((d - 1) / daysInMonth) * 100;
+        const guide = document.createElement('div');
+        guide.className = 'unit-track-guide';
+        guide.style.left = `${pos}%`;
+        track.appendChild(guide);
+      }
+      unit.bookings.forEach((b)=>{
+        if (!b.checkIn || !b.checkOut) return;
+        const start = new Date(b.checkIn);
+        const end = new Date(b.checkOut);
+        if (isNaN(start) || isNaN(end)) return;
+        // clip to visible month
+        const renderStart = new Date(Math.max(start.getTime(), visibleStart.getTime()));
+        const renderEnd = new Date(Math.min(end.getTime(), visibleEnd.getTime()));
+        if (renderEnd <= renderStart) return; // no overlap
+        const dayStart = renderStart.getDate();
+        const dayEnd = renderEnd.getDate();
+        const left = ((dayStart - 1) / daysInMonth) * 100;
+        const width = ((dayEnd - dayStart + 1) / daysInMonth) * 100;
+        const block = document.createElement('div');
+        block.className = 'unit-block';
+        block.style.left = `${left}%`;
+        block.style.width = `${width}%`;
+        block.title = `${b.guestName || 'Booking'} (${b.checkIn} → ${b.checkOut})`;
+        block.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          fillGuestHeader(b);
+          attachActions(b);
+          toggleEditBooking(false);
+        });
+        track.appendChild(block);
+      });
+      row.appendChild(track);
+      lanesWrap.appendChild(row);
+    });
+    grid.appendChild(header);
+    grid.appendChild(lanesWrap);
+    refreshAllCheckins();
+    return;
   }
+  grid.classList.remove('calendar-grid--lanes');
+  // single-unit mode: rebuild weekday headings
+  const weekdayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  weekdayLabels.forEach((wd)=>{
+    const el = document.createElement('div');
+    el.className = 'weekday';
+    el.textContent = wd;
+    grid.appendChild(el);
+  });
 
   const firstDay   = new Date(year, month, 1).getDay();      // 0–6
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -838,8 +1139,9 @@ let supportChatPoll = null;
     const bookingSpans = [];  // for continuous outlines across the row
 
 
-    if (Array.isArray(calendarBookings)) {
-    calendarBookings.forEach((b) => {
+    const source = getFilteredBookings(calendarBookings);
+    if (Array.isArray(source)) {
+    source.forEach((b) => {
       if (!b || b.cancelled) return;
       if (!b.checkIn || !b.checkOut) return;
 
@@ -1093,7 +1395,12 @@ if (spanStart !== null && spanEnd !== null) {
     const unitModal = document.getElementById('unitModal');
     const unitGo = document.getElementById('unitModalGo');
     if (!unitModal || !unitGo) return;
-    unitGo.setAttribute('data-redirect', redirectUrl || '/unit-settings');
+    let target = redirectUrl || '/unit-settings';
+    const unitId = currentBookingData && (currentBookingData.unitId || currentBookingData.unit_id);
+    if (unitId) {
+      target = `/unit-settings?unitId=${encodeURIComponent(unitId)}`;
+    }
+    unitGo.setAttribute('data-redirect', target);
     unitModal.style.display = 'flex';
   }
   function updateCheckinBadges() {
@@ -1108,16 +1415,18 @@ if (spanStart !== null && spanEnd !== null) {
     });
   }
   function renderProgress(){
-    const tracked = comp.slice(0,5); // exclude cleaning status from progress
-    const done=tracked.filter(Boolean).length;
-    const v=Math.round((done/tracked.length)*100);
+    const total = currentWorkflowSteps.length || 1;
+    const done = comp.filter(Boolean).length;
+    const v = Math.round((done/total)*100);
     document.getElementById('progress').style.width=v+'%';
     updateCheckinBadges();
   }
-function setIdStepState(hasId){
-    comp[0] = !!hasId;
+  function setIdStepState(hasId){
+    const idx = getStepIndex('upload_id');
+    if (idx === -1) return;
+    comp[idx] = !!hasId;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[0];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${hasId ? 'eye' : 'upload'}" class="icon-16"></i>`;
@@ -1143,9 +1452,11 @@ function setIdStepState(hasId){
   }
 
   function setEmailStepState(hasForm){
-    comp[1] = !!hasForm;
+    const idx = getStepIndex('send_endorsement_email');
+    if (idx === -1) return;
+    comp[idx] = !!hasForm;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[1];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${hasForm ? 'file-text' : 'mail'}" class="icon-16"></i>`;
@@ -1170,9 +1481,11 @@ function setIdStepState(hasId){
   }
 
   function setReceiptStepState(hasReceipt){
-    comp[2] = !!hasReceipt;
+    const idx = getStepIndex('payment_receipt');
+    if (idx === -1) return;
+    comp[idx] = !!hasReceipt;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[2];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${hasReceipt ? 'file-check-2' : 'stamp'}" class="icon-16"></i>`;
@@ -1198,9 +1511,11 @@ function setIdStepState(hasId){
   }
 
 function setAccessPaidState(isPaid, persist=true){
-    comp[3] = !!isPaid;
+    const idx = getStepIndex('access_card_paid');
+    if (idx === -1) return;
+    comp[idx] = !!isPaid;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[3];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${isPaid ? 'badge-check' : 'credit-card'}" class="icon-16"></i>`;
@@ -1228,9 +1543,11 @@ function setAccessPaidState(isPaid, persist=true){
   }
 
 function setAccessPickedState(isPicked, persist=true){
-    comp[4] = !!isPicked;
+    const idx = getStepIndex('access_card_picked_up');
+    if (idx === -1) return;
+    comp[idx] = !!isPicked;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[4];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${isPicked ? 'hand-heart' : 'id-card'}" class="icon-16"></i>`;
@@ -1257,9 +1574,11 @@ function setAccessPickedState(isPicked, persist=true){
     refreshAllCheckins();
   }
   function setCleanStepState(isReady){
-    comp[5] = !!isReady;
+    const idx = getStepIndex('cleaning_status');
+    if (idx === -1) return;
+    comp[idx] = !!isReady;
     const circles=document.querySelectorAll('#steps .step-circle');
-    const circle=circles[5];
+    const circle=circles[idx];
     if (circle) {
       circle.classList.remove('done','view');
       circle.innerHTML = `<i data-lucide="${isReady ? 'sparkles' : 'brush'}" class="icon-16"></i>`;
@@ -1286,6 +1605,14 @@ function setAccessPickedState(isPicked, persist=true){
     try{
       const r=await fetch('/api/bookings');
       const data = await r.json();
+      console.log('[DEBUG loadBookings raw]', (data || []).slice(0, 5).map(b => ({
+        id: b.id || b.timestamp,
+        guestName: b.guestName,
+        checkIn: b.checkIn,
+        checkOut: b.checkOut,
+        check_in: b.check_in,
+        check_out: b.check_out
+      })));
       console.log('[perf] loadBookings done in', Math.round(performance.now()-t0), 'ms');
       return data;
     } catch(e){
@@ -1320,15 +1647,19 @@ function setAccessPickedState(isPicked, persist=true){
     const bookings = await loadBookings();
     calendarBookings = bookings || [];
     latestBookings = bookings || [];
-    computeCleanReady(latestBookings);
+    const filtered = getFilteredBookings(latestBookings);
+    computeCleanReady(filtered);
     renderMiniCalendar();
 
-    if (!bookings || bookings.length === 0) {
+    if (!filtered || filtered.length === 0) {
+      defaultBookingData = null;
+      currentBookingData = null;
+      currentBookingId = null;
       showNoBookings();
       return;
     }
 
-    const current = pickCurrent(bookings);
+    const current = pickCurrent(filtered);
     defaultBookingData = current;
     if (current) {
       fillGuestHeader(current);
@@ -1504,6 +1835,148 @@ function setAccessPickedState(isPicked, persist=true){
     }
   }
 
+  // Building creation (temporary)
+  const BUILDING_STEP_ORDER = [
+    { key: 'upload_id', label: 'Upload ID' },
+    { key: 'send_endorsement_email', label: 'Send endorsement email' },
+    { key: 'payment_receipt', label: 'payment receipt' },
+    { key: 'access_card_paid', label: 'Access card is paid' },
+    { key: 'access_card_picked_up', label: 'Access card picked up' },
+    { key: 'cleaning_status', label: 'Cleaning status' },
+  ];
+
+  function collectBuildingSteps() {
+    const checks = Array.from(document.querySelectorAll('.building-step'));
+    const selectedKeys = new Set(checks.filter(c => c.checked).map(c => c.value));
+    const steps = [];
+    let order = 1;
+    BUILDING_STEP_ORDER.forEach((item) => {
+      if (selectedKeys.has(item.key)) {
+        steps.push({
+          stepKey: item.key,
+          stepLabel: item.label,
+          stepOrder: order++,
+          isRequired: true,
+        });
+      }
+    });
+    return steps;
+  }
+
+  async function saveBuilding() {
+    const statusEl = document.getElementById('buildingSaveStatus');
+    const nameEl = document.getElementById('buildingName');
+    if (statusEl) statusEl.textContent = '';
+    const name = (nameEl?.value || '').trim();
+    const steps = collectBuildingSteps();
+    if (!name) { if (statusEl) statusEl.textContent = 'Name is required.'; return; }
+    if (!steps.length) { if (statusEl) statusEl.textContent = 'Select at least one step.'; return; }
+    try {
+      const res = await fetch('/api/buildings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, workflowSteps: steps }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        throw new Error(err.error || 'Failed to save building');
+      }
+      const data = await res.json();
+      if (statusEl) statusEl.textContent = `Saved "${data.name}"`;
+      if (nameEl) nameEl.value = '';
+      document.querySelectorAll('.building-step').forEach(cb => { cb.checked = true; });
+    } catch (e) {
+      console.error(e);
+      if (statusEl) statusEl.textContent = 'Could not save building.';
+    }
+  }
+
+  async function loadBuildingsOptions() {
+    try {
+      const res = await fetch('/api/buildings');
+      if (!res.ok) throw new Error('failed');
+      const data = await res.json();
+      const sel = document.getElementById('unitBuildingSelect');
+      if (sel) {
+        sel.innerHTML = '<option value=\"\">Select building</option>';
+        (data || []).forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.id;
+          opt.textContent = b.name || `Building ${b.id}`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn('load buildings failed', e);
+    }
+  }
+
+  let cachedUnits = [];
+  async function loadUnitsWithBuildings() {
+    try {
+      const res = await fetch('/api/units-with-buildings');
+      if (!res.ok) throw new Error('failed');
+      const data = await res.json();
+      cachedUnits = Array.isArray(data) ? data : [];
+      populateUnitSelects();
+    } catch (e) {
+      console.warn('load units failed', e);
+    }
+  }
+
+  function populateUnitSelects() {
+    const options = cachedUnits.map(u => ({
+      value: u.id,
+      label: `${u.buildingName || 'Building'} — ${u.unitNumber || u.id}`
+    }));
+    const selects = [
+      document.getElementById('newBookingUnit'),
+      document.getElementById('editBookingUnit'),
+      document.getElementById('unitBuildingSelect') // already building dropdown, skip
+    ];
+    selects.forEach(sel => {
+      if (!sel || sel === document.getElementById('unitBuildingSelect')) return;
+      const current = sel.value;
+      sel.innerHTML = '<option value=\"\">Select unit</option>';
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label;
+        sel.appendChild(opt);
+      });
+      if (current) sel.value = current;
+    });
+  }
+
+  async function saveUnit() {
+    const statusEl = document.getElementById('unitSaveStatus');
+    const numEl = document.getElementById('unitNumberInput');
+    const bSel = document.getElementById('unitBuildingSelect');
+    if (statusEl) statusEl.textContent = '';
+    const unitNumber = (numEl?.value || '').trim();
+    const buildingId = Number(bSel?.value || 0);
+    if (!unitNumber) { if (statusEl) statusEl.textContent = 'Unit number is required.'; return; }
+    if (!buildingId) { if (statusEl) statusEl.textContent = 'Select a building.'; return; }
+    try {
+      const res = await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber, buildingId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        throw new Error(err.error || 'Failed to save unit');
+      }
+      await res.json();
+      if (statusEl) statusEl.textContent = 'Unit saved.';
+      if (numEl) numEl.value = '';
+      if (bSel) bSel.value = '';
+    } catch (e) {
+      console.error(e);
+      if (statusEl) statusEl.textContent = 'Could not save unit.';
+    }
+  }
+
   async function loadRevenueDashboard(){
     try{
       const { preset, from, to, unitId, platform } = getFilterStateFromUI();
@@ -1580,7 +2053,7 @@ function setAccessPickedState(isPicked, persist=true){
     const cleanEl = document.getElementById('cleanStatus');
     if (cleanEl) {
       // Show readiness based on the current booking: itself cleaned, or immediate prior stay cleaned
-      const isClean = computeReadyForBooking(b, latestBookings);
+      const isClean = computeReadyForBooking(b, getFilteredBookings(latestBookings));
       cleanEl.textContent = isClean ? 'Cleaned and ready' : 'Not cleaned';
       cleanEl.classList.toggle('clean-yes', isClean);
       cleanEl.classList.toggle('clean-no', !isClean);
@@ -1593,7 +2066,7 @@ function setAccessPickedState(isPicked, persist=true){
   window.currentBookingId = id;
 
   // reset comp state and rebuild steps for new selection
-  comp = new Array(steps.length).fill(false);
+  recomputeCompletion(current);
   stepsRow();
   renderProgress();
 
@@ -1763,10 +2236,19 @@ async function uploadReceiptDirect(bookingId, file){
       setAccessPickedState(true, false);
     }
     // Cleaning readiness (view-only)
-    const isCleanReady = computeReadyForBooking(current, latestBookings);
+    const isCleanReady = computeReadyForBooking(current, getFilteredBookings(latestBookings));
     setCleanStepState(isCleanReady);
     currentBookingData = current;
+    console.log('[DEBUG selected current booking]', {
+      id: current?.id || current?.timestamp,
+      guestName: current?.guestName,
+      checkIn: current?.checkIn,
+      checkOut: current?.checkOut,
+      check_in: current?.check_in,
+      check_out: current?.check_out
+    });
     updateCheckinCell(currentBookingData);
+    loadWorkflowForBooking(currentBookingData);
 
 
     const openGET=(path,{modal=true,newtab=false}={})=>{const url=`${path}/${encodeURIComponent(id)}`; if(newtab) return window.open(url,'_blank'); if(modal) return openModal(url); window.location.href=url;};
@@ -1776,21 +2258,36 @@ async function uploadReceiptDirect(bookingId, file){
     const editCancel = document.getElementById('cancelEditBooking');
 
     if (editBtn && editForm) {
-      const toInputDate = (val) => {
+      const normalizeDateForInput = (val) => {
         if (!val) return '';
-        const d = new Date(val);
-        if (isNaN(d)) return val;
-        return d.toISOString().slice(0, 10); // yyyy-mm-dd for date inputs
+        if (typeof val === 'string') return val.slice(0, 10);
+        return '';
       };
       const populateEditForm = (b) => {
+        console.log('[DEBUG populateEditForm input]', {
+          id: b?.id || b?.timestamp,
+          guestName: b?.guestName,
+          checkIn: b?.checkIn,
+          checkOut: b?.checkOut,
+          check_in: b?.check_in,
+          check_out: b?.check_out
+        });
         if (!b) return;
         editForm.elements.guestName.value = b.guestName || '';
         editForm.elements.platform.value = b.platform || '';
-        editForm.elements.checkIn.value = toInputDate(b.checkIn);
-        editForm.elements.checkOut.value = toInputDate(b.checkOut);
+        editForm.elements.checkIn.value = normalizeDateForInput(b.checkIn || b.check_in);
+        editForm.elements.checkOut.value = normalizeDateForInput(b.checkOut || b.check_out);
+        console.log('[DEBUG populateEditForm assigned]', {
+          assignedCheckIn: editForm.elements.checkIn.value,
+          assignedCheckOut: editForm.elements.checkOut.value
+        });
         editForm.elements.people.value = b.people || '';
         if (editForm.elements.totalPrice) {
           editForm.elements.totalPrice.value = (b.totalPrice ?? b.total_price ?? '');
+        }
+        if (editForm.elements.unitId) {
+          populateUnitSelects();
+          editForm.elements.unitId.value = b.unit_id || b.unitId || '';
         }
       };
 
@@ -1831,12 +2328,21 @@ async function uploadReceiptDirect(bookingId, file){
             const refreshed = await loadBookings();
             calendarBookings = refreshed || [];
             latestBookings = refreshed || [];
+            const filtered = getFilteredBookings(latestBookings);
+            computeCleanReady(filtered);
             renderMiniCalendar();
-            const updated = (refreshed || []).find((b)=>String(b.timestamp||b.id||'')===String(activeId));
-            if (updated) {
-              currentBookingData = updated;
-              fillGuestHeader(updated);
-              attachActions(updated);
+            let target = filtered.find((b)=>String(b.timestamp||b.id||'')===String(activeId));
+            if (!target && filtered.length) {
+              target = pickCurrent(filtered);
+            }
+            if (target) {
+              currentBookingData = target;
+              fillGuestHeader(target);
+              attachActions(target);
+            } else {
+              currentBookingData = null;
+              currentBookingId = null;
+              showNoBookings();
             }
             toggleEditBooking(false);
           } else {
@@ -1860,75 +2366,92 @@ function openPicker(inputEl) {
 }
 
 
-
-
-    const actions=[
-     ()=>{ 
-       if (comp[0]) {
-         openModal(`/view-ids/${encodeURIComponent(id)}`);
-       } else {
-         currentUploadId = id;
-         openPicker(fileInput);
-       }
-     },
-    async ()=>{ 
-   if (comp[1]) {
-     openModal(`/generate-movein/${encodeURIComponent(id)}`);
-     return;
-   }
-    if (sendingEmail) return;
-    sendingEmail = true;
-
-    const btn = circles[1];
-    btn?.classList.add('sending');           // show spinner
-    btn?.setAttribute('aria-busy','true');   // a11y
-
-    try{
-      const r = await fetch(`/send-email/${encodeURIComponent(id)}`);
-      if (r.status === 409) {
-        try {
-          const data = await r.json();
-          if (data && data.error === 'UNIT_NOT_CONFIGURED') {
-            showUnitModal(data.redirect || '/unit-settings');
+    function buildAction(stepKey, idx){
+      if (stepKey === 'upload_id') {
+        return ()=> {
+          if (comp[idx]) {
+            openModal(`/view-ids/${encodeURIComponent(id)}`);
+          } else {
+            currentUploadId = id;
+            openPicker(fileInput);
+          }
+        };
+      }
+      if (stepKey === 'send_endorsement_email') {
+        return async ()=> {
+          if (comp[idx]) {
+            openModal(`/generate-movein/${encodeURIComponent(id)}`);
             return;
           }
-        } catch (_) {}
+          if (sendingEmail) return;
+          sendingEmail = true;
+          const btn = circles[idx];
+          btn?.classList.add('sending');
+          btn?.setAttribute('aria-busy','true');
+          try{
+            const r = await fetch(`/send-email/${encodeURIComponent(id)}`);
+            if (r.status === 409) {
+              try {
+                const data = await r.json();
+                if (data && data.error === 'UNIT_NOT_CONFIGURED') {
+                  showUnitModal(data.redirect || '/unit-settings');
+                  return;
+                }
+              } catch (_) {}
+            }
+            if(r.ok){
+              setEmailStepState(true);
+            }else{
+              console.error('Email send failed:', r.status, r.statusText);
+            }
+          }catch(e){
+            console.error('Email send error:', e);
+          }finally{
+            btn?.classList.remove('sending');
+            btn?.removeAttribute('aria-busy');
+            sendingEmail = false;
+          }
+        };
       }
-      if(r.ok){
-        setEmailStepState(true);             // mark as viewable move-in form
-      }else{
-        console.error('Email send failed:', r.status, r.statusText);
+      if (stepKey === 'payment_receipt') {
+        return ()=> {
+          if (comp[idx]) {
+            openModal(`/view-stamps/${encodeURIComponent(id)}`);
+            return;
+          }
+          currentReceiptId = id;
+          openPicker(receiptInput);
+        };
       }
-    }catch(e){
-      console.error('Email send error:', e);
-    }finally{
-      btn?.classList.remove('sending');      // hide spinner
-      btn?.removeAttribute('aria-busy');
-      sendingEmail = false;
+      if (stepKey === 'access_card_paid') {
+        return ()=> {
+          const nv = !comp[idx];
+          setAccessPaidState(nv);
+        };
+      }
+      if (stepKey === 'access_card_picked_up') {
+        return ()=> {
+          const nv = !comp[idx];
+          setAccessPickedState(nv);
+        };
+      }
+      if (stepKey === 'cleaning_status') {
+        return ()=>{};
+      }
+      return ()=>{};
     }
-     },
 
-      ()=>{ 
-        if (comp[2]) {
-          openModal(`/view-stamps/${encodeURIComponent(id)}`);
-          return;
-        }
-        currentReceiptId = id;
-        openPicker(receiptInput);
-      },
-
-      ()=>{ const nv = !comp[3]; setAccessPaidState(nv); },
-      ()=>{ const nv = !comp[4]; setAccessPickedState(nv); },
-      ()=>{} // cleaning status (view-only)
-
-
-
-    ];
-circles.forEach((c,i)=>{
-  const btn = c.parentElement;
-  const handler = () => actions[i] && actions[i]();
-  btn.onclick = handler; // use normal click for all steps (no pointerdown)
-});
+    function bindStepActions(){
+      const stepButtons = document.querySelectorAll('#steps .step');
+      stepButtons.forEach((btn)=>{
+        const key = btn.dataset.stepKey;
+        const idx = Number(btn.dataset.stepIndex || 0);
+        const handler = buildAction(key, idx);
+        btn.onclick = handler;
+      });
+    }
+    window.bindStepActions = bindStepActions;
+    bindStepActions();
 
 
   }
@@ -2091,6 +2614,13 @@ try {
     wireCommentButtons();
     wireSupportChat();
     loadDashboardKpis();
+    loadDashboardUnits();
+    const buildingBtn = document.getElementById('buildingSaveBtn');
+    if (buildingBtn) buildingBtn.addEventListener('click', (e)=>{ e.preventDefault(); saveBuilding(); });
+    const unitBtn = document.getElementById('unitSaveBtn');
+    if (unitBtn) unitBtn.addEventListener('click', (e)=>{ e.preventDefault(); saveUnit(); });
+    loadBuildingsOptions();
+    loadUnitsWithBuildings();
     refreshSupportUnread();
     setInterval(refreshSupportUnread, 10000);
     renderProgress();
@@ -2099,6 +2629,28 @@ try {
     renderMiniCalendar(); // draw frame immediately, will fill after data arrives
 
     loadAndRenderBookings(); // async, updates UI when ready
+
+    const unitFilter = document.getElementById('dashboardUnitFilter');
+    if (unitFilter) {
+      unitFilter.addEventListener('change', ()=>{
+        dashboardSelectedUnitId = unitFilter.value || 'all';
+        const filtered = getFilteredBookings(latestBookings);
+        computeCleanReady(filtered);
+        renderMiniCalendar();
+        defaultBookingData = pickCurrent(filtered);
+        const match = filtered.find((b)=>String(b.timestamp||b.id||'')===String(currentBookingId));
+        const target = match || defaultBookingData;
+        if (target) {
+          fillGuestHeader(target);
+          attachActions(target);
+          setStatus('Uploaded documentation for current selected guest');
+        } else {
+          currentBookingData = null;
+          currentBookingId = null;
+          showNoBookings();
+        }
+      });
+    }
 
     const nextBtn = document.getElementById('nextGuestBtn');
     if (nextBtn) {

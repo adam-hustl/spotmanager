@@ -973,6 +973,111 @@ body.page {
   display: grid; grid-template-columns: repeat(7, 1fr); row-gap: .75rem; text-align: center; position: relative; 
 }
 
+.calendar-grid--lanes {
+  display: block;
+  margin-top: .75rem;
+}
+.calendar-grid--lanes .unit-lanes-header {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.calendar-grid--lanes .unit-lanes-header-label {
+  min-height: 1px;
+}
+.calendar-grid--lanes .unit-lanes-header-track {
+  position: relative;
+  height: 24px;
+  width: 100%;
+}
+.calendar-grid--lanes .unit-lanes-scale-mark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.calendar-grid--lanes .unit-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.calendar-grid--lanes .unit-lane {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+.calendar-grid--lanes .unit-label {
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.2;
+}
+.calendar-grid--lanes .unit-track {
+  position: relative;
+  height: 40px;
+  width: 100%;
+  background: #f3f4f6;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.calendar-grid--lanes .unit-track-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(107, 114, 128, 0.14);
+  pointer-events: none;
+}
+.calendar-grid--lanes .unit-block {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 8px;
+  background: rgba(16,185,129,0.18);
+  border: 1px solid rgba(16,185,129,0.45);
+  cursor: pointer;
+}
+
+.unit-lanes {
+  margin-top: .75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.unit-lane {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.unit-label {
+  min-width: 180px;
+  max-width: 240px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.unit-track {
+  position: relative;
+  flex: 1;
+  height: 38px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.unit-block {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  border-radius: 6px;
+  background: rgba(16,185,129,0.18);
+  border: 1px solid rgba(16,185,129,0.45);
+  cursor: pointer;
+}
+
 .booking-span {
   align-self: center;
   height: 2.5rem;              /* roughly same height as the circles */

@@ -4,7 +4,9 @@ const path = require('path');
 const app = express();
 const fs = require('fs');
 
-const { Pool } = require('pg');
+const pg = require('pg');
+const { Pool } = pg;
+pg.types.setTypeParser(1082, (val) => val);
 
 const pool = process.env.DATABASE_URL
   ? new Pool({
@@ -1318,7 +1320,8 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
     platform: req.body.platform,
     people: req.body.people,
     notes: req.body.notes,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    unitId: req.body.unitId ? Number(req.body.unitId) : null,
   };
 
   if (usePgBookings(req)) {
@@ -1328,11 +1331,22 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
     }
     console.log('Bookings write backend: postgres');
     try {
+      // validate unit
+      let unitIdValidated = null;
+      if (newBooking.unitId) {
+        const { rowCount } = await pool.query(
+          `SELECT 1 FROM units WHERE id = $1 AND workspace_id = $2`,
+          [newBooking.unitId, req.session.workspaceId]
+        );
+        if (!rowCount) return res.status(400).json({ error: 'UNIT_NOT_FOUND' });
+        unitIdValidated = newBooking.unitId;
+      }
+
       const { rows } = await pool.query(
         `INSERT INTO bookings (
-           workspace_id, guest_name, check_in, check_out, platform, people, notes,
+           workspace_id, guest_name, check_in, check_out, platform, people, notes, unit_id,
             total_price, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,false,false,false,false,false,false,NOW(),NOW())
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,false,false,false,false,false,false,NOW(),NOW())
          RETURNING id`,
         [
           req.session.workspaceId,
@@ -1342,6 +1356,7 @@ app.post('/save-booking', requireAdmin, async (req, res) => {
           newBooking.platform || '',
           newBooking.people || null,
           newBooking.notes || '',
+          unitIdValidated,
           (()=>{
             const totalPriceRaw = req.body.totalPrice ?? req.body.total_price;
             const val = (totalPriceRaw === '' || totalPriceRaw == null) ? null : Number(totalPriceRaw);
@@ -1867,7 +1882,10 @@ function usePgBookings(req) {
 
 async function pgFetchBookings(workspaceId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, total_price, created_at, updated_at
+    `SELECT id, guest_name,
+            check_in::text AS check_in,
+            check_out::text AS check_out,
+            platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, total_price, created_at, updated_at
      FROM bookings
      WHERE workspace_id = $1
      ORDER BY check_in ASC`,
@@ -1926,7 +1944,10 @@ function mapBookingRow(r){
 
 async function pgFetchBookingById(workspaceId, bookingId) {
   const { rows } = await pool.query(
-    `SELECT id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, created_at, updated_at
+    `SELECT id, guest_name,
+            check_in::text AS check_in,
+            check_out::text AS check_out,
+            platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, created_at, updated_at
      FROM bookings
      WHERE workspace_id = $1 AND id::text = $2
      LIMIT 1`,
@@ -1951,7 +1972,10 @@ async function pgUpdateChecklist(workspaceId, bookingId, field, val) {
   const { rows } = await pool.query(
     `UPDATE bookings SET ${column} = $1, updated_at = NOW()
      WHERE workspace_id = $2 AND id = $3
-     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
+     RETURNING id, guest_name,
+       check_in::text AS check_in,
+       check_out::text AS check_out,
+       platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [val === true || val === 'true', workspaceId, bookingId]
   );
   return mapBookingRow(rows[0]) || false;
@@ -1992,7 +2016,10 @@ async function pgUpdateNotes(workspaceId, bookingId, notes) {
   const { rows } = await pool.query(
     `UPDATE bookings SET notes = $1, updated_at = NOW()
      WHERE workspace_id = $2 AND id = $3
-     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
+     RETURNING id, guest_name,
+       check_in::text AS check_in,
+       check_out::text AS check_out,
+       platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [notes || '', workspaceId, bookingId]
   );
   return mapBookingRow(rows[0]) || false;
@@ -2002,7 +2029,10 @@ async function pgSetCleaned(workspaceId, bookingId, isCleaned) {
   const { rows } = await pool.query(
     `UPDATE bookings SET cleaned = $1, updated_at = NOW()
      WHERE workspace_id = $2 AND id = $3
-     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
+     RETURNING id, guest_name,
+       check_in::text AS check_in,
+       check_out::text AS check_out,
+       platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [isCleaned, workspaceId, bookingId]
   );
   return mapBookingRow(rows[0]) || false;
@@ -2012,7 +2042,10 @@ async function pgSetCancelled(workspaceId, bookingId, isCancelled) {
   const { rows } = await pool.query(
     `UPDATE bookings SET cancelled = $1, updated_at = NOW()
      WHERE workspace_id = $2 AND id = $3
-     RETURNING id, guest_name, check_in, check_out, platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
+     RETURNING id, guest_name,
+       check_in::text AS check_in,
+       check_out::text AS check_out,
+       platform, people, notes, step1, step2, step3, step4, step5, email_sent, cleaned, created_at, updated_at`,
     [isCancelled, workspaceId, bookingId]
   );
   return mapBookingRow(rows[0]) || false;
@@ -2173,7 +2206,21 @@ async function pgDeleteFinanceEntry(workspaceId, id) {
 async function pgListUnitsSimple(workspaceId) {
   if (!pool || !workspaceId) return [];
   const { rows } = await pool.query(
-    `SELECT id, name FROM units WHERE workspace_id = $1 ORDER BY id ASC`,
+    `SELECT
+       u.id,
+       COALESCE(NULLIF(u.name, ''), u.unit_number::text) AS name,
+       u.unit_number,
+       u.building_id,
+       b.name AS building_name,
+       u.unit_owner_name,
+       u.unit_phone,
+       u.signature_file_key
+     FROM units u
+     LEFT JOIN buildings b
+       ON b.id = u.building_id
+      AND b.workspace_id = u.workspace_id
+     WHERE u.workspace_id = $1
+     ORDER BY b.name ASC NULLS LAST, u.unit_number ASC NULLS LAST, u.id ASC`,
     [workspaceId]
   );
   return rows || [];
@@ -2198,6 +2245,199 @@ function forbidViewer(req, res, next) {
 // About page
 app.get('/about', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'about.html'));
+});
+
+// Buildings + units
+app.get('/api/buildings', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name FROM buildings WHERE workspace_id = $1 ORDER BY name ASC`,
+      [workspaceId]
+    );
+    return res.json(rows || []);
+  } catch (e) {
+    if (!IS_PROD) console.error('buildings list failed', e);
+    return res.status(500).json({ error: 'failed to load buildings' });
+  }
+});
+
+app.get('/api/buildings/:id/workflow', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+  const buildingId = Number(req.params.id);
+  if (!buildingId) return res.status(400).json({ error: 'buildingId missing' });
+  try {
+    const { rowCount } = await pool.query(
+      `SELECT 1 FROM buildings WHERE id = $1 AND workspace_id = $2`,
+      [buildingId, workspaceId]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'building not found' });
+
+    const { rows } = await pool.query(
+      `SELECT id, step_key, step_label, step_order, is_required
+       FROM building_workflow_steps
+       WHERE building_id = $1
+       ORDER BY step_order ASC`,
+      [buildingId]
+    );
+    return res.json((rows || []).map(r => ({
+      id: r.id,
+      stepKey: r.step_key,
+      stepLabel: r.step_label,
+      stepOrder: r.step_order,
+      isRequired: r.is_required,
+    })));
+  } catch (e) {
+    if (!IS_PROD) console.error('building workflow failed', e);
+    return res.status(500).json({ error: 'failed to load building workflow' });
+  }
+});
+
+app.get('/api/units-with-buildings', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         u.id,
+         u.unit_number,
+         u.building_id,
+         b.name AS building_name
+       FROM units u
+       LEFT JOIN buildings b
+         ON b.id = u.building_id
+        AND b.workspace_id = u.workspace_id
+       WHERE u.workspace_id = $1
+       ORDER BY u.id ASC`,
+      [workspaceId]
+    );
+    return res.json((rows || []).map(r => ({
+      id: r.id,
+      unitNumber: r.unit_number,
+      buildingId: r.building_id,
+      buildingName: r.building_name,
+    })));
+  } catch (e) {
+    if (!IS_PROD) console.error('units with buildings failed', e);
+    return res.status(500).json({ error: 'failed to load units' });
+  }
+});
+
+app.post('/api/units', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+
+  const unitNumber = (req.body?.unitNumber || '').trim();
+  const buildingId = Number(req.body?.buildingId);
+  const ownerName = req.body?.ownerName ? String(req.body.ownerName).trim() : null;
+  const ownerPhone = req.body?.ownerPhone ? String(req.body.ownerPhone).trim() : null;
+
+  if (!unitNumber) return res.status(400).json({ error: 'UNIT_NUMBER_REQUIRED' });
+  if (!buildingId) return res.status(400).json({ error: 'BUILDING_ID_REQUIRED' });
+
+  try {
+    // validate building belongs to workspace
+    const { rowCount: bCount } = await pool.query(
+      `SELECT 1 FROM buildings WHERE id = $1 AND workspace_id = $2`,
+      [buildingId, workspaceId]
+    );
+    if (!bCount) return res.status(400).json({ error: 'BUILDING_NOT_FOUND' });
+
+    // duplicate check
+    const { rowCount: dup } = await pool.query(
+      `SELECT 1 FROM units WHERE workspace_id = $1 AND unit_number = $2`,
+      [workspaceId, unitNumber]
+    );
+    if (dup) return res.status(400).json({ error: 'UNIT_EXISTS' });
+
+    // insert (only common columns to avoid schema risk)
+    const insertCols = ['workspace_id', 'building_id', 'unit_number'];
+    const values = [workspaceId, buildingId, unitNumber];
+    const placeholders = ['$1', '$2', '$3'];
+    let idx = 4;
+    if (ownerName) { insertCols.push('owner_name'); placeholders.push(`$${idx++}`); values.push(ownerName); }
+    if (ownerPhone) { insertCols.push('owner_phone'); placeholders.push(`$${idx++}`); values.push(ownerPhone); }
+
+    const { rows } = await pool.query(
+      `INSERT INTO units (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})
+       RETURNING id, unit_number, building_id`,
+      values
+    );
+
+    return res.json({
+      id: rows[0].id,
+      unitNumber: rows[0].unit_number,
+      buildingId: rows[0].building_id,
+    });
+  } catch (e) {
+    if (!IS_PROD) console.error('create unit failed', e);
+    return res.status(500).json({ error: 'failed to create unit' });
+  }
+});
+
+app.post('/api/buildings', requireAnyUser, async (req, res) => {
+  const workspaceId = req.session ? req.session.workspaceId : null;
+  if (!workspaceId) return res.status(400).json({ error: 'workspaceId missing' });
+  if (!pool) return res.status(500).json({ error: 'database unavailable' });
+  const nameRaw = (req.body?.name || '').trim();
+  const steps = Array.isArray(req.body?.workflowSteps) ? req.body.workflowSteps : [];
+  if (!nameRaw) return res.status(400).json({ error: 'NAME_REQUIRED' });
+  if (!steps.length) return res.status(400).json({ error: 'STEPS_REQUIRED' });
+
+  // validate steps: stepKey, stepLabel, stepOrder required; unique stepKey & stepOrder
+  const seenKeys = new Set();
+  const seenOrders = new Set();
+  for (const s of steps) {
+    if (!s || !s.stepKey || !s.stepLabel || s.stepOrder == null) {
+      return res.status(400).json({ error: 'INVALID_STEP' });
+    }
+    if (seenKeys.has(s.stepKey)) return res.status(400).json({ error: 'DUPLICATE_STEP_KEY' });
+    if (seenOrders.has(Number(s.stepOrder))) return res.status(400).json({ error: 'DUPLICATE_STEP_ORDER' });
+    seenKeys.add(s.stepKey);
+    seenOrders.add(Number(s.stepOrder));
+  }
+
+  try {
+    const { rowCount: exists } = await pool.query(
+      `SELECT 1 FROM buildings WHERE workspace_id = $1 AND lower(name) = lower($2)`,
+      [workspaceId, nameRaw]
+    );
+    if (exists) return res.status(400).json({ error: 'NAME_EXISTS' });
+
+    const { rows: bRows } = await pool.query(
+      `INSERT INTO buildings (workspace_id, name) VALUES ($1, $2) RETURNING id, name`,
+      [workspaceId, nameRaw]
+    );
+    const building = bRows[0];
+    if (!building) return res.status(500).json({ error: 'failed to create building' });
+
+    const stepValues = [];
+    const params = [];
+    let idx = 1;
+    steps.forEach(s => {
+      params.push(building.id, s.stepKey, s.stepLabel, Number(s.stepOrder), !!s.isRequired);
+      stepValues.push(`($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4})`);
+      idx += 5;
+    });
+    if (stepValues.length) {
+      await pool.query(
+        `INSERT INTO building_workflow_steps (building_id, step_key, step_label, step_order, is_required)
+         VALUES ${stepValues.join(',')}`,
+        params
+      );
+    }
+
+    return res.json({ id: building.id, name: building.name });
+  } catch (e) {
+    if (!IS_PROD) console.error('create building failed', e);
+    return res.status(500).json({ error: 'failed to create building' });
+  }
 });
 
 
@@ -4235,6 +4475,13 @@ app.get('/api/analytics/profit-tab', requireAnyUser, async (req, res) => {
 // === Lightweight API for wiring UI later ===
 app.get('/api/bookings', requireAnyUser, async (req, res) => {
   try {
+    const normalizeBookingDateString = (val) => {
+      if (!val) return '';
+      if (typeof val === 'string') return val.slice(0, 10);
+      if (val instanceof Date) return val.toISOString().slice(0, 10);
+      return String(val).slice(0, 10);
+    };
+
     const usePg = usePgBookings(req);
     if (usePg) {
       console.log('Bookings backend: postgres');
@@ -4243,12 +4490,15 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         return res.status(400).json({ error: 'workspace not set' });
       }
       const { rows } = await pool.query(
-        `SELECT id, guest_name, check_in, check_out, platform, people, notes,
-                step1, step2, step3, step4, step5, email_sent, cleaned, unit_id, total_price,
-                created_at, updated_at
-         FROM bookings
-         WHERE workspace_id = $1
-         ORDER BY check_in ASC`,
+        `SELECT b.id, b.guest_name, b.check_in, b.check_out, b.platform, b.people, b.notes,
+                b.step1, b.step2, b.step3, b.step4, b.step5, b.email_sent, b.cleaned, b.unit_id, b.total_price,
+                b.created_at, b.updated_at,
+                u.unit_number, u.building_id, bl.name AS building_name
+         FROM bookings b
+         LEFT JOIN units u ON u.id = b.unit_id AND u.workspace_id = b.workspace_id
+         LEFT JOIN buildings bl ON bl.id = u.building_id AND bl.workspace_id = u.workspace_id
+         WHERE b.workspace_id = $1
+         ORDER BY b.check_in ASC`,
         [req.session.workspaceId]
       );
       const mapped = rows.map((r) => ({
@@ -4263,6 +4513,9 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         unit_id: r.unit_id,
         total_price: r.total_price,
         totalPrice: r.total_price,
+        unitNumber: r.unit_number,
+        buildingId: r.building_id,
+        buildingName: r.building_name,
         checklist: {
           step1: r.step1,
           step2: r.step2,
@@ -4349,7 +4602,11 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         if (typeof b.checklist.step4 !== 'boolean') b.checklist.step4 = false;
         if (typeof b.checklist.step5 !== 'boolean') b.checklist.step5 = false;
       }
-      return b;
+      return {
+        ...b,
+        checkIn: normalizeBookingDateString(b.checkIn || b.check_in),
+        checkOut: normalizeBookingDateString(b.checkOut || b.check_out),
+      };
     });
 
     if (changed && typeof writeBookingsLocal === 'function') {
@@ -4358,6 +4615,15 @@ app.get('/api/bookings', requireAnyUser, async (req, res) => {
         pushBookingsToGist(data).catch(() => {});
       }
     }
+
+    console.log('[DEBUG /api/bookings outgoing]', enriched.slice(0,5).map(b => ({
+      id: b.id || b.timestamp,
+      guestName: b.guestName,
+      checkIn: b.checkIn,
+      checkOut: b.checkOut,
+      check_in: b.check_in,
+      check_out: b.check_out
+    })));
 
     res.json(enriched);
   } catch (e) {
@@ -5346,6 +5612,172 @@ app.post('/api/unit/default/signature', requireAnyUser, uploadSignature.single('
   }
 });
 
+// Units (workspace-scoped, per-unit settings)
+app.get('/api/units', requireAnyUser, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const { rows } = await pool.query(
+      `SELECT
+         u.id,
+         u.unit_number AS "unitNumber",
+         COALESCE(NULLIF(u.name, ''), u.unit_number::text) AS "displayName",
+         u.building_id AS "buildingId",
+         b.name AS "buildingName",
+         u.unit_owner_name AS "unitOwnerName",
+         u.unit_phone AS "unitPhone",
+         u.signature_file_key AS "signatureFileKey"
+       FROM units u
+       LEFT JOIN buildings b
+         ON b.id = u.building_id
+        AND b.workspace_id = u.workspace_id
+       WHERE u.workspace_id = $1
+       ORDER BY b.name ASC NULLS LAST, u.unit_number ASC NULLS LAST, u.id ASC`,
+      [ws]
+    );
+    return res.json(rows || []);
+  } catch (e) {
+    console.error('GET /api/units failed', e);
+    return res.status(500).json({ error: 'failed to load units' });
+  }
+});
+
+app.get('/api/units/:id', requireAnyUser, async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const unitId = Number(req.params.id);
+    if (!unitId) return res.status(400).json({ error: 'invalid unit id' });
+    const { rows } = await pool.query(
+      `SELECT
+         u.id,
+         u.unit_number AS "unitNumber",
+         COALESCE(NULLIF(u.name, ''), u.unit_number::text) AS "displayName",
+         u.name AS "name",
+         u.building_id AS "buildingId",
+         b.name AS "buildingName",
+         u.unit_owner_name AS "unitOwnerName",
+         u.unit_phone AS "unitPhone",
+         u.signature_file_key AS "signatureFileKey"
+       FROM units u
+       LEFT JOIN buildings b
+         ON b.id = u.building_id
+        AND b.workspace_id = u.workspace_id
+       WHERE u.workspace_id = $1 AND u.id = $2
+       LIMIT 1`,
+      [ws, unitId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'unit not found' });
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error('GET /api/units/:id failed', e);
+    return res.status(500).json({ error: 'failed to load unit' });
+  }
+});
+
+app.put('/api/units/:id', requireAnyUser, express.json(), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const unitId = Number(req.params.id);
+    if (!unitId) return res.status(400).json({ error: 'invalid unit id' });
+    const { unitNumber, unitOwnerName, unitPhone, name } = req.body || {};
+    if (!unitNumber) return res.status(400).json({ error: 'unitNumber required' });
+
+    const exists = await pool.query(
+      'SELECT id FROM units WHERE id = $1 AND workspace_id = $2 LIMIT 1',
+      [unitId, ws]
+    );
+    if (!exists.rows[0]) return res.status(404).json({ error: 'unit not found' });
+
+    const { rows } = await pool.query(
+      `UPDATE units
+         SET unit_number = $1,
+             unit_owner_name = $2,
+             unit_phone = $3,
+             name = COALESCE($4, name),
+             updated_at = NOW()
+       WHERE id = $5 AND workspace_id = $6
+       RETURNING
+         id,
+         unit_number AS "unitNumber",
+         COALESCE(NULLIF(name, ''), unit_number::text) AS "displayName",
+         name,
+         building_id AS "buildingId",
+         unit_owner_name AS "unitOwnerName",
+         unit_phone AS "unitPhone",
+         signature_file_key AS "signatureFileKey"`,
+      [unitNumber, unitOwnerName || null, unitPhone || null, name || null, unitId, ws]
+    );
+    return res.json(rows[0]);
+  } catch (e) {
+    console.error('PUT /api/units/:id failed', e);
+    return res.status(500).json({ error: 'failed to update unit' });
+  }
+});
+
+app.post('/api/units/:id/signature', requireAnyUser, uploadSignature.single('signature'), async (req, res) => {
+  try {
+    if (!pool) return res.status(500).json({ error: 'DB not configured' });
+    const ws = req.session.workspaceId;
+    if (!ws) return res.status(400).json({ error: 'workspace not set' });
+    const unitId = Number(req.params.id);
+    if (!unitId) return res.status(400).json({ error: 'invalid unit id' });
+    const unitRow = await pool.query(
+      'SELECT id FROM units WHERE id = $1 AND workspace_id = $2 LIMIT 1',
+      [unitId, ws]
+    );
+    if (!unitRow.rows[0]) return res.status(404).json({ error: 'unit not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    let ext = (path.extname(req.file.originalname || '') || '').toLowerCase();
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.gif']);
+    if (!allowedExt.has(ext)) ext = '.png';
+    const finalRel = `signatures/unit-${unitId}${ext}`;
+    const finalPath = path.join(UPLOADS_DIR, finalRel);
+
+    try {
+      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+      fs.renameSync(req.file.path, finalPath);
+      if (!IS_PROD) console.log('[signature] moved to', finalPath, 'exists=', fs.existsSync(finalPath));
+    } catch (e) {
+      console.error('Failed to move signature file', e);
+      return res.status(500).json({ error: 'failed to save signature locally' });
+    }
+
+    if (USE_SFTP_SIGNATURES) {
+      try {
+        const sftp = await getSftp();
+        const remoteDir = `${SFTP_ROOT}/signatures`;
+        try { await sftp.mkdir(remoteDir, true); } catch (_) {}
+        const remotePath = `${remoteDir}/unit-${unitId}${ext}`;
+        await sftp.put(finalPath, remotePath);
+        await sftp.end();
+        try { fs.unlinkSync(finalPath); } catch (_) {}
+        if (!IS_PROD) console.log('[signature] uploaded to sftp', remotePath);
+      } catch (e) {
+        console.error('Signature SFTP upload failed', e);
+        return res.status(500).json({ error: 'failed to upload signature' });
+      }
+    } else {
+      if (!IS_PROD) console.log('[signature] stored locally at', finalPath);
+    }
+
+    await pool.query(
+      'UPDATE units SET signature_file_key = $1, updated_at = NOW() WHERE id = $2 AND workspace_id = $3',
+      [finalRel, unitId, ws]
+    );
+
+    return res.json({ ok: true, signature_file_key: finalRel });
+  } catch (e) {
+    console.error('POST /api/units/:id/signature failed', e);
+    return res.status(500).json({ error: 'failed to save signature' });
+  }
+});
+
 app.get('/signature/:unitId', requireAnyUser, async (req, res) => {
   try {
     if (!pool) return res.status(500).send('DB not configured');
@@ -6318,8 +6750,14 @@ app.get('/edit-booking/:id', (req, res) => {
   const renderForm = (booking) => {
     if (!booking) return res.send('Booking not found.');
     const fmt = (d) => {
+      if (!d) return '';
+      if (typeof d === 'string') return d.slice(0, 10);
       const dt = new Date(d);
-      return isNaN(dt) ? d : dt.toISOString().slice(0,10);
+      if (Number.isNaN(dt.getTime())) return '';
+      const y = dt.getUTCFullYear();
+      const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(dt.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     };
     res.send(`
       <html>
@@ -6349,10 +6787,15 @@ app.get('/edit-booking/:id', (req, res) => {
             <br />
               </label>
               <label>Check-in Date:
-                <input type="date" name="checkIn" value="${fmt(booking.checkIn)}" required />
+                <input type="date" name="checkIn" value="${String(booking.checkIn || '').slice(0,10)}" required />
               </label>
               <label>Check-out Date:
-                <input type="date" name="checkOut" value="${fmt(booking.checkOut)}" required />
+                <input type="date" name="checkOut" value="${String(booking.checkOut || '').slice(0,10)}" required />
+              </label>
+              <label>Unit:
+                <select name="unitId" id="editBookingUnitSelect">
+                  <option value="">Select unit</option>
+                </select>
               </label>
               <label>Amount of people:
                 <input type="text" name="people" value="${booking.people || ''}" />
@@ -6390,6 +6833,27 @@ app.get('/edit-booking/:id', (req, res) => {
       console.error(err);
     }
   });
+
+  async function loadUnits() {
+    try {
+      const res = await fetch('/api/units-with-buildings');
+      if (!res.ok) throw new Error('failed');
+      const units = await res.json();
+      const sel = document.getElementById('editBookingUnitSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value=\"\">Select unit</option>';
+      (units || []).forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = (u.buildingName || 'Building') + ' — ' + (u.unitNumber || u.id);
+        if (String(u.id) === String(${booking.unitId || 'null'})) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn('load units failed', e);
+    }
+  }
+  loadUnits();
 </script>
 
         </body>
@@ -6399,7 +6863,7 @@ app.get('/edit-booking/:id', (req, res) => {
 
   if (usePgBookings(req)) {
     pool.query(
-      `SELECT id, guest_name, check_in, check_out, platform, people, notes, total_price FROM bookings WHERE id = $1 AND workspace_id = $2 LIMIT 1`,
+      `SELECT id, guest_name, check_in::text AS check_in, check_out::text AS check_out, platform, people, notes, total_price FROM bookings WHERE id = $1 AND workspace_id = $2 LIMIT 1`,
       [bookingId, req.session.workspaceId]
     ).then(({ rows })=>{
       const b = rows[0];
@@ -6413,7 +6877,8 @@ app.get('/edit-booking/:id', (req, res) => {
         platform: b.platform,
         people: b.people,
         notes: b.notes,
-        totalPrice: b.total_price
+        totalPrice: b.total_price,
+        unitId: b.unit_id
       });
     }).catch((e)=>{
       console.error('Edit booking fetch pg failed', e);
@@ -6446,20 +6911,37 @@ app.post('/edit-booking/:id', requireAdmin, (req, res) => {
   if (usePgBookings(req)) {
     console.log('Bookings write backend: postgres');
     const { guestName, platform, checkIn, checkOut, people, notes } = req.body || {};
+    const unitId = req.body?.unitId ? Number(req.body.unitId) : null;
     const totalPriceRaw = req.body?.totalPrice ?? req.body?.total_price;
     const totalPrice = (totalPriceRaw === '' || totalPriceRaw == null) ? null : Number(totalPriceRaw);
     const totalPriceSafe = Number.isNaN(totalPrice) ? null : totalPrice;
     const bid = req.params.id;
     if (!bid) return res.status(400).send('Missing booking id');
+
+    const unitCheck = async () => {
+      if (!unitId) return null;
+      const { rowCount } = await pool.query(
+        `SELECT 1 FROM units WHERE id = $1 AND workspace_id = $2`,
+        [unitId, req.session.workspaceId]
+      );
+      return rowCount ? unitId : (()=>{ throw new Error('UNIT_NOT_FOUND'); })();
+    };
+
+    unitCheck().then((unitValidated)=> {
     pool.query(
-      `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, total_price=$7, updated_at=NOW()
-       WHERE id=$8 AND workspace_id=$9
+      `UPDATE bookings SET guest_name=$1, platform=$2, people=$3, notes=$4, check_in=$5, check_out=$6, total_price=$7, unit_id=$8, updated_at=NOW()
+       WHERE id=$9 AND workspace_id=$10
        RETURNING id`,
-      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, totalPriceSafe, bid, req.session.workspaceId]
+      [guestName || '', platform || '', people || null, notes || '', checkIn || null, checkOut || null, totalPriceSafe, unitValidated, bid, req.session.workspaceId]
     ).then(({ rowCount })=>{
       if (rowCount !== 1) return res.status(404).send('Booking not found');
       return res.sendStatus(200);
     }).catch((e)=>{
+      console.error('Edit booking pg failed', e);
+      return res.status(500).send('Error saving booking.');
+    });
+    }).catch((e)=>{
+      if (e.message === 'UNIT_NOT_FOUND') return res.status(400).json({ error: 'UNIT_NOT_FOUND' });
       console.error('Edit booking pg failed', e);
       return res.status(500).send('Error saving booking.');
     });

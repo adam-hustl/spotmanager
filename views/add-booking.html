@@ -31,6 +31,11 @@
           <option value="Direct">Direct</option>
         </select>
       </label>
+      <label>Unit:
+        <select name="unitId" id="addBookingUnit">
+          <option value="">Select unit</option>
+        </select>
+      </label>
       <label>Amount of people:
         <input type="text" name="people" />
       </label>
@@ -69,6 +74,26 @@
       console.error(err);
     }
   });
+
+  async function loadUnits() {
+    try {
+      const res = await fetch('/api/units-with-buildings');
+      if (!res.ok) throw new Error('failed');
+      const units = await res.json();
+      const sel = document.getElementById('addBookingUnit');
+      if (!sel) return;
+      sel.innerHTML = '<option value=\"\">Select unit</option>';
+      (units || []).forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = `${u.buildingName || 'Building'} — ${u.unitNumber || u.id}`;
+        sel.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn('load units failed', e);
+    }
+  }
+  loadUnits();
 </script>
 
 </body>
